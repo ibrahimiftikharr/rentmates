@@ -1,0 +1,561 @@
+import { useState } from 'react';
+import { 
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  X,
+  Eye,
+  FileText,
+  Shield,
+  Calendar,
+  DollarSign,
+  Clock
+} from 'lucide-react';
+import { Button } from '@/shared/ui/button';
+import { Input } from '@/shared/ui/input';
+import { Card } from '@/shared/ui/card';
+import { Badge } from '@/shared/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
+
+interface JoinRequest {
+  id: string;
+  propertyName: string;
+  propertyId: string;
+  studentName: string;
+  studentId: string;
+  studentPhoto: string;
+  bidAmount: string;
+  leaseDuration: string;
+  moveInDate: string;
+  status: 'pending' | 'approved' | 'rejected';
+  contractSigned: boolean;
+  blockchainVerified: boolean;
+  contractId?: string;
+  // Extended details
+  studentBio: string;
+  interests: string[];
+  kycVerified: boolean;
+  rentalScore?: number;
+  // Approval flow tracking
+  landlordApproved?: boolean;
+  studentSigned?: boolean;
+  landlordSigned?: boolean;
+}
+
+const MOCK_REQUESTS: JoinRequest[] = [
+  {
+    id: '1',
+    propertyName: 'Modern 2-Bed Flat in City Centre',
+    propertyId: '1',
+    studentName: 'Jane Doe',
+    studentId: 's1',
+    studentPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80',
+    bidAmount: '1200',
+    leaseDuration: '12',
+    moveInDate: '2025-12-01',
+    status: 'pending',
+    contractSigned: false,
+    blockchainVerified: false,
+    studentBio: 'Final year Computer Science student looking for a comfortable place close to university. Non-smoker, responsible tenant with excellent references.',
+    interests: ['Reading', 'Coding', 'Yoga', 'Cooking', 'Hiking'],
+    kycVerified: true,
+    rentalScore: 4.8
+  },
+  {
+    id: '2',
+    propertyName: 'Cosy Studio Near University',
+    propertyId: '2',
+    studentName: 'Michael Chen',
+    studentId: 's2',
+    studentPhoto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',
+    bidAmount: '850',
+    leaseDuration: '6',
+    moveInDate: '2025-11-15',
+    status: 'pending',
+    contractSigned: false,
+    blockchainVerified: false,
+    studentBio: 'Business student seeking a quiet studio for focused studying. Always pay rent on time and maintain properties well.',
+    interests: ['Finance', 'Chess', 'Photography', 'Music'],
+    kycVerified: true,
+    rentalScore: 4.5
+  },
+  {
+    id: '3',
+    propertyName: 'Spacious 3-Bed House with Garden',
+    propertyId: '3',
+    studentName: 'Sarah Johnson',
+    studentId: 's3',
+    studentPhoto: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&q=80',
+    bidAmount: '1800',
+    leaseDuration: '12',
+    moveInDate: '2025-12-15',
+    status: 'approved',
+    contractSigned: true,
+    blockchainVerified: true,
+    contractId: 'CONTRACT-003',
+    studentBio: 'Medical student with excellent references. Looking for a long-term rental with outdoor space.',
+    interests: ['Medicine', 'Gardening', 'Running', 'Art', 'Volunteering'],
+    kycVerified: true,
+    rentalScore: 5.0,
+    landlordApproved: true,
+    studentSigned: true,
+    landlordSigned: true
+  }
+];
+
+interface JoinRequestsPageProps {
+  onNavigate: (page: string, requestId?: string) => void;
+}
+
+export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
+  const [requests, setRequests] = useState<JoinRequest[]>(MOCK_REQUESTS);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
+  const [showApproveModal, setShowApproveModal] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'bg-yellow-500/10 text-yellow-700 border-yellow-200';
+      case 'approved':
+        return 'bg-green-500/10 text-green-700 border-green-200';
+      case 'rejected':
+        return 'bg-red-500/10 text-red-700 border-red-200';
+      default:
+        return 'bg-gray-500/10 text-gray-700 border-gray-200';
+    }
+  };
+
+  const filteredRequests = requests.filter(req => {
+    const matchesSearch = 
+      req.propertyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      req.studentName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || req.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleApprove = (id: string) => {
+    // Mark request as approved by landlord
+    setRequests(requests.map(req => 
+      req.id === id ? { 
+        ...req, 
+        landlordApproved: true,
+        contractId: `CONTRACT-${id.padStart(3, '0')}` 
+      } : req
+    ));
+    setShowApproveModal(null);
+    showSuccessToast('✅ Student has been notified of your approval.');
+  };
+
+  const handleViewContract = (id: string) => {
+    const request = requests.find(req => req.id === id);
+    if (request?.contractId) {
+      onNavigate('view-contract', request.contractId);
+    }
+  };
+
+  const handleReject = (id: string) => {
+    setRequests(requests.map(req => 
+      req.id === id ? { ...req, status: 'rejected' as const } : req
+    ));
+    setShowRejectModal(null);
+    showSuccessToast('Request rejected successfully');
+  };
+
+  const showSuccessToast = (message: string) => {
+    setShowToast({ message, type: 'success' });
+    setTimeout(() => setShowToast(null), 3000);
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedRow(expandedRow === id ? null : id);
+  };
+
+  return (
+    <div className="p-4 sm:p-6 md:p-8">
+      {/* Header */}
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-[#4A4A68] mb-2 text-xl sm:text-2xl">Join Requests</h1>
+        <p className="text-muted-foreground text-sm sm:text-base">Review and manage student rental requests</p>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <Card className="p-3 sm:p-4 mb-4 sm:mb-6 shadow-md">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 items-stretch sm:items-center">
+          {/* Search */}
+          <div className="flex-1 min-w-full sm:min-w-[250px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by property or student name"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Status Filter */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[200px] text-sm">
+              <SelectValue placeholder="Filter by Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Requests</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </Card>
+
+      {/* Requests Cards */}
+      <div className="space-y-3 sm:space-y-4">
+        {filteredRequests.length === 0 ? (
+          <Card className="p-12 text-center shadow-lg">
+            <p className="text-muted-foreground">No requests found</p>
+          </Card>
+        ) : (
+          filteredRequests.map((request) => (
+            <Card key={request.id} className="shadow-lg hover:shadow-xl transition-shadow">
+              {/* Card Header */}
+              <div className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4 mb-4">
+                  {/* Left: Student Info */}
+                  <div className="flex items-start gap-3 sm:gap-4 flex-1 w-full sm:w-auto">
+                    <img
+                      src={request.studentPhoto}
+                      alt={request.studentName}
+                      className="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-[#4A4A68] truncate text-base sm:text-lg">{request.studentName}</h3>
+                        <button className="text-[#8C57FF] hover:text-[#7645E8] transition-colors flex-shrink-0">
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs sm:text-sm text-muted-foreground mb-2">Rental Score: {request.rentalScore}/5.0</p>
+                      <Badge className={`text-xs ${request.kycVerified 
+                        ? 'bg-green-500/10 text-green-700 border-green-200'
+                        : 'bg-red-500/10 text-red-700 border-red-200'
+                      }`}>
+                        {request.kycVerified ? '✓ KYC Verified' : '✗ Not Verified'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Right: Status & Actions */}
+                  <div className="flex flex-row sm:flex-col items-start sm:items-end justify-between sm:justify-start gap-2 sm:gap-3 flex-shrink-0 w-full sm:w-auto">
+                    <div className="flex flex-col items-start sm:items-end gap-1">
+                      <Badge className={`${getStatusColor(request.status)} text-xs`}>
+                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                      </Badge>
+                      {request.blockchainVerified && (
+                        <Badge className="bg-[#8C57FF]/10 text-[#8C57FF] border-[#8C57FF]/20 text-xs">
+                          🟢 On-chain
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {request.status === 'pending' && !request.landlordApproved && (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => setShowApproveModal(request.id)}
+                          className="bg-green-600 hover:bg-green-700 text-xs h-8"
+                        >
+                          <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">Approve</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowRejectModal(request.id)}
+                          className="text-red-600 hover:text-red-700 hover:border-red-300 h-8 px-2"
+                        >
+                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {request.landlordApproved && !request.contractSigned && (
+                      <div className="flex flex-col items-end gap-2">
+                        <Button
+                          size="sm"
+                          disabled
+                          className="bg-gray-400 text-xs h-8 cursor-not-allowed"
+                        >
+                          <Check className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                          Approved
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleViewContract(request.id)}
+                          className="bg-[#8C57FF] hover:bg-[#7645E8] text-xs h-8"
+                        >
+                          <FileText className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
+                          View Contract
+                        </Button>
+                        <p className="text-xs text-muted-foreground italic">Awaiting Student Signature</p>
+                      </div>
+                    )}
+                    {request.status === 'approved' && request.contractSigned && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleViewContract(request.id)}
+                        className="text-[#8C57FF] hover:text-[#7645E8] text-xs h-8"
+                      >
+                        <FileText className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">View Contract</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Property & Request Details */}
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 p-3 sm:p-4 bg-[#F4F5FA] rounded-lg">
+                  <div>
+                    <p className="text-xs text-[#8C57FF] mb-1 truncate">Property</p>
+                    <p className="text-xs sm:text-sm text-[#4A4A68] truncate">{request.propertyName}</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 mb-1">
+                      <DollarSign className="h-3 w-3 text-[#8C57FF] flex-shrink-0" />
+                      <p className="text-xs text-[#8C57FF] truncate">Bid Amount</p>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#4A4A68]">£{request.bidAmount}/mo</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 mb-1">
+                      <Clock className="h-3 w-3 text-[#8C57FF] flex-shrink-0" />
+                      <p className="text-xs text-[#8C57FF] truncate">Duration</p>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#4A4A68]">{request.leaseDuration} months</p>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 mb-1">
+                      <Calendar className="h-3 w-3 text-[#8C57FF] flex-shrink-0" />
+                      <p className="text-xs text-[#8C57FF] truncate">Move-in Date</p>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#4A4A68]">
+                      {new Date(request.moveInDate).toLocaleDateString('en-GB', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Expand Button */}
+                <div className="flex justify-center mt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleExpanded(request.id)}
+                    className="text-[#8C57FF] hover:text-[#7645E8] hover:bg-[#8C57FF]/5"
+                  >
+                    {expandedRow === request.id ? (
+                      <>
+                        <ChevronUp className="h-4 w-4 mr-1" />
+                        Show Less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-4 w-4 mr-1" />
+                        Show More Details
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Expanded Details */}
+              {expandedRow === request.id && (
+                <div className="px-6 pb-6 border-t pt-6">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {/* Left Column */}
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="h-4 w-4 text-[#8C57FF]" />
+                          <p className="text-sm text-[#8C57FF]">Student Bio</p>
+                        </div>
+                        <p className="text-sm text-[#4A4A68]">{request.studentBio}</p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm text-[#8C57FF]">Interests</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {request.interests.map((interest, idx) => (
+                            <Badge key={idx} variant="outline" className="bg-white">
+                              {interest}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column */}
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Shield className="h-4 w-4 text-[#8C57FF]" />
+                          <p className="text-sm text-[#8C57FF]">Verification Status</p>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between p-2 bg-[#F4F5FA] rounded">
+                            <span className="text-sm text-[#4A4A68]">KYC Verification</span>
+                            <Badge className={request.kycVerified 
+                              ? 'bg-green-500/10 text-green-700 border-green-200'
+                              : 'bg-red-500/10 text-red-700 border-red-200'
+                            }>
+                              {request.kycVerified ? '✓ Verified' : '✗ Not Verified'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between p-2 bg-[#F4F5FA] rounded">
+                            <span className="text-sm text-[#4A4A68]">Rental Score</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-[#4A4A68]">{request.rentalScore}/5.0</span>
+                              <div className="flex gap-0.5">
+                                {[...Array(5)].map((_, i) => (
+                                  <span key={i} className={i < Math.round(request.rentalScore!) ? 'text-yellow-500' : 'text-gray-300'}>
+                                    ★
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons in Expanded View */}
+                  {request.status === 'pending' && !request.landlordApproved && (
+                    <div className="flex flex-col sm:flex-row gap-3 mt-6 pt-6 border-t">
+                      <Button
+                        onClick={() => setShowApproveModal(request.id)}
+                        className="bg-[#8C57FF] hover:bg-[#7645E8] flex-1"
+                      >
+                        <Check className="h-4 w-4 mr-2" />
+                        Approve Request
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowRejectModal(request.id)}
+                        className="text-red-600 hover:text-red-700 hover:border-red-300 flex-1"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Reject Request
+                      </Button>
+                    </div>
+                  )}
+                  {request.landlordApproved && !request.contractSigned && (
+                    <div className="mt-6 pt-6 border-t">
+                      <div className="flex flex-col items-center gap-3">
+                        <Badge className="bg-green-500/10 text-green-700 border-green-200">
+                          ✓ Approved by You
+                        </Badge>
+                        <Button
+                          onClick={() => handleViewContract(request.id)}
+                          className="bg-[#8C57FF] hover:bg-[#7645E8] w-full sm:w-auto"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          View Contract
+                        </Button>
+                        <p className="text-sm text-muted-foreground italic">Awaiting Student Signature</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* Approve Confirmation Modal */}
+      {showApproveModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="p-6 max-w-md w-full">
+            <div className="flex items-center gap-2 mb-4">
+              <Check className="h-5 w-5 text-green-600" />
+              <h3 className="text-[#4A4A68]">Approve Request</h3>
+            </div>
+            <p className="text-muted-foreground mb-6">
+              Are you sure you want to approve this rental request? A smart contract will be generated and sent to the student for review and signature.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowApproveModal(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-green-600 hover:bg-green-700"
+                onClick={() => handleApprove(showApproveModal)}
+              >
+                Approve
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Reject Confirmation Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="p-6 max-w-md w-full">
+            <div className="flex items-center gap-2 mb-4">
+              <X className="h-5 w-5 text-red-600" />
+              <h3 className="text-[#4A4A68]">Reject Request</h3>
+            </div>
+            <p className="text-muted-foreground mb-6">
+              Are you sure you want to reject this rental request? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowRejectModal(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={() => handleReject(showRejectModal)}
+              >
+                Reject
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Toast Notifications */}
+      {showToast && (
+        <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 ${
+          showToast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+        } text-white`}>
+          {showToast.type === 'success' ? (
+            <Check className="h-5 w-5" />
+          ) : (
+            <X className="h-5 w-5" />
+          )}
+          {showToast.message}
+        </div>
+      )}
+    </div>
+  );
+}

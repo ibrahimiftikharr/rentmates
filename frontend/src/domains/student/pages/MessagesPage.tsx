@@ -1,0 +1,508 @@
+import { useState } from 'react';
+import { MessageSquare, Search, Pin, User, ArrowLeft, Paperclip, Send, CheckCheck, Check, ExternalLink } from 'lucide-react';
+import { Card, CardContent } from '@/shared/ui/card';
+import { Input } from '@/shared/ui/input';
+import { Button } from '@/shared/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/avatar';
+import { Badge } from '@/shared/ui/badge';
+
+interface Message {
+  id: string;
+  text: string;
+  timestamp: string;
+  sent: boolean;
+  status?: 'sent' | 'delivered' | 'read';
+}
+
+interface Conversation {
+  id: string;
+  name: string;
+  role: 'Student' | 'Landlord';
+  property?: string;
+  lastMessage: string;
+  timestamp: string;
+  unreadCount: number;
+  online: boolean;
+  avatar?: string;
+  isPinned?: boolean;
+  messages: Message[];
+}
+
+export function MessagesPage() {
+  const [selectedConversation, setSelectedConversation] = useState<string>('resolution-team');
+  const [messageInput, setMessageInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showMobileChat, setShowMobileChat] = useState(false);
+
+  // Mock conversations data
+  const conversations: Conversation[] = [
+    {
+      id: 'resolution-team',
+      name: 'Resolution Team',
+      role: 'Landlord',
+      lastMessage: 'We\'re here to help you with any disputes or questions',
+      timestamp: '2m ago',
+      unreadCount: 0,
+      online: true,
+      isPinned: true,
+      messages: [
+        {
+          id: '1',
+          text: 'Hello! Welcome to the Resolution Team. How can we help you today?',
+          timestamp: '10:00 AM',
+          sent: false,
+        },
+        {
+          id: '2',
+          text: 'Hi, I have a question about the security deposit process.',
+          timestamp: '10:05 AM',
+          sent: true,
+          status: 'read',
+        },
+        {
+          id: '3',
+          text: 'We\'re here to help you with any disputes or questions',
+          timestamp: '10:06 AM',
+          sent: false,
+        },
+      ],
+    },
+    {
+      id: '2',
+      name: 'John Doe',
+      role: 'Student',
+      property: 'Modern Studio, Oxford',
+      lastMessage: 'Thanks for the quick response!',
+      timestamp: '5m ago',
+      unreadCount: 2,
+      online: true,
+      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400',
+      messages: [
+        {
+          id: '1',
+          text: 'Hi! I\'m interested in the apartment you listed.',
+          timestamp: '10:30 AM',
+          sent: false,
+        },
+        {
+          id: '2',
+          text: 'Hello! Yes, it\'s still available. Would you like to schedule a viewing?',
+          timestamp: '10:32 AM',
+          sent: true,
+          status: 'read',
+        },
+        {
+          id: '3',
+          text: 'That would be great! Thanks for the quick response!',
+          timestamp: '10:35 AM',
+          sent: false,
+        },
+      ],
+    },
+    {
+      id: '3',
+      name: 'Sarah Smith',
+      role: 'Student',
+      property: 'Cozy 2-Bedroom Flat, Cambridge',
+      lastMessage: 'When can we schedule a viewing?',
+      timestamp: '1h ago',
+      unreadCount: 0,
+      online: false,
+      avatar: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400',
+      messages: [
+        {
+          id: '1',
+          text: 'When can we schedule a viewing?',
+          timestamp: '9:15 AM',
+          sent: false,
+        },
+        {
+          id: '2',
+          text: 'I\'m available this weekend. Does Saturday work for you?',
+          timestamp: '9:20 AM',
+          sent: true,
+          status: 'delivered',
+        },
+      ],
+    },
+    {
+      id: '4',
+      name: 'Mike Johnson',
+      role: 'Student',
+      property: 'Student House Share, London',
+      lastMessage: 'The rental agreement looks good',
+      timestamp: '2h ago',
+      unreadCount: 1,
+      online: true,
+      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400',
+      messages: [
+        {
+          id: '1',
+          text: 'I\'ve reviewed the rental agreement.',
+          timestamp: '8:00 AM',
+          sent: false,
+        },
+        {
+          id: '2',
+          text: 'The rental agreement looks good',
+          timestamp: '8:05 AM',
+          sent: false,
+        },
+      ],
+    },
+    {
+      id: '5',
+      name: 'Emma Wilson',
+      role: 'Student',
+      property: 'Modern Studio, Oxford',
+      lastMessage: 'Is the apartment still available?',
+      timestamp: '1d ago',
+      unreadCount: 0,
+      online: false,
+      avatar: 'https://images.unsplash.com/photo-1631128869897-68e78bf4fb7e?w=400',
+      messages: [
+        {
+          id: '1',
+          text: 'Is the apartment still available?',
+          timestamp: 'Yesterday',
+          sent: false,
+        },
+        {
+          id: '2',
+          text: 'Yes, it is! Would you like to schedule a visit?',
+          timestamp: 'Yesterday',
+          sent: true,
+          status: 'sent',
+        },
+      ],
+    },
+    {
+      id: '6',
+      name: 'David Brown',
+      role: 'Landlord',
+      property: 'Luxury Apartment, Manchester',
+      lastMessage: 'I need help with the contract',
+      timestamp: '2d ago',
+      unreadCount: 0,
+      online: false,
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+      messages: [
+        {
+          id: '1',
+          text: 'I need help with the contract',
+          timestamp: '2 days ago',
+          sent: false,
+        },
+      ],
+    },
+  ];
+
+  // Filter conversations based on search
+  const filteredConversations = conversations.filter((conv) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      conv.name.toLowerCase().includes(query) ||
+      conv.lastMessage.toLowerCase().includes(query) ||
+      conv.property?.toLowerCase().includes(query)
+    );
+  });
+
+  // Separate pinned and regular conversations
+  const pinnedConversations = filteredConversations.filter((conv) => conv.isPinned);
+  const regularConversations = filteredConversations.filter((conv) => !conv.isPinned);
+
+  const activeConversation = conversations.find((conv) => conv.id === selectedConversation);
+
+  const handleSendMessage = () => {
+    if (!messageInput.trim()) return;
+    // Handle sending message
+    setMessageInput('');
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const getStatusIcon = (status?: 'sent' | 'delivered' | 'read') => {
+    if (status === 'read') {
+      return <CheckCheck className="w-3 h-3 text-blue-500" />;
+    } else if (status === 'delivered') {
+      return <CheckCheck className="w-3 h-3 text-gray-400" />;
+    } else if (status === 'sent') {
+      return <Check className="w-3 h-3 text-gray-400" />;
+    }
+    return null;
+  };
+
+  const handleConversationClick = (convId: string) => {
+    setSelectedConversation(convId);
+    setShowMobileChat(true);
+  };
+
+  const handleBackToList = () => {
+    setShowMobileChat(false);
+  };
+
+  return (
+    <div className="h-[calc(100vh-80px)] flex flex-col">
+      {/* Main Content - Full Height */}
+      <div className="flex gap-3 flex-1 overflow-hidden">
+        {/* Left Column - Conversation List */}
+        <div className={`w-full lg:w-[35%] flex-shrink-0 ${showMobileChat ? 'hidden lg:block' : 'block'}`}>
+          <Card className="shadow-lg h-full flex flex-col">
+            <CardContent className="p-3 flex flex-col h-full">
+              {/* Header */}
+              <div className="mb-3">
+                <h3 className="font-semibold mb-3">Chats</h3>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search messages"
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Conversations List */}
+              <div className="flex-1 overflow-y-auto space-y-1">
+                {/* Pinned Section */}
+                {pinnedConversations.length > 0 && (
+                  <>
+                    {pinnedConversations.map((conv) => (
+                      <button
+                        key={conv.id}
+                        onClick={() => handleConversationClick(conv.id)}
+                        className={`w-full p-3 rounded-lg text-left transition-all ${
+                          selectedConversation === conv.id
+                            ? 'bg-primary/10 border border-primary/20'
+                            : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="relative">
+                            <Avatar className="w-12 h-12 border-2 border-primary/30">
+                              <AvatarImage src={conv.avatar} />
+                              <AvatarFallback className="bg-primary/20 text-primary">
+                                <MessageSquare className="w-6 h-6" />
+                              </AvatarFallback>
+                            </Avatar>
+                            {conv.online && (
+                              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold truncate">{conv.name}</p>
+                              <Pin className="w-3 h-3 text-primary flex-shrink-0" />
+                            </div>
+                            <Badge variant="outline" className="mb-1 text-xs bg-primary/5 text-primary border-primary/30">
+                              Pinned
+                            </Badge>
+                            {conv.online && (
+                              <p className="text-xs text-green-600 mb-1">🟢 Active now</p>
+                            )}
+                            <p className="text-sm text-muted-foreground truncate">{conv.lastMessage}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{conv.timestamp}</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                    <div className="border-b my-3"></div>
+                  </>
+                )}
+
+                {/* Regular Conversations */}
+                {regularConversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => handleConversationClick(conv.id)}
+                    className={`w-full p-3 rounded-lg text-left transition-all ${
+                      selectedConversation === conv.id
+                        ? 'bg-primary/10 border border-primary/20'
+                        : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative">
+                        <Avatar className="w-12 h-12">
+                          <AvatarImage src={conv.avatar} />
+                          <AvatarFallback className="bg-gray-100">
+                            {conv.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        {conv.online && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="font-semibold truncate">{conv.name}</p>
+                          {conv.unreadCount > 0 && (
+                            <Badge className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
+                              {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                            </Badge>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="mb-1 text-xs">
+                          {conv.role}
+                        </Badge>
+                        {conv.property && (
+                          <p className="text-xs text-gray-500 mb-1">{conv.property}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground truncate">{conv.lastMessage}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{conv.timestamp}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Active Chat Window */}
+        <div className={`flex-1 ${showMobileChat ? 'block' : 'hidden lg:block'}`}>
+          <Card className="shadow-lg h-full flex flex-col">
+            {activeConversation ? (
+              <>
+                {/* Chat Header */}
+                <div className="p-4 border-b border-border">
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="lg:hidden -ml-2"
+                      onClick={handleBackToList}
+                    >
+                      <ArrowLeft className="w-5 h-5" />
+                    </Button>
+                    <div className="relative">
+                      <Avatar className="w-12 h-12">
+                        <AvatarImage src={activeConversation.avatar} />
+                        <AvatarFallback className="bg-gray-100">
+                          {activeConversation.name
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')}
+                        </AvatarFallback>
+                      </Avatar>
+                      {activeConversation.online && (
+                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold">{activeConversation.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {activeConversation.online ? (
+                          <span className="text-green-600">🟢 Active now</span>
+                        ) : (
+                          <span>⚫ Offline</span>
+                        )}
+                      </p>
+                    </div>
+                    {!activeConversation.isPinned && (
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <ExternalLink className="w-4 h-4" />
+                        <span className="hidden sm:inline">View Profile</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Chat Area */}
+                <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {activeConversation.messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex gap-3 ${message.sent ? 'justify-end' : 'justify-start'}`}
+                    >
+                      {!message.sent && (
+                        <Avatar className="w-8 h-8 flex-shrink-0">
+                          <AvatarImage src={activeConversation.avatar} />
+                          <AvatarFallback className="bg-gray-100 text-xs">
+                            {activeConversation.name
+                              .split(' ')
+                              .map((n) => n[0])
+                              .join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div
+                        className={`max-w-[70%] rounded-2xl px-4 py-3 ${
+                          message.sent
+                            ? 'bg-primary text-white rounded-br-sm'
+                            : 'bg-gray-100 text-gray-900 rounded-bl-sm'
+                        }`}
+                      >
+                        <p className="text-sm leading-relaxed">{message.text}</p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <p
+                            className={`text-xs ${
+                              message.sent ? 'text-white/70' : 'text-gray-500'
+                            }`}
+                          >
+                            {message.timestamp}
+                          </p>
+                          {message.sent && getStatusIcon(message.status)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+
+                {/* Message Input */}
+                <div className="p-4 border-t border-border bg-white">
+                  <div className="flex gap-2 items-end">
+                    <Button variant="outline" size="icon" className="flex-shrink-0">
+                      <Paperclip className="w-5 h-5 text-gray-500" />
+                    </Button>
+                    <div className="flex-1 relative">
+                      <Input
+                        placeholder="Type a message..."
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        className="pr-24"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hidden sm:inline">
+                        Press Enter ↵
+                      </span>
+                    </div>
+                    <Button
+                      onClick={handleSendMessage}
+                      className="bg-primary hover:bg-primary/90 flex-shrink-0 gap-2"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span className="hidden sm:inline">Send</span>
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center">
+                  <MessageSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">
+                    Select a conversation
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Choose a chat from the list to start messaging
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
