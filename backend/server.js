@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const authRouter = require('./routes/authRoutes.js');
+const landlordRouter = require('./routes/landlordRoutes.js');
+const propertyRouter = require('./routes/propertyRoutes.js');
 
 // Load environment variables
 dotenv.config();
@@ -44,6 +46,12 @@ app.get('/api/health', (req, res) => {
 
 // Auth routes (signup, login, OTP, etc.)
 app.use('/api/auth', authRouter);
+
+// Landlord routes (profile, documents, reputation)
+app.use('/api/landlord', landlordRouter);
+
+// Property routes (CRUD operations)
+app.use('/api/properties', propertyRouter);
 
 // ========================================
 // START SERVER

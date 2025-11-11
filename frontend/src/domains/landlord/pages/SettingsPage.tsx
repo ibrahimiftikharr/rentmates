@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -9,29 +9,181 @@ import { Badge } from '@/shared/ui/badge';
 import { Progress } from '@/shared/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
-import { User, Bell, Lock, Shield, Eye, Upload, Info, FileText, Star } from 'lucide-react';
+import { User, Bell, Lock, Shield, Eye, Upload, Info, FileText, Loader2, CheckCircle2, MapPin } from 'lucide-react';
+import { landlordService, LandlordProfile } from '../services/landlordService';
+import { toast } from 'sonner';
+import PlacesAutocomplete from 'react-places-autocomplete';
+import { GoogleMapsLoader } from '@/shared/components/GoogleMapsLoader';
 
 export function SettingsPage() {
-  const [uploadedFileName, setUploadedFileName] = useState('drivers_license.pdf');
-  const [kycStatus, setKycStatus] = useState<'verified' | 'pending' | 'not-submitted'>('verified');
-  const reputationScore = 4.5; // Out of 5
+  const [profile, setProfile] = useState<LandlordProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
 
-  const getKycBadge = () => {
-    switch (kycStatus) {
-      case 'verified':
-        return <Badge className="bg-green-500/10 text-green-700 border-green-200">✅ Verified</Badge>;
-      case 'pending':
-        return <Badge className="bg-orange-500/10 text-orange-700 border-orange-200">⏳ Pending</Badge>;
-      case 'not-submitted':
-        return <Badge className="bg-red-500/10 text-red-700 border-red-200">❌ Not Submitted</Badge>;
+  // Form state - only required fields
+  const [formData, setFormData] = useState({
+    phone: '',
+    nationality: '',
+    address: '',
+    governmentId: '',
+  });
+
+  // Profile image and document state
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [govIdDocumentFile, setGovIdDocumentFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      const data = await landlordService.getProfile();
+      setProfile(data);
+      setFormData({
+        phone: data.phone || '',
+        nationality: data.nationality || '',
+        address: data.address || '',
+        governmentId: data.governmentId || '',
+      });
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploadedFileName(file.name);
+  const isFormValid = () => {
+    // Required: phone, nationality, address, and profile image
+    return (
+      formData.phone.trim() !== '' &&
+      formData.nationality.trim() !== '' &&
+      formData.address.trim() !== '' &&
+      profile?.profileImage !== ''
+    );
+  };
+
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!isFormValid()) {
+      toast.error('Please fill in all required fields');
+      return;
     }
+
+    try {
+      setSaving(true);
+      const updatedProfile = await landlordService.updateProfile(formData);
+      setProfile(updatedProfile);
+      toast.success('Profile updated successfully!');
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+      toast.error('Only JPG and PNG images are allowed');
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      const imageUrl = await landlordService.uploadProfileImage(file);
+      setProfile((prev) => prev ? { ...prev, profileImage: imageUrl } : null);
+      toast.success('Profile image updated!');
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleGovIdDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Document must be less than 10MB');
+      return;
+    }
+
+    // Validate file type
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+      toast.error('Only PDF, JPG, and PNG files are allowed');
+      return;
+    }
+
+    try {
+      setUploadingDocument(true);
+      const documentUrl = await landlordService.uploadGovIdDocument(file);
+      setProfile((prev) => prev ? { ...prev, govIdDocument: documentUrl } : null);
+      setGovIdDocumentFile(file);
+      toast.success('Government ID document uploaded!');
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
+  const getKycBadge = () => {
+    if (!profile) return null;
+
+    if (profile.govIdDocument) {
+      return <Badge className="bg-green-500/10 text-green-700 border-green-200">✅ Verified</Badge>;
+    } else {
+      return <Badge className="bg-red-500/10 text-red-700 border-red-200">❌ Not Submitted</Badge>;
+    }
+  };
+
+  const getReputationMessage = () => {
+    if (!profile) return '';
+    const score = profile.reputationScore;
+    if (score >= 80) return 'Excellent reputation! Keep up the great work.';
+    if (score >= 60) return 'Good reputation. Continue providing quality service.';
+    if (score >= 40) return 'Fair reputation. Consider improving your service.';
+    return 'Build your reputation by maintaining properties and responding promptly.';
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-[#8C57FF]" />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-muted-foreground">Failed to load profile</p>
+      </div>
+    );
+  }
+
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Removed - using handleGovIdDocumentUpload instead
   };
 
   return (
@@ -57,12 +209,31 @@ export function SettingsPage() {
               {/* Avatar Section */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-4 border-b">
                 <Avatar className="h-20 w-20">
-                  <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=landlord" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarImage src={profile.profileImage || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.name}`} />
+                  <AvatarFallback>{profile.name.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <Button className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto">
-                    Change Photo
+                  <input
+                    type="file"
+                    id="profile-image-upload"
+                    className="hidden"
+                    accept="image/jpeg,image/png,image/jpg"
+                    onChange={handleProfileImageUpload}
+                    disabled={uploadingImage}
+                  />
+                  <Button
+                    className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
+                    onClick={() => document.getElementById('profile-image-upload')?.click()}
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      'Change Photo'
+                    )}
                   </Button>
                   <p className="text-xs text-muted-foreground mt-2">
                     JPG, PNG up to 5MB
@@ -84,79 +255,179 @@ export function SettingsPage() {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-sm max-w-xs">
-                            Your reputation is based on tenant reviews, property maintenance, and timely responses.
+                            Your reputation is based on tenant reviews, property maintenance, and timely responses. Score ranges from 0-100.
                           </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </Label>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Star
-                        key={star}
-                        className={`h-4 w-4 ${
-                          star <= Math.floor(reputationScore)
-                            ? 'fill-yellow-400 text-yellow-400'
-                            : star - 0.5 <= reputationScore
-                            ? 'fill-yellow-400/50 text-yellow-400'
-                            : 'fill-gray-200 text-gray-200'
-                        }`}
-                      />
-                    ))}
-                    <span className="ml-2 text-sm text-[#4A4A68]">{reputationScore}/5</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-bold text-[#8C57FF]">{profile.reputationScore}</span>
+                    <span className="text-sm text-muted-foreground">/100</span>
                   </div>
                 </div>
-                <Progress value={(reputationScore / 5) * 100} className="h-2" />
+                <Progress value={profile.reputationScore} className="h-2" />
                 <p className="text-xs text-muted-foreground">
-                  Excellent reputation! Keep up the great work.
+                  {getReputationMessage()}
                 </p>
               </div>
 
+              {/* Profile Completion Status */}
+              {!profile.isProfileComplete && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 text-orange-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-orange-900">
+                        Complete Your Profile to Add Properties
+                      </p>
+                      <p className="text-xs text-orange-700 mt-1">
+                        Required: Phone number, Nationality, Address, and Profile Photo. KYC verification is optional but boosts your reputation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {profile.isProfileComplete && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900">
+                        Profile Complete!
+                      </p>
+                      <p className="text-xs text-green-700 mt-1">
+                        You can now add properties to your portfolio.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Basic Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>First Name</Label>
-                  <Input defaultValue="John" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Last Name</Label>
-                  <Input defaultValue="Doe" />
-                </div>
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input value={profile.name} disabled className="bg-gray-50" />
+                <p className="text-xs text-muted-foreground">
+                  Name is managed through your account settings
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" defaultValue="john.doe@email.com" />
+                <Input type="email" value={profile.email} disabled className="bg-gray-50" />
+                <p className="text-xs text-muted-foreground">
+                  Email is managed through your account settings
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input type="tel" defaultValue="+1 (555) 123-4567" />
+                <Label>Phone *</Label>
+                <Input
+                  type="tel"
+                  placeholder="+1 (555) 123-4567"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
-                <Label>Nationality</Label>
-                <Select defaultValue="us">
+                <Label>Nationality *</Label>
+                <Select value={formData.nationality} onValueChange={(value) => handleInputChange('nationality', value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select nationality" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="us">🇺🇸 United States</SelectItem>
-                    <SelectItem value="uk">🇬🇧 United Kingdom</SelectItem>
-                    <SelectItem value="ca">🇨🇦 Canada</SelectItem>
-                    <SelectItem value="au">🇦🇺 Australia</SelectItem>
-                    <SelectItem value="de">🇩🇪 Germany</SelectItem>
-                    <SelectItem value="fr">🇫🇷 France</SelectItem>
-                    <SelectItem value="es">🇪🇸 Spain</SelectItem>
-                    <SelectItem value="in">🇮🇳 India</SelectItem>
-                    <SelectItem value="cn">🇨🇳 China</SelectItem>
-                    <SelectItem value="jp">🇯🇵 Japan</SelectItem>
+                    <SelectItem value="US">🇺🇸 United States</SelectItem>
+                    <SelectItem value="UK">🇬🇧 United Kingdom</SelectItem>
+                    <SelectItem value="CA">🇨🇦 Canada</SelectItem>
+                    <SelectItem value="AU">🇦🇺 Australia</SelectItem>
+                    <SelectItem value="DE">🇩🇪 Germany</SelectItem>
+                    <SelectItem value="FR">🇫🇷 France</SelectItem>
+                    <SelectItem value="ES">🇪🇸 Spain</SelectItem>
+                    <SelectItem value="IN">🇮🇳 India</SelectItem>
+                    <SelectItem value="CN">🇨🇳 China</SelectItem>
+                    <SelectItem value="JP">🇯🇵 Japan</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              <Button className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto">
-                Save Changes
+              {/* Address Field with Autocomplete */}
+              <div className="space-y-2">
+                <Label>Address *</Label>
+                <GoogleMapsLoader fallback={
+                  <Input
+                    value={formData.address}
+                    onChange={(e) => handleInputChange('address', e.target.value)}
+                    placeholder="Loading Google Maps..."
+                    disabled
+                  />
+                }>
+                  <PlacesAutocomplete
+                    value={formData.address}
+                    onChange={(value) => handleInputChange('address', value)}
+                    onSelect={(value) => handleInputChange('address', value)}
+                  >
+                    {({ getInputProps, suggestions, getSuggestionItemProps, loading }) => (
+                      <div className="relative">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                        <Input
+                          {...getInputProps({ placeholder: 'Start typing your address...' })}
+                          className="pl-10"
+                        />
+                        {(loading || suggestions.length > 0) && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {loading && <div className="px-4 py-3 text-sm text-gray-500">Loading...</div>}
+                            {suggestions.map((suggestion) => (
+                              <div
+                                {...getSuggestionItemProps(suggestion, {
+                                  className: `px-4 py-3 cursor-pointer text-sm border-b last:border-b-0 ${
+                                    suggestion.active ? 'bg-gray-50' : 'bg-white'
+                                  }`,
+                                })}
+                                key={suggestion.placeId}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <MapPin className="h-4 w-4 text-[#8C57FF] mt-0.5 flex-shrink-0" />
+                                  <span>{suggestion.description}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </PlacesAutocomplete>
+                </GoogleMapsLoader>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Government ID Number (Optional)</Label>
+                <Input
+                  type="text"
+                  placeholder="Enter your ID number"
+                  value={formData.governmentId}
+                  onChange={(e) => handleInputChange('governmentId', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional - helps with verification
+                </p>
+              </div>
+
+              <Button
+                className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
+                onClick={handleSaveProfile}
+                disabled={!isFormValid() || saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -166,23 +437,20 @@ export function SettingsPage() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-[#8C57FF]" />
-                <CardTitle className="text-[#4A4A68]">KYC Verification</CardTitle>
+                <div>
+                  <CardTitle className="text-[#4A4A68]">KYC Verification (Optional)</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Boost your reputation score by verifying your identity
+                  </p>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4 md:space-y-6">
-              <div className="space-y-2">
-                <Label>Government Issued ID Number</Label>
-                <Input type="text" placeholder="Enter your ID number" defaultValue="3410625622826" />
-                <p className="text-xs text-muted-foreground">
-                  This will be used for contract verification purposes
-                </p>
-              </div>
-
               {/* KYC Verification Status */}
-              <div className="space-y-3 pt-4 border-t">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Label>KYC Verification Status</Label>
+                    <Label>Verification Status</Label>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -192,7 +460,7 @@ export function SettingsPage() {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-sm max-w-xs">
-                            Know Your Customer (KYC) verification helps ensure trust and security on the platform. Upload a valid ID document for verification.
+                            Uploading a government ID and document increases your reputation score and builds trust with tenants. This is optional but highly recommended.
                           </p>
                         </TooltipContent>
                       </Tooltip>
@@ -204,26 +472,50 @@ export function SettingsPage() {
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-[#8C57FF]" />
-                    ID / Driver's License
+                    ID / Driver's License (Optional)
                   </Label>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="flex-1 px-4 py-2 bg-[#F4F5FA] rounded-lg border border-border">
-                      <p className="text-sm text-[#4A4A68] truncate">{uploadedFileName}</p>
+                      <p className="text-sm text-[#4A4A68] truncate">
+                        {profile.govIdDocument ? (
+                          <a
+                            href={profile.govIdDocument}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#8C57FF] hover:underline"
+                          >
+                            {govIdDocumentFile?.name || 'View Document'}
+                          </a>
+                        ) : (
+                          'No document uploaded'
+                        )}
+                      </p>
                     </div>
                     <input
                       type="file"
                       id="id-upload"
                       className="hidden"
                       accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={handleFileUpload}
+                      onChange={handleGovIdDocumentUpload}
+                      disabled={uploadingDocument}
                     />
                     <Button
                       variant="outline"
                       onClick={() => document.getElementById('id-upload')?.click()}
                       className="w-full sm:w-auto"
+                      disabled={uploadingDocument}
                     >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Replace
+                      {uploadingDocument ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4 mr-2" />
+                          {profile.govIdDocument ? 'Replace' : 'Upload'}
+                        </>
+                      )}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -231,10 +523,6 @@ export function SettingsPage() {
                   </p>
                 </div>
               </div>
-
-              <Button className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto">
-                Update KYC Information
-              </Button>
             </CardContent>
           </Card>
 

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, SlidersHorizontal, Heart, MapPin, BedDouble, Bath, Maximize } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, SlidersHorizontal, Heart, MapPin, BedDouble, Bath, Maximize, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Input } from '@/shared/ui/input';
 import { Button } from '@/shared/ui/button';
@@ -11,25 +11,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { PropertyDetailsPage } from '../components/property-details/PropertyDetailsPage';
 import { toast } from 'sonner';
+import { studentService, Property as APIProperty } from '../services/studentService';
 
 interface Property {
-  id: number;
+  id: string;
   title: string;
   price: number;
-  type: 'flat' | 'house' | 'studio';
+  type: 'flat' | 'house' | 'studio' | 'apartment';
   image: string;
   images: string[];
-  distance: number;
-  university: string;
-  city: string;
+  distance?: number;
   address: string;
   bills: string[];
+  billPrices?: {
+    wifi: number;
+    water: number;
+    electricity: number;
+    gas: number;
+    councilTax: number;
+  };
   isWishlisted: boolean;
-  shared: boolean;
   bedrooms?: number;
   bathrooms?: number;
   area?: number;
   description?: string;
+  furnished?: boolean;
 }
 
 interface SearchPropertiesPageProps {
@@ -47,142 +53,73 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
   const [sortBy, setSortBy] = useState('price');
   const [showFilters, setShowFilters] = useState(true);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [calculatingDistances, setCalculatingDistances] = useState(false);
 
-  // Mock properties data
-  const [properties, setProperties] = useState<Property[]>([
-    {
-      id: 1,
-      title: 'Modern Studio near Campus',
-      price: 850,
-      type: 'studio',
-      image: 'https://images.unsplash.com/photo-1610123172763-1f587473048f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb3p5JTIwc3R1ZGlvJTIwYXBhcnRtZW50fGVufDF8fHx8MTc2MjMyMTM3OXww&ixlib=rb-4.1.0&q=80&w=1080',
-      images: [
-        'https://images.unsplash.com/photo-1610123172763-1f587473048f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1556912172-45b7abe8b7e1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      ],
-      distance: 0.5,
-      university: 'Oxford University',
-      city: 'Oxford',
-      address: '42 Park End Street, Oxford, OX1 1HP',
-      bills: ['Gas', 'Electricity'],
-      isWishlisted: false,
-      shared: false,
-      bedrooms: 1,
-      bathrooms: 1,
-      area: 450,
-    },
-    {
-      id: 2,
-      title: 'Spacious 2-Bed Flat with Garden',
-      price: 1200,
-      type: 'flat',
-      image: 'https://images.unsplash.com/photo-1757780993465-7f1923296763?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBmbGF0JTIwYnVpbGRpbmd8ZW58MXx8fHwxNzYyNDI2ODg0fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      images: [
-        'https://images.unsplash.com/photo-1757780993465-7f1923296763?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1493809842364-78817add7ffb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      ],
-      distance: 1.2,
-      university: 'Cambridge University',
-      city: 'Cambridge',
-      address: '28 Mill Road, Cambridge, CB1 2AD',
-      bills: [],
-      isWishlisted: false,
-      shared: true,
-      bedrooms: 2,
-      bathrooms: 1,
-      area: 750,
-    },
-    {
-      id: 3,
-      title: 'Cozy Student House - 4 Bedrooms',
-      price: 1800,
-      type: 'house',
-      image: 'https://images.unsplash.com/photo-1583430312373-0fb9d4e0c4ef?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwaG91c2UlMjByZW50YWx8ZW58MXx8fHwxNzYyNDM0ODQ4fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      images: [
-        'https://images.unsplash.com/photo-1583430312373-0fb9d4e0c4ef?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      ],
-      distance: 0.8,
-      university: 'Oxford University',
-      city: 'Oxford',
-      address: '156 Cowley Road, Oxford, OX4 1UE',
-      bills: ['Gas', 'Electricity'],
-      isWishlisted: true,
-      shared: true,
-      bedrooms: 4,
-      bathrooms: 2,
-      area: 1200,
-    },
-    {
-      id: 4,
-      title: 'Luxury Apartment in City Centre',
-      price: 1500,
-      type: 'flat',
-      image: 'https://images.unsplash.com/photo-1758471576052-a7e3d287a7ae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwYXBhcnRtZW50JTIwZXh0ZXJpb3J8ZW58MXx8fHwxNzYyNDM0ODQ3fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      images: [
-        'https://images.unsplash.com/photo-1758471576052-a7e3d287a7ae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1556912173-3bb406ef7e77?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1574643156929-51fa098b0394?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      ],
-      distance: 2.1,
-      university: 'Cambridge University',
-      city: 'Cambridge',
-      address: '8 Market Street, Cambridge, CB2 3QE',
-      bills: ['Gas'],
-      isWishlisted: false,
-      shared: false,
-      bedrooms: 3,
-      bathrooms: 2,
-      area: 950,
-    },
-    {
-      id: 5,
-      title: 'Affordable Studio Close to Library',
-      price: 650,
-      type: 'studio',
-      image: 'https://images.unsplash.com/photo-1610123172763-1f587473048f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb3p5JTIwc3R1ZGlvJTIwYXBhcnRtZW50fGVufDF8fHx8MTc2MjMyMTM3OXww&ixlib=rb-4.1.0&q=80&w=1080',
-      images: [
-        'https://images.unsplash.com/photo-1610123172763-1f587473048f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1507089947368-19c1da9775ae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      ],
-      distance: 0.3,
-      university: 'Oxford University',
-      city: 'Oxford',
-      address: '90 High Street, Oxford, OX1 4BG',
-      bills: ['Gas', 'Electricity'],
-      isWishlisted: false,
-      shared: false,
-      bedrooms: 1,
-      bathrooms: 1,
-      area: 400,
-    },
-    {
-      id: 6,
-      title: 'Victorian House Share',
-      price: 950,
-      type: 'house',
-      image: 'https://images.unsplash.com/photo-1583430312373-0fb9d4e0c4ef?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwaG91c2UlMjByZW50YWx8ZW58MXx8fHwxNzYyNDM0ODQ4fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      images: [
-        'https://images.unsplash.com/photo-1583430312373-0fb9d4e0c4ef?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-        'https://images.unsplash.com/photo-1505691938895-1758d7feb511?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-      ],
-      distance: 1.5,
-      university: 'Cambridge University',
-      city: 'Cambridge',
-      address: '34 Victoria Avenue, Cambridge, CB4 3DU',
-      bills: [],
-      isWishlisted: false,
-      shared: true,
-      bedrooms: 3,
-      bathrooms: 2,
-      area: 1000,
-    },
-  ]);
+  useEffect(() => {
+    fetchProperties();
+  }, []);
+
+  const fetchProperties = async () => {
+    try {
+      setLoading(true);
+      const data = await studentService.getAllProperties();
+      
+      // Transform API properties to local format
+      const transformedProperties: Property[] = data.map((prop: APIProperty) => ({
+        id: prop.id,
+        title: prop.title,
+        price: prop.price,
+        type: prop.type,
+        image: prop.mainImage || prop.images[0] || '',
+        images: prop.images,
+        address: prop.address,
+        bills: prop.billsIncluded,
+        billPrices: prop.billPrices,
+        isWishlisted: false,
+        bedrooms: prop.bedrooms,
+        bathrooms: prop.bathrooms,
+        area: prop.area,
+        description: prop.description,
+        furnished: prop.furnished,
+        distance: undefined, // Will be calculated when user searches
+      }));
+
+      setProperties(transformedProperties);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load properties');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      // Clear distances if no search query
+      setProperties(prev => prev.map(p => ({ ...p, distance: undefined })));
+      return;
+    }
+
+    try {
+      setCalculatingDistances(true);
+      
+      // Calculate distances for all properties
+      const updatedProperties = await Promise.all(
+        properties.map(async (property) => {
+          const distance = await studentService.calculateDistance(searchQuery, property.address);
+          return { ...property, distance };
+        })
+      );
+
+      setProperties(updatedProperties);
+      toast.success('Distances calculated successfully');
+    } catch (error) {
+      toast.error('Failed to calculate distances');
+    } finally {
+      setCalculatingDistances(false);
+    }
+  };
 
   const handlePropertyTypeToggle = (type: string) => {
     setPropertyType(prev =>
@@ -208,7 +145,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
     toast.success('All filters cleared');
   };
 
-  const toggleWishlist = (propertyId: number) => {
+  const toggleWishlist = (propertyId: string) => {
     setProperties(prev =>
       prev.map(prop =>
         prop.id === propertyId
@@ -231,8 +168,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
     .filter(prop => {
       const matchesSearch =
         searchQuery === '' ||
-        prop.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prop.university.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        prop.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
         prop.title.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesPrice =
@@ -252,7 +188,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
       if (sortBy === 'price') {
         return a.price - b.price;
       } else if (sortBy === 'proximity') {
-        return a.distance - b.distance;
+        return (a.distance || 999) - (b.distance || 999);
       }
       return 0;
     });
@@ -284,12 +220,32 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
       <div className="flex flex-1 items-center bg-gray-50 border-2 rounded-md h-12 md:h-14 px-4 focus-within:border-primary">
         <Search className="w-5 h-5 text-muted-foreground mr-3 flex-shrink-0" />
         <Input
-          placeholder="Search by city, university, or property name..."
+          placeholder="Search by location to calculate distances..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
+          onKeyPress={e => e.key === 'Enter' && handleSearch()}
           className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm md:text-base flex-1 placeholder:text-muted-foreground"
         />
       </div>
+
+      {/* Search Button */}
+      <Button
+        onClick={handleSearch}
+        disabled={calculatingDistances || !searchQuery.trim()}
+        className="bg-primary hover:bg-primary/90 h-12 md:h-14 px-6"
+      >
+        {calculatingDistances ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            Calculating...
+          </>
+        ) : (
+          <>
+            <Search className="w-5 h-5 mr-2" />
+            Search
+          </>
+        )}
+      </Button>
 
       {/* Filters Button */}
       <Button
@@ -455,23 +411,30 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
             </Card>
           )}
 
-          {/* Sort and Results Count */}
-          <div className="flex items-center justify-between p-4 rounded-lg border-2 bg-card">
-            <p className="font-medium">
-              <span className="text-primary">{filteredProperties.length}</span> {filteredProperties.length === 1 ? 'property' : 'properties'} found
-            </p>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-              <Label className="text-muted-foreground">Sort by:</Label>
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full sm:w-40 border-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="price">Price (Low to High)</SelectItem>
-                  <SelectItem value="proximity">Distance</SelectItem>
-                </SelectContent>
-              </Select>
+          {/* Loading State */}
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
+          ) : (
+            <>
+              {/* Sort and Results Count */}
+              <div className="flex items-center justify-between p-4 rounded-lg border-2 bg-card">
+                <p className="font-medium">
+                  <span className="text-primary">{filteredProperties.length}</span> {filteredProperties.length === 1 ? 'property' : 'properties'} found
+                </p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                  <Label className="text-muted-foreground">Sort by:</Label>
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger className="w-full sm:w-40 border-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="price">Price (Low to High)</SelectItem>
+                      <SelectItem value="proximity">Distance</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
           </div>
 
           {/* Property Cards Grid */}
@@ -501,20 +464,17 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
                     <Badge className="bg-primary/90 backdrop-blur-sm text-white border-0 capitalize px-3 py-1">
                       {property.type}
                     </Badge>
-                    {property.shared && (
-                      <Badge className="bg-blue-500/90 backdrop-blur-sm text-white border-0 px-3 py-1">
-                        Shared
-                      </Badge>
-                    )}
                   </div>
                 </div>
                 <CardContent className="p-5 space-y-4">
                   <div>
                     <h3 className="mb-2 line-clamp-1 group-hover:text-primary transition-colors">{property.title}</h3>
-                    <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span className="line-clamp-1">{property.distance} km from {property.university}</span>
-                    </div>
+                    {property.distance !== undefined && (
+                      <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span className="line-clamp-1">{property.distance} miles away</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Property Stats */}
@@ -583,6 +543,8 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
                 </Button>
               </CardContent>
             </Card>
+          )}
+            </>
           )}
         </div>
       )}

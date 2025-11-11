@@ -22,32 +22,7 @@ export function RoommateMatchingSection() {
   const [visitType, setVisitType] = useState<'virtual' | 'in-person' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
 
-  const flatmates = [
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      photo: 'https://images.unsplash.com/photo-1544717305-2782549b5136?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHVkZW50JTIwcG9ydHJhaXR8ZW58MXx8fHwxNzYyMzYxNzI0fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      field: 'Computer Science',
-      tagline: 'Love coding and late-night study sessions!',
-      compatibility: 92,
-    },
-    {
-      id: 2,
-      name: 'Emma Wilson',
-      photo: 'https://images.unsplash.com/photo-1631128869897-68e78bf4fb7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjb2xsZWdlJTIwc3R1ZGVudCUyMHNtaWxpbmd8ZW58MXx8fHwxNzYyNDUyMzk0fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      field: 'Business Management',
-      tagline: 'Organized, clean, and friendly roommate',
-      compatibility: 87,
-    },
-    {
-      id: 3,
-      name: 'Alex Chen',
-      photo: 'https://images.unsplash.com/photo-1568880893176-fb2bdab44e41?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwc3R1ZGVudCUyMHByb2ZpbGV8ZW58MXx8fHwxNzYyNDUyMzk0fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      field: 'Engineering',
-      tagline: 'Quiet, respectful, love cooking together',
-      compatibility: 79,
-    },
-  ];
+  const flatmates: any[] = []; // Empty array - no flatmates for now
 
   // Mock available dates
   const today = new Date();
@@ -167,9 +142,21 @@ export function RoommateMatchingSection() {
             Meet your potential flatmates and check your compatibility score
           </p>
 
-          {/* Flatmate Cards - Improved with shadow and elevation */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {flatmates.map((flatmate) => (
+          {flatmates.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-muted mb-4">
+                <Users className="w-10 h-10 text-muted-foreground" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">No flatmates for now</h3>
+              <p className="text-muted-foreground">
+                Be the first to join this property!
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Flatmate Cards - Improved with shadow and elevation */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {flatmates.map((flatmate) => (
               <Card 
                 key={flatmate.id}
                 className="shadow-xl hover:shadow-2xl transition-all border-2 hover:border-primary/50"
@@ -180,7 +167,8 @@ export function RoommateMatchingSection() {
                     <div className="relative mb-4">
                       <Avatar className="w-32 h-32 border-4 border-white shadow-xl ring-2 ring-primary/20">
                         <AvatarImage src={flatmate.photo} alt={flatmate.name} />
-                        <AvatarFallback>{flatmate.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                        {/* 'n' implicitly has any — explicitly type it */}
+                        <AvatarFallback>{flatmate.name.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
                       </Avatar>
                       {/* Compatibility Badge */}
                       <div className={`absolute -bottom-2 -right-2 ${getCompatibilityColor(flatmate.compatibility)} text-white px-3 py-1.5 rounded-full text-sm font-semibold shadow-lg flex items-center gap-1`}>
@@ -223,6 +211,8 @@ export function RoommateMatchingSection() {
               </Card>
             ))}
           </div>
+            </>
+          )}
 
           {/* Info Box */}
           <Card className="border-2 border-primary/30 bg-gradient-to-r from-primary/10 to-blue-500/10 shadow-lg">

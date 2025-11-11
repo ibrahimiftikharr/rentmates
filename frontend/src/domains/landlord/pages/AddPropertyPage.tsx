@@ -1,18 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
-  Home, 
   ChevronRight, 
   ChevronLeft, 
   MapPin, 
   Upload, 
-  Calendar as CalendarIcon,
   Check,
   Plus,
   X,
   Edit,
   AlertCircle,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
+import PlacesAutocomplete from 'react-places-autocomplete';
+import { GoogleMapsLoader } from '@/shared/components/GoogleMapsLoader';
+
+// Extend Window interface for Google Maps
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
@@ -22,6 +31,9 @@ import { Checkbox } from '@/shared/ui/checkbox';
 import { Card } from '@/shared/ui/card';
 import { Calendar } from '@/shared/ui/calendar';
 import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/alert';
+import { landlordService } from '../services/landlordService';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 const STEPS = [
   { id: 1, title: 'Property Details', description: 'Basic information' },
@@ -45,20 +57,19 @@ interface PropertyData {
   bedrooms: string;
   bathrooms: string;
   size: string;
-  flatmates: string;
   rent: string;
   deposit: string;
   minStay: string;
   maxStay: string;
   availableBy: Date | undefined;
   description: string;
-  furnishing: string;
+  furnished: boolean;
   petsAllowed: boolean;
   smokingAllowed: boolean;
   guestsAllowed: boolean;
   amenities: string[];
   customAmenities: string[];
-  photos: { url: string; caption: string }[];
+  photos: File[];
   bills: {
     wifi: { included: boolean; amount: string };
     water: { included: boolean; amount: string };
@@ -70,28 +81,15 @@ interface PropertyData {
 }
 
 interface AddPropertyPageProps {
-  onPublish: () => void;
+  onPublish?: () => void;
   onNavigate?: (page: string) => void;
 }
 
-// Mock profile data - in real app this would come from a context or API
-const checkProfileComplete = () => {
-  // Simulating profile check - check if basic required fields are filled
-  // TO TEST: Change any of these values to empty string (e.g., firstName: '') 
-  // to see the profile incomplete warning
-  const profile = {
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@email.com',
-    phone: '+1 (555) 123-4567',
-    nationality: 'us'
-  };
-  
-  return !!(profile.firstName && profile.lastName && profile.email && profile.phone && profile.nationality);
-};
-
 export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps) {
-  const isProfileComplete = checkProfileComplete();
+  const navigate = useNavigate();
+  const [isProfileComplete, setIsProfileComplete] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
+  const [publishing, setPublishing] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [propertyData, setPropertyData] = useState<PropertyData>({
     title: '',
@@ -100,14 +98,13 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     bedrooms: '',
     bathrooms: '',
     size: '',
-    flatmates: '',
     rent: '',
     deposit: '',
     minStay: '',
     maxStay: '',
     availableBy: undefined,
     description: '',
-    furnishing: '',
+    furnished: false,
     petsAllowed: false,
     smokingAllowed: false,
     guestsAllowed: false,
@@ -124,9 +121,42 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     availability: []
   });
   const [newCustomAmenity, setNewCustomAmenity] = useState('');
-  const [newPhotoCaption, setNewPhotoCaption] = useState('');
+
+  useEffect(() => {
+    checkProfileStatus();
+  }, []);  const checkProfileStatus = async () => {
+    try {
+      setCheckingProfile(true);
+      const profile = await landlordService.getProfile();
+      setIsProfileComplete(profile.isProfileComplete);
+      
+      if (!profile.isProfileComplete) {
+        toast.error('Please complete your profile before adding properties');
+      }
+    } catch (error: any) {
+      toast.error('Failed to check profile status');
+    } finally {
+      setCheckingProfile(false);
+    }
+  };
+
+  const isStep1Valid = () => {
+    return (
+      propertyData.title.trim() !== '' &&
+      propertyData.address.trim() !== '' &&
+      propertyData.propertyType !== '' &&
+      propertyData.bedrooms !== '' &&
+      propertyData.bathrooms !== '' &&
+      propertyData.rent !== '' &&
+      propertyData.description.trim() !== ''
+    );
+  };
 
   const handleNext = () => {
+    if (currentStep === 1 && !isStep1Valid()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
     if (currentStep < 6) {
       setCurrentStep(currentStep + 1);
     }
@@ -136,6 +166,124 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Validate file count (max 10)
+    if (propertyData.photos.length + files.length > 10) {
+      toast.error('Maximum 10 images allowed');
+      return;
+    }
+
+    // Validate each file
+    const validFiles = files.filter(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 5MB)`);
+        return false;
+      }
+      if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+        toast.error(`${file.name} is not a valid image`);
+        return false;
+      }
+      return true;
+    });
+
+    setPropertyData(prev => ({
+      ...prev,
+      photos: [...prev.photos, ...validFiles]
+    }));
+  };
+
+  const removePhoto = (index: number) => {
+    setPropertyData(prev => ({
+      ...prev,
+      photos: prev.photos.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handlePublish = async () => {
+    if (!isProfileComplete) {
+      toast.error('Please complete your profile first');
+      return;
+    }
+
+    if (!isStep1Valid()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (propertyData.photos.length === 0) {
+      toast.error('Please upload at least one photo');
+      return;
+    }
+
+    try {
+      setPublishing(true);
+
+      // Prepare bills array
+      const billsIncluded = [];
+      if (propertyData.bills.wifi.included) billsIncluded.push('WiFi');
+      if (propertyData.bills.water.included) billsIncluded.push('Water');
+      if (propertyData.bills.electricity.included) billsIncluded.push('Electricity');
+      if (propertyData.bills.gas.included) billsIncluded.push('Gas');
+      if (propertyData.bills.councilTax.included) billsIncluded.push('Council Tax');
+
+      // Prepare bill prices
+      const billPrices = {
+        wifi: parseFloat(propertyData.bills.wifi.amount) || 0,
+        water: parseFloat(propertyData.bills.water.amount) || 0,
+        electricity: parseFloat(propertyData.bills.electricity.amount) || 0,
+        gas: parseFloat(propertyData.bills.gas.amount) || 0,
+        councilTax: parseFloat(propertyData.bills.councilTax.amount) || 0
+      };
+
+      // Combine standard and custom amenities
+      const allAmenities = [...propertyData.amenities, ...propertyData.customAmenities];
+
+      const propertyPayload = {
+        title: propertyData.title,
+        description: propertyData.description,
+        type: propertyData.propertyType,
+        address: propertyData.address,
+        bedrooms: parseInt(propertyData.bedrooms),
+        bathrooms: parseInt(propertyData.bathrooms),
+        area: propertyData.size ? parseInt(propertyData.size) : undefined,
+        furnished: propertyData.furnished,
+        price: parseFloat(propertyData.rent),
+        deposit: propertyData.deposit ? parseFloat(propertyData.deposit) : undefined,
+        amenities: allAmenities,
+        billsIncluded,
+        billPrices,
+        availableFrom: propertyData.availableBy?.toISOString(),
+        minimumStay: propertyData.minStay ? parseInt(propertyData.minStay) : undefined,
+        maximumStay: propertyData.maxStay ? parseInt(propertyData.maxStay) : undefined,
+        images: propertyData.photos,
+      };
+
+      await landlordService.createProperty(propertyPayload);
+      toast.success('Property published successfully!');
+      
+      // Navigate to properties page or dashboard
+      if (onPublish) {
+        onPublish();
+      } else {
+        navigate('/landlord/dashboard');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to publish property');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  if (checkingProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-[#8C57FF]" />
+      </div>
+    );
   };
 
   const toggleAmenity = (amenity: string) => {
@@ -164,26 +312,6 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     }));
   };
 
-  const addPhoto = () => {
-    // Simulated photo upload
-    const newPhoto = {
-      url: `https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80`,
-      caption: newPhotoCaption
-    };
-    setPropertyData(prev => ({
-      ...prev,
-      photos: [...prev.photos, newPhoto]
-    }));
-    setNewPhotoCaption('');
-  };
-
-  const removePhoto = (index: number) => {
-    setPropertyData(prev => ({
-      ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
-    }));
-  };
-
   const calculateTotalBills = () => {
     const bills = propertyData.bills;
     let total = 0;
@@ -195,16 +323,6 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     return total;
   };
 
-  const toggleAvailability = (date: Date) => {
-    const dateStr = date.toISOString();
-    setPropertyData(prev => ({
-      ...prev,
-      availability: prev.availability.some(d => d.toISOString() === dateStr)
-        ? prev.availability.filter(d => d.toISOString() !== dateStr)
-        : [...prev.availability, date]
-    }));
-  };
-
   const renderStep = () => {
     switch (currentStep) {
       case 1:
@@ -214,32 +332,69 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
-                <Label htmlFor="title">Property Title</Label>
+                <Label htmlFor="title">Property Title *</Label>
                 <Input
                   id="title"
                   placeholder="e.g., Modern 2-bed flat in City Centre"
                   value={propertyData.title}
                   onChange={(e) => setPropertyData({ ...propertyData, title: e.target.value })}
                   className="mt-1.5"
+                  required
                 />
               </div>
 
               <div className="md:col-span-2">
-                <Label htmlFor="address">Address</Label>
-                <div className="relative mt-1.5">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="address"
-                    placeholder="Start typing address..."
-                    value={propertyData.address}
-                    onChange={(e) => setPropertyData({ ...propertyData, address: e.target.value })}
-                    className="pl-10"
-                  />
+                <Label htmlFor="address">Address *</Label>
+                <div className="mt-1.5">
+                  <GoogleMapsLoader fallback={
+                    <Input
+                      value={propertyData.address}
+                      onChange={(e) => setPropertyData({ ...propertyData, address: e.target.value })}
+                      placeholder="Loading Google Maps..."
+                      disabled
+                    />
+                  }>
+                    <PlacesAutocomplete
+                      value={propertyData.address}
+                      onChange={(value) => setPropertyData({ ...propertyData, address: value })}
+                      onSelect={(value) => setPropertyData({ ...propertyData, address: value })}
+                    >
+                      {({ getInputProps, suggestions, getSuggestionItemProps, loading }) => (
+                        <div className="relative">
+                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
+                          <Input
+                            {...getInputProps({ placeholder: 'Start typing your address...' })}
+                            className="pl-10"
+                          />
+                          {(loading || suggestions.length > 0) && (
+                            <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                              {loading && <div className="px-4 py-3 text-sm text-gray-500">Loading...</div>}
+                              {suggestions.map((suggestion) => (
+                                <div
+                                  {...getSuggestionItemProps(suggestion, {
+                                    className: `px-4 py-3 cursor-pointer text-sm border-b last:border-b-0 ${
+                                      suggestion.active ? 'bg-gray-50' : 'bg-white'
+                                    }`,
+                                  })}
+                                  key={suggestion.placeId}
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <MapPin className="h-4 w-4 text-[#8C57FF] mt-0.5 flex-shrink-0" />
+                                    <span>{suggestion.description}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </PlacesAutocomplete>
+                  </GoogleMapsLoader>
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="propertyType">Property Type</Label>
+                <Label htmlFor="propertyType">Property Type *</Label>
                 <Select value={propertyData.propertyType} onValueChange={(value) => setPropertyData({ ...propertyData, propertyType: value })}>
                   <SelectTrigger className="mt-1.5">
                     <SelectValue placeholder="Select type" />
@@ -247,32 +402,39 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   <SelectContent>
                     <SelectItem value="studio">Studio</SelectItem>
                     <SelectItem value="apartment">Apartment</SelectItem>
-                    <SelectItem value="shared">Shared House</SelectItem>
+                    <SelectItem value="flat">Flat</SelectItem>
+                    <SelectItem value="house">House</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
+              <div className="md:col-span-1"></div>
+
               <div>
-                <Label htmlFor="bedrooms">Number of Bedrooms</Label>
+                <Label htmlFor="bedrooms">Number of Bedrooms *</Label>
                 <Input
                   id="bedrooms"
                   type="number"
+                  min="1"
                   placeholder="e.g., 2"
                   value={propertyData.bedrooms}
                   onChange={(e) => setPropertyData({ ...propertyData, bedrooms: e.target.value })}
                   className="mt-1.5"
+                  required
                 />
               </div>
 
               <div>
-                <Label htmlFor="bathrooms">Number of Bathrooms</Label>
+                <Label htmlFor="bathrooms">Number of Bathrooms *</Label>
                 <Input
                   id="bathrooms"
                   type="number"
+                  min="1"
                   placeholder="e.g., 1"
                   value={propertyData.bathrooms}
                   onChange={(e) => setPropertyData({ ...propertyData, bathrooms: e.target.value })}
                   className="mt-1.5"
+                  required
                 />
               </div>
 
@@ -289,19 +451,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
               </div>
 
               <div>
-                <Label htmlFor="flatmates">Number of Flatmates Allowed</Label>
-                <Input
-                  id="flatmates"
-                  type="number"
-                  placeholder="e.g., 2"
-                  value={propertyData.flatmates}
-                  onChange={(e) => setPropertyData({ ...propertyData, flatmates: e.target.value })}
-                  className="mt-1.5"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="rent">Rent Price (per month)</Label>
+                <Label htmlFor="rent">Rent Price (per month) *</Label>
                 <div className="relative mt-1.5">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">£</span>
                   <Input
@@ -311,6 +461,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                     value={propertyData.rent}
                     onChange={(e) => setPropertyData({ ...propertyData, rent: e.target.value })}
                     className="pl-8"
+                    required
                   />
                 </div>
               </div>
@@ -355,14 +506,17 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
               </div>
 
               <div className="md:col-span-2">
-                <Label htmlFor="furnishing">Furnishing</Label>
-                <Select value={propertyData.furnishing} onValueChange={(value) => setPropertyData({ ...propertyData, furnishing: value })}>
+                <Label htmlFor="furnished">Furnishing</Label>
+                <Select 
+                  value={propertyData.furnished ? 'true' : 'false'} 
+                  onValueChange={(value) => setPropertyData({ ...propertyData, furnished: value === 'true' })}
+                >
                   <SelectTrigger className="mt-1.5">
                     <SelectValue placeholder="Select furnishing status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fully">Fully Furnished</SelectItem>
-                    <SelectItem value="requires">Requires Furnishing</SelectItem>
+                    <SelectItem value="true">Fully Furnished</SelectItem>
+                    <SelectItem value="false">Unfurnished</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -480,48 +634,57 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
         return (
           <div className="space-y-6">
             <h2 className="text-[#4A4A68]">Upload Photos</h2>
+            <p className="text-sm text-muted-foreground">Upload up to 10 photos of your property. The first image will be used as the main display image.</p>
             
-            <div className="border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-[#8C57FF]/50 transition-colors">
+            <input
+              type="file"
+              id="photo-upload"
+              className="hidden"
+              accept="image/jpeg,image/png,image/jpg"
+              multiple
+              onChange={handlePhotoUpload}
+            />
+            
+            <div 
+              className="border-2 border-dashed border-border rounded-lg p-12 text-center hover:border-[#8C57FF]/50 transition-colors cursor-pointer"
+              onClick={() => document.getElementById('photo-upload')?.click()}
+            >
               <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-2">Drag & drop images here, or click to browse</p>
-              <p className="text-sm text-muted-foreground">Supports: JPG, PNG (Max 5MB each)</p>
+              <p className="text-muted-foreground mb-2">Click to browse and select images</p>
+              <p className="text-sm text-muted-foreground">Supports: JPG, PNG (Max 5MB each, up to 10 images)</p>
             </div>
 
             {propertyData.photos.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {propertyData.photos.map((photo, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={photo.url}
-                      alt={photo.caption}
-                      className="w-full h-48 object-cover rounded-lg"
-                    />
-                    <button
-                      onClick={() => removePhoto(index)}
-                      className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                    <p className="text-sm text-muted-foreground mt-2">{photo.caption}</p>
-                  </div>
-                ))}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>{propertyData.photos.length} {propertyData.photos.length === 1 ? 'image' : 'images'} uploaded</Label>
+                  <p className="text-xs text-muted-foreground">First image will be the main display</p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {propertyData.photos.map((photo, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={URL.createObjectURL(photo)}
+                        alt={photo.name}
+                        className="w-full h-48 object-cover rounded-lg"
+                      />
+                      {index === 0 && (
+                        <div className="absolute top-2 left-2 px-2 py-1 bg-[#8C57FF] text-white text-xs rounded">
+                          Main Image
+                        </div>
+                      )}
+                      <button
+                        onClick={() => removePhoto(index)}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      <p className="text-sm text-muted-foreground mt-2 truncate">{photo.name}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-
-            <div className="space-y-3">
-              <Label>Add Photo with Caption</Label>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Photo caption..."
-                  value={newPhotoCaption}
-                  onChange={(e) => setNewPhotoCaption(e.target.value)}
-                />
-                <Button onClick={addPhoto} className="bg-[#8C57FF] hover:bg-[#7645E8]">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add
-                </Button>
-              </div>
-            </div>
           </div>
         );
 
@@ -686,11 +849,10 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                     </Button>
                   </div>
                   <div className="flex gap-2">
-                    {propertyData.photos.slice(0, 4).map((photo, index) => (
+                    {propertyData.photos.slice(0, 4).map((_, index) => (
                       <img
                         key={index}
-                        src={photo.url}
-                        alt={photo.caption}
+                        //src={photo.url} alt={photo.caption}
                         className="w-20 h-20 object-cover rounded"
                       />
                     ))}
@@ -718,8 +880,19 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
             </Card>
 
             <div className="flex justify-center mt-6">
-              <Button className="px-8 bg-[#8C57FF] hover:bg-[#7645E8]" onClick={onPublish}>
-                Publish Property
+              <Button 
+                className="px-8 bg-[#8C57FF] hover:bg-[#7645E8]" 
+                onClick={handlePublish}
+                disabled={publishing || !isProfileComplete}
+              >
+                {publishing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  'Publish Property'
+                )}
               </Button>
             </div>
           </div>
@@ -744,10 +917,10 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
           <AlertCircle className="h-5 w-5 text-orange-600" />
           <AlertTitle className="text-orange-900">Complete Your Profile First</AlertTitle>
           <AlertDescription className="text-orange-800">
-            You need to complete your profile information before adding a property. Please fill in your first name, last name, email, phone number, and nationality in the Settings page.
+            Please complete your profile before adding a property. Required: Phone number, Nationality, Address, and Profile Photo. Visit the Settings page to complete your profile.
             <div className="mt-3">
               <Button
-                onClick={() => onNavigate?.('settings')}
+                onClick={() => onNavigate ? onNavigate('settings') : navigate('/landlord/settings')}
                 className="bg-orange-600 hover:bg-orange-700 text-white"
                 size="sm"
               >
@@ -815,6 +988,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
             <Button
               onClick={handleNext}
               className="bg-[#8C57FF] hover:bg-[#7645E8]"
+              disabled={currentStep === 1 && !isStep1Valid()}
             >
               Next
               <ChevronRight className="h-4 w-4 ml-2" />

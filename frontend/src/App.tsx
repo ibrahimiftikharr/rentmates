@@ -7,6 +7,8 @@ import { authService } from './domains/auth/services/authService';
 import { ProtectedRoute } from './shared/components/ProtectedRoute';
 
 function App() {
+  console.log('[App] Rendering, current path:', window.location.pathname);
+  
   return (
     <Routes>
       <Route 

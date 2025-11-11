@@ -1,13 +1,19 @@
 import { Header } from '../components/Header';
 import { IllustrationPanel } from '../components/IllustrationPanel';
 import { AuthCard } from '../components/AuthCard';
-import { Toaster } from '@/shared/ui/sonner';
 import '../styles/index.css';
 import '../styles/globals.css';
 
 export function AuthPage() {
+  console.log('[AuthPage] Rendering');
+  
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background" style={{ minHeight: '100vh', backgroundColor: '#FAFBFC' }}>
+      {/* Debug element */}
+      <div style={{ position: 'fixed', top: 0, left: 0, padding: '10px', backgroundColor: 'red', color: 'white', zIndex: 9999 }}>
+        Auth Page Loaded
+      </div>
+      
       <div className="lg:hidden">
         <Header />
       </div>
@@ -17,7 +23,6 @@ export function AuthPage() {
           <AuthCard />
         </div>
       </div>
-      <Toaster />
     </div>
   );
 }
