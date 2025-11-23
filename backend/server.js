@@ -61,6 +61,23 @@ app.use('/api/student', studentRouter);
 // Public student routes (search students, view public profiles)
 app.use('/api/public', publicStudentRouter);
 
+// Log all registered routes for debugging
+console.log('\n📋 Registered routes:');
+app._router.stack.forEach((r) => {
+  if (r.route && r.route.path) {
+    console.log(`  ${Object.keys(r.route.methods)[0].toUpperCase()} ${r.route.path}`);
+  } else if (r.name === 'router') {
+    r.handle.stack.forEach((handler) => {
+      if (handler.route) {
+        const route = handler.route;
+        const method = Object.keys(route.methods)[0].toUpperCase();
+        console.log(`  ${method} ${r.regexp.source.replace('\\/?', '').replace('(?=\\/|$)', '')}${route.path}`);
+      }
+    });
+  }
+});
+console.log('');
+
 // ========================================
 // START SERVER
 // ========================================

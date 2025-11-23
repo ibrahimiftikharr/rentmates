@@ -86,9 +86,12 @@ studentSchema.methods.calculateReputationScore = function() {
   // Email verified (already given at signup)
   if (this.isEmailVerified) score += 25;
   
-  // Profile completion
-  const allStepsComplete = Object.values(this.profileSteps).every(step => step === true);
-  if (allStepsComplete) score += 30;
+  // Profile completion - give points for each step (30 points total, 6 points per step)
+  if (this.profileSteps.basicInfo) score += 6;
+  if (this.profileSteps.housingPreferences) score += 6;
+  if (this.profileSteps.documentsUploaded) score += 6;
+  if (this.profileSteps.bioCompleted) score += 6;
+  if (this.profileSteps.verificationCompleted) score += 6;
   
   // Documents uploaded (National ID or Passport)
   if (this.documents.nationalId || this.documents.passport) score += 25;

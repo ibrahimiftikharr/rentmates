@@ -8,9 +8,9 @@ interface Student {
   id: number;
   name: string;
   photo: string;
-  field: string;
-  year: string;
-  compatibility: number;
+  course: string;
+  yearOfStudy: string;
+  compatibilityScore: number;
   nationality: string;
   university: string;
   bio: string;
@@ -63,7 +63,7 @@ export function StudentProfilePage({ student, onClose, onNavigate }: StudentProf
               <div className="space-y-2 mb-6">
                 <div className="flex items-center gap-3 text-gray-600">
                   <BedDouble className="w-5 h-5" />
-                  <span>{student.field} • {student.year}</span>
+                  <span>{student.course} • {student.yearOfStudy}</span>
                 </div>
                 <div className="flex items-center gap-3 text-gray-600">
                   <Home className="w-5 h-5" />
@@ -78,7 +78,7 @@ export function StudentProfilePage({ student, onClose, onNavigate }: StudentProf
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <div className="inline-flex items-center gap-2 bg-primary/10 px-4 py-2 rounded-full">
                   <Heart className="w-5 h-5 text-primary fill-primary" />
-                  <span className="font-semibold text-primary">{student.compatibility}% Match</span>
+                  <span className="font-semibold text-primary">{student.compatibilityScore}% Match</span>
                 </div>
                 <Button 
                   className="gap-2"

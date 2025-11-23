@@ -204,33 +204,42 @@ exports.getStudentsWithCompatibility = async (req, res) => {
     const studentsWithScores = calculateCompatibilityScores(currentStudent, students);
 
     // Transform data
-    let results = studentsWithScores.map(student => ({
-      id: student._id,
-      userId: student.user._id,
-      name: student.user.name,
-      email: student.user.email,
-      photo: student.documents?.profileImage || null,
-      university: student.university,
-      course: student.course,
-      yearOfStudy: student.yearOfStudy,
-      nationality: student.nationality,
-      phone: student.phone,
-      bio: student.bio,
-      interests: student.interests || [],
-      reputationScore: student.reputationScore,
-      trustLevel: student.getTrustLevel(),
-      compatibilityScore: student.compatibilityScore,
-      housingPreferences: {
-        propertyType: student.housingPreferences?.propertyType || [],
-        budgetMin: student.housingPreferences?.budgetMin,
-        budgetMax: student.housingPreferences?.budgetMax,
-        moveInDate: student.housingPreferences?.moveInDate,
-        petsAllowed: student.housingPreferences?.petsAllowed,
-        smokingAllowed: student.housingPreferences?.smokingAllowed,
-        furnished: student.housingPreferences?.furnished,
-        billsIncluded: student.housingPreferences?.billsIncluded
-      }
-    }));
+    let results = studentsWithScores.map(student => {
+      // Calculate trust level based on reputation score
+      let trustLevel = 'New';
+      const score = student.reputationScore || 0;
+      if (score >= 80) trustLevel = 'Excellent';
+      else if (score >= 60) trustLevel = 'Good';
+      else if (score >= 40) trustLevel = 'Fair';
+      
+      return {
+        id: student._id,
+        userId: student.user._id,
+        name: student.user.name,
+        email: student.user.email,
+        photo: student.documents?.profileImage || null,
+        university: student.university,
+        course: student.course,
+        yearOfStudy: student.yearOfStudy,
+        nationality: student.nationality,
+        phone: student.phone,
+        bio: student.bio,
+        interests: student.interests || [],
+        reputationScore: student.reputationScore,
+        trustLevel: trustLevel,
+        compatibilityScore: student.compatibilityScore,
+        housingPreferences: {
+          propertyType: student.housingPreferences?.propertyType || [],
+          budgetMin: student.housingPreferences?.budgetMin,
+          budgetMax: student.housingPreferences?.budgetMax,
+          moveInDate: student.housingPreferences?.moveInDate,
+          petsAllowed: student.housingPreferences?.petsAllowed,
+          smokingAllowed: student.housingPreferences?.smokingAllowed,
+          furnished: student.housingPreferences?.furnished,
+          billsIncluded: student.housingPreferences?.billsIncluded
+        }
+      };
+    });
 
     // Apply search filter
     if (search) {

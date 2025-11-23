@@ -23,4 +23,17 @@ studentRouter.post('/profile/upload-document', uploadDocument.single('document')
 // Delete document
 studentRouter.delete('/profile/document/:documentType', studentController.deleteDocument);
 
+// ========================================
+// WISHLIST ROUTES
+// ========================================
+
+// Get wishlist
+studentRouter.get('/wishlist', studentController.getWishlist);
+
+// Add to wishlist
+studentRouter.post('/wishlist', studentController.addToWishlist);
+
+// Remove from wishlist
+studentRouter.delete('/wishlist/:propertyId', studentController.removeFromWishlist);
+
 module.exports = studentRouter;

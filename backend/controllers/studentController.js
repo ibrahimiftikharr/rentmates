@@ -262,9 +262,125 @@ const deleteDocument = async (req, res) => {
   }
 };
 
+// Get student's wishlist
+const getWishlist = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const student = await Student.findOne({ user: userId })
+      .populate({
+        path: 'wishlist',
+        populate: {
+          path: 'landlord',
+          select: 'name email'
+        }
+      });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student profile not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      wishlist: student.wishlist || []
+    });
+  } catch (error) {
+    console.error('Get wishlist error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch wishlist' });
+  }
+};
+
+// Add property to wishlist
+const addToWishlist = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { propertyId } = req.body;
+
+    if (!propertyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Property ID is required'
+      });
+    }
+
+    const student = await Student.findOne({ user: userId });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student profile not found'
+      });
+    }
+
+    // Check if property already in wishlist
+    if (student.wishlist.includes(propertyId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Property already in wishlist'
+      });
+    }
+
+    student.wishlist.push(propertyId);
+    await student.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Property added to wishlist',
+      wishlist: student.wishlist
+    });
+  } catch (error) {
+    console.error('Add to wishlist error:', error);
+    res.status(500).json({ success: false, message: 'Failed to add to wishlist' });
+  }
+};
+
+// Remove property from wishlist
+const removeFromWishlist = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { propertyId } = req.params;
+
+    if (!propertyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Property ID is required'
+      });
+    }
+
+    const student = await Student.findOne({ user: userId });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student profile not found'
+      });
+    }
+
+    student.wishlist = student.wishlist.filter(
+      id => id.toString() !== propertyId
+    );
+    await student.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Property removed from wishlist',
+      wishlist: student.wishlist
+    });
+  } catch (error) {
+    console.error('Remove from wishlist error:', error);
+    res.status(500).json({ success: false, message: 'Failed to remove from wishlist' });
+  }
+};
+
 module.exports = {
   getStudentProfile,
   updateStudentProfile,
   uploadDocument,
-  deleteDocument
+  deleteDocument,
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist
 };
