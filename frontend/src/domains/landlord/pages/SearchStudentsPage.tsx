@@ -159,28 +159,24 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps) {
                   <p className="text-xs sm:text-sm text-muted-foreground">{student.nationality}</p>
                 </div>
 
-                {/* Housing Preferences */}
-                <div className="mb-4 sm:mb-5 text-center">
-                  <p className="text-xs text-[#8C57FF] mb-2">Looking For</p>
-                  <p className="text-xs sm:text-sm text-[#4A4A68]">
-                    {student.housingPreferences.propertyType.join(', ') || 'Not specified'}
-                  </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                    £{student.housingPreferences.budgetMin}–£{student.housingPreferences.budgetMax}/month
-                  </p>
-                </div>
-
-                {/* Trust Level Badge */}
-                <div className="mb-4 flex justify-center">
-                  <Badge className={`text-xs ${
-                    student.trustLevel === 'High' ? 'bg-green-500' :
-                    student.trustLevel === 'Medium' ? 'bg-blue-500' :
-                    student.trustLevel === 'Low' ? 'bg-orange-500' :
-                    'bg-red-500'
-                  } text-white`}>
-                    {student.trustLevel} Trust • {student.reputationScore}/100
-                  </Badge>
-                </div>
+                {/* Interests */}
+                {student.interests && student.interests.length > 0 && (
+                  <div className="mb-4 sm:mb-5">
+                    <p className="text-xs text-[#8C57FF] mb-2 text-center">Interests</p>
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      {student.interests.slice(0, 3).map((interest, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs bg-white px-2 py-0.5">
+                          {interest}
+                        </Badge>
+                      ))}
+                      {student.interests.length > 3 && (
+                        <Badge variant="outline" className="text-xs bg-[#8C57FF]/10 text-[#8C57FF] px-2 py-0.5">
+                          +{student.interests.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5 lg:gap-3">
