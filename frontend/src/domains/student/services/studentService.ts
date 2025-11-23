@@ -58,6 +58,14 @@ export interface Property {
   };
   createdAt: string;
   distance?: number; // Will be calculated on frontend
+  flatmates?: any[];
+  houseRules?: {
+    petsAllowed: boolean;
+    smokingAllowed: boolean;
+    guestsAllowed: boolean;
+  };
+  availabilityDates?: string[];
+  moveInBy?: string;
 }
 
 // ========================================

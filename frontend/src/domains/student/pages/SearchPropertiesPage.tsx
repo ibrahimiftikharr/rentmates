@@ -23,6 +23,7 @@ interface Property {
   distance?: number;
   address: string;
   bills: string[];
+  billsIncluded?: string[];
   billPrices?: {
     wifi: number;
     water: number;
@@ -36,6 +37,20 @@ interface Property {
   area?: number;
   description?: string;
   furnished?: boolean;
+  amenities?: string[];
+  landlord?: any;
+  deposit?: number;
+  minimumStay?: number;
+  maximumStay?: number;
+  availableFrom?: string;
+  flatmates?: any[];
+  houseRules?: {
+    petsAllowed: boolean;
+    smokingAllowed: boolean;
+    guestsAllowed: boolean;
+  };
+  availabilityDates?: string[];
+  moveInBy?: string;
 }
 
 interface SearchPropertiesPageProps {
@@ -44,7 +59,7 @@ interface SearchPropertiesPageProps {
 
 export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps = {}) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [priceRange, setPriceRange] = useState([300, 2000]);
+  const [priceRange, setPriceRange] = useState([10, 20000]);
   const [propertyType, setPropertyType] = useState<string[]>([]);
   const [selectedBills, setSelectedBills] = useState<string[]>([]);
   const [moveInMonth, setMoveInMonth] = useState('');
@@ -65,29 +80,55 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
     try {
       setLoading(true);
       const data = await studentService.getAllProperties();
+      console.log('✅ Fetched properties from API:', data.length);
       
       // Transform API properties to local format
-      const transformedProperties: Property[] = data.map((prop: APIProperty) => ({
-        id: prop.id,
-        title: prop.title,
-        price: prop.price,
-        type: prop.type,
-        image: prop.mainImage || prop.images[0] || '',
-        images: prop.images,
-        address: prop.address,
-        bills: prop.billsIncluded,
-        billPrices: prop.billPrices,
-        isWishlisted: false,
-        bedrooms: prop.bedrooms,
-        bathrooms: prop.bathrooms,
-        area: prop.area,
-        description: prop.description,
-        furnished: prop.furnished,
-        distance: undefined, // Will be calculated when user searches
-      }));
+      const transformedProperties: Property[] = data.map((prop: APIProperty, index: number) => {
+        const transformed = {
+          id: prop.id,
+          title: prop.title,
+          price: prop.price,
+          type: prop.type,
+          image: prop.mainImage || prop.images?.[0] || '',
+          images: prop.images || [],
+          address: prop.address,
+          bills: prop.billsIncluded || [],
+          billsIncluded: prop.billsIncluded || [],
+          billPrices: prop.billPrices,
+          isWishlisted: false,
+          bedrooms: prop.bedrooms,
+          bathrooms: prop.bathrooms,
+          area: prop.area,
+          description: prop.description,
+          furnished: prop.furnished,
+          amenities: prop.amenities || [],
+          landlord: prop.landlord,
+          deposit: prop.deposit,
+          minimumStay: prop.minimumStay,
+          maximumStay: prop.maximumStay,
+          availableFrom: prop.availableFrom,
+          flatmates: prop.flatmates || [],
+          houseRules: prop.houseRules,
+          availabilityDates: prop.availabilityDates,
+          moveInBy: prop.moveInBy,
+          distance: undefined,
+        };
+        
+        // Log any property that might have issues
+        if (!transformed.images || transformed.images.length === 0) {
+          console.warn(`⚠️ Property ${index + 1} (${prop.title}) has no images`);
+        }
+        if (!transformed.image) {
+          console.warn(`⚠️ Property ${index + 1} (${prop.title}) has no main image`);
+        }
+        
+        return transformed;
+      });
 
+      console.log('✅ Transformed properties:', transformedProperties.length);
       setProperties(transformedProperties);
     } catch (error: any) {
+      console.error('❌ Error fetching properties:', error);
       toast.error(error.message || 'Failed to load properties');
     } finally {
       setLoading(false);
@@ -135,7 +176,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
 
   const handleClearFilters = () => {
     setSearchQuery('');
-    setPriceRange([300, 2000]);
+    setPriceRange([100, 20000]);
     setPropertyType([]);
     setSelectedBills([]);
     setMoveInMonth('');
@@ -182,7 +223,20 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
         (selectedBills.includes('No bills') && prop.bills.length === 0) ||
         selectedBills.some(bill => bill !== 'No bills' && prop.bills.includes(bill));
 
-      return matchesSearch && matchesPrice && matchesType && matchesBills;
+      const passes = matchesSearch && matchesPrice && matchesType && matchesBills;
+      
+      if (!passes) {
+        console.log(`🚫 Property filtered out: ${prop.title}`, {
+          matchesSearch,
+          matchesPrice,
+          matchesType,
+          matchesBills,
+          price: prop.price,
+          priceRange
+        });
+      }
+      
+      return passes;
     })
     .sort((a, b) => {
       if (sortBy === 'price') {
@@ -294,9 +348,9 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
                     <Label className="mb-4 block font-semibold">Price Range</Label>
                     <div className="space-y-4">
                       <Slider
-                        min={300}
-                        max={2000}
-                        step={50}
+                        min={10}
+                        max={20000}
+                        step={100}
                         value={priceRange}
                         onValueChange={setPriceRange}
                         className="my-6"

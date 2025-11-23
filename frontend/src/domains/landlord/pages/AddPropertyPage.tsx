@@ -259,6 +259,13 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
         availableFrom: propertyData.availableBy?.toISOString(),
         minimumStay: propertyData.minStay ? parseInt(propertyData.minStay) : undefined,
         maximumStay: propertyData.maxStay ? parseInt(propertyData.maxStay) : undefined,
+        availabilityDates: propertyData.availability.map(date => date.toISOString()),
+        moveInBy: propertyData.availableBy?.toISOString(),
+        houseRules: {
+          petsAllowed: propertyData.petsAllowed,
+          smokingAllowed: propertyData.smokingAllowed,
+          guestsAllowed: propertyData.guestsAllowed
+        },
         images: propertyData.photos,
       };
 

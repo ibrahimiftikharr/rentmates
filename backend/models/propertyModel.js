@@ -41,6 +41,15 @@ const propertySchema = new mongoose.Schema({
   availableFrom: { type: Date },
   minimumStay: { type: Number }, // In months
   maximumStay: { type: Number }, // In months
+  availabilityDates: [{ type: Date }], // Specific dates when property is available for viewing
+  moveInBy: { type: Date }, // Deadline for moving in
+  
+  // House Rules
+  houseRules: {
+    petsAllowed: { type: Boolean, default: false },
+    smokingAllowed: { type: Boolean, default: false },
+    guestsAllowed: { type: Boolean, default: true }
+  },
   
   // Status
   status: { type: String, enum: ['active', 'inactive', 'rented'], default: 'active' },

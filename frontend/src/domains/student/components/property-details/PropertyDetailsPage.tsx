@@ -51,44 +51,17 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   const [visitCalendarYear, setVisitCalendarYear] = useState(new Date().getFullYear());
   const [selectedFlatmate, setSelectedFlatmate] = useState<Flatmate | null>(null);
 
+  // Extract bills from property data
   const bills = [
-    { name: 'WiFi', included: true, amount: 25 },
-    { name: 'Water', included: true, amount: 15 },
-    { name: 'Electricity', included: false, amount: 40 },
-    { name: 'Gas', included: true, amount: 30 },
-    { name: 'Council Tax', included: false, amount: 120 },
+    { name: 'WiFi', included: property.billsIncluded?.includes('WiFi') || property.billsIncluded?.includes('wifi') || false, amount: property.billPrices?.wifi || 0 },
+    { name: 'Water', included: property.billsIncluded?.includes('Water') || property.billsIncluded?.includes('water') || false, amount: property.billPrices?.water || 0 },
+    { name: 'Electricity', included: property.billsIncluded?.includes('Electricity') || property.billsIncluded?.includes('electricity') || false, amount: property.billPrices?.electricity || 0 },
+    { name: 'Gas', included: property.billsIncluded?.includes('Gas') || property.billsIncluded?.includes('gas') || false, amount: property.billPrices?.gas || 0 },
+    { name: 'Council Tax', included: property.billsIncluded?.includes('Council Tax') || property.billsIncluded?.includes('councilTax') || false, amount: property.billPrices?.councilTax || 0 },
   ];
 
-  const flatmates: Flatmate[] = [
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      photo: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400',
-      field: 'Computer Science',
-      year: '3rd Year',
-      compatibility: 92,
-      nationality: 'British',
-      university: 'Oxford University',
-      bio: 'Passionate about technology and innovation. Love coding late into the night and always up for a good study session. Looking for like-minded flatmates who value a clean, organized living space.',
-      interests: ['Coding', 'Gaming', 'Coffee', 'Hiking', 'Photography'],
-      email: 'sarah.johnson@oxford.ac.uk',
-      phone: '+44 7700 900123',
-    },
-    {
-      id: 2,
-      name: 'Emma Wilson',
-      photo: 'https://images.unsplash.com/photo-1631128869897-68e78bf4fb7e?w=400',
-      field: 'Business Management',
-      year: '2nd Year',
-      compatibility: 87,
-      nationality: 'American',
-      university: 'Oxford University',
-      bio: 'Organized, friendly, and always looking for new adventures. I believe in maintaining a balanced lifestyle between academics and social life. Love cooking and trying new recipes!',
-      interests: ['Cooking', 'Yoga', 'Reading', 'Travel', 'Music'],
-      email: 'emma.wilson@oxford.ac.uk',
-      phone: '+44 7700 900456',
-    },
-  ];
+  // Flatmates data - currently empty for new properties
+  const flatmates: Flatmate[] = property.flatmates || [];
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -116,13 +89,42 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   const isDateAvailable = (day: number | null, month: number, year: number) => {
     if (!day) return false;
     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time for accurate comparison
     const date = new Date(year, month, day);
+    date.setHours(0, 0, 0, 0);
     
-    // Only future dates are available
+    // Only future dates or today are available
     if (date < today) return false;
     
-    // Make every 3rd day available
-    return day % 3 === 0;
+    // Debug logging
+    if (month === currentMonth && year === currentYear && property.availabilityDates) {
+      console.log(`📅 Checking day ${day}:`, {
+        availabilityDates: property.availabilityDates,
+        dateCount: property.availabilityDates.length
+      });
+    }
+    
+    // If property has specific availability dates, check against them
+    if (property.availabilityDates && property.availabilityDates.length > 0) {
+      const isAvailable = property.availabilityDates.some((availDate: string | Date) => {
+        const availableDate = new Date(availDate);
+        availableDate.setHours(0, 0, 0, 0);
+        const matches = availableDate.getDate() === day &&
+               availableDate.getMonth() === month &&
+               availableDate.getFullYear() === year;
+        
+        if (matches && month === currentMonth && year === currentYear) {
+          console.log(`✅ Day ${day} matches availability date:`, availableDate);
+        }
+        
+        return matches;
+      });
+      
+      return isAvailable;
+    }
+    
+    // If no specific dates, all future dates are available as fallback
+    return true;
   };
 
   const handleNextMonth = () => {
@@ -451,19 +453,21 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
               <div className="flex items-center gap-6 text-gray-600 border-y py-4 my-4">
                 <div className="flex items-center gap-2">
                   <BedDouble className="w-5 h-5" />
-                  <span>3 Bedrooms</span>
+                  <span>{property.bedrooms || 0} Bedroom{property.bedrooms !== 1 ? 's' : ''}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Bath className="w-5 h-5" />
-                  <span>2 Bathrooms</span>
+                  <span>{property.bathrooms || 0} Bathroom{property.bathrooms !== 1 ? 's' : ''}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Ruler className="w-5 h-5" />
-                  <span>1,200 sq ft</span>
-                </div>
+                {property.area && (
+                  <div className="flex items-center gap-2">
+                    <Ruler className="w-5 h-5" />
+                    <span>{property.area} sq ft</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  <span>2 Flatmates</span>
+                  <span>{flatmates.length} Flatmate{flatmates.length !== 1 ? 's' : ''}</span>
                 </div>
               </div>
             </div>
@@ -502,33 +506,55 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                   </div>
                   <div className="border rounded-lg p-4">
                     <p className="text-sm text-gray-500 mb-1">Furnishing</p>
-                    <p className="font-medium">Fully Furnished</p>
+                    <p className="font-medium">{property.furnished ? 'Fully Furnished' : 'Unfurnished'}</p>
                   </div>
-                  <div className="border rounded-lg p-4">
-                    <p className="text-sm text-gray-500 mb-1">Min Stay</p>
-                    <p className="font-medium">3 months</p>
-                  </div>
-                  <div className="border rounded-lg p-4">
-                    <p className="text-sm text-gray-500 mb-1">Max Stay</p>
-                    <p className="font-medium">12 months</p>
-                  </div>
+                  {property.minimumStay && (
+                    <div className="border rounded-lg p-4">
+                      <p className="text-sm text-gray-500 mb-1">Min Stay</p>
+                      <p className="font-medium">{property.minimumStay} month{property.minimumStay !== 1 ? 's' : ''}</p>
+                    </div>
+                  )}
+                  {property.maximumStay && (
+                    <div className="border rounded-lg p-4">
+                      <p className="text-sm text-gray-500 mb-1">Max Stay</p>
+                      <p className="font-medium">{property.maximumStay} month{property.maximumStay !== 1 ? 's' : ''}</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* House Rules */}
                 <div>
                   <h3 className="mb-4">House Rules</h3>
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="border rounded-lg p-4 text-center bg-gray-50">
-                      <XIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                      <p className="text-sm font-medium text-gray-700">No Pets</p>
+                    <div className={`border rounded-lg p-4 text-center ${property.houseRules?.petsAllowed ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                      {property.houseRules?.petsAllowed ? (
+                        <Check className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
+                      ) : (
+                        <XIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      )}
+                      <p className={`text-sm font-medium ${property.houseRules?.petsAllowed ? 'text-emerald-700' : 'text-gray-700'}`}>
+                        {property.houseRules?.petsAllowed ? 'Pets Allowed' : 'No Pets'}
+                      </p>
                     </div>
-                    <div className="border rounded-lg p-4 text-center bg-gray-50">
-                      <XIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                      <p className="text-sm font-medium text-gray-700">No Smoking</p>
+                    <div className={`border rounded-lg p-4 text-center ${property.houseRules?.smokingAllowed ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                      {property.houseRules?.smokingAllowed ? (
+                        <Check className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
+                      ) : (
+                        <XIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      )}
+                      <p className={`text-sm font-medium ${property.houseRules?.smokingAllowed ? 'text-emerald-700' : 'text-gray-700'}`}>
+                        {property.houseRules?.smokingAllowed ? 'Smoking Allowed' : 'No Smoking'}
+                      </p>
                     </div>
-                    <div className="border rounded-lg p-4 text-center bg-emerald-50">
-                      <Check className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
-                      <p className="text-sm font-medium text-emerald-700">Guests Welcome</p>
+                    <div className={`border rounded-lg p-4 text-center ${property.houseRules?.guestsAllowed !== false ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                      {property.houseRules?.guestsAllowed !== false ? (
+                        <Check className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
+                      ) : (
+                        <XIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      )}
+                      <p className={`text-sm font-medium ${property.houseRules?.guestsAllowed !== false ? 'text-emerald-700' : 'text-gray-700'}`}>
+                        {property.houseRules?.guestsAllowed !== false ? 'Guests Welcome' : 'No Guests'}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -536,14 +562,20 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
 
               <TabsContent value="amenities" className="mt-6">
                 <h3 className="mb-4">Included Amenities</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {['High-Speed WiFi', 'Washing Machine', 'Dishwasher', 'Central Heating', 'Fully Furnished', 'Study Desk', 'Gym Access', 'Bike Storage'].map((amenity, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50">
-                      <Check className="w-5 h-5 text-primary flex-shrink-0" />
-                      <span className="text-gray-700">{amenity}</span>
-                    </div>
-                  ))}
-                </div>
+                {property.amenities && property.amenities.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {property.amenities.map((amenity: string, index: number) => (
+                      <div key={index} className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50">
+                        <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                        <span className="text-gray-700">{amenity}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <p>No amenities listed for this property</p>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="bills" className="mt-6 space-y-6">
@@ -649,157 +681,182 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 </div>
               </TabsContent>
 
-              <TabsContent value="flatmates" className="mt-6">
-                <h3 className="mb-6">Current Flatmates ({flatmates.length})</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {flatmates.map((flatmate) => (
-                    <Card key={flatmate.id} className="shadow-xl hover:shadow-2xl transition-all border-2 hover:border-primary/50">
-                      <CardContent className="p-6">
-                        {/* Profile Photo - Centered and Large */}
-                        <div className="flex flex-col items-center mb-5">
-                          <Avatar className="w-32 h-32 border-4 border-white shadow-xl ring-4 ring-primary/10 mb-4">
-                            <AvatarImage src={flatmate.photo} className="object-cover" />
-                            <AvatarFallback className="text-xl">
-                              {flatmate.name.split(' ').map(n => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          
-                          {/* Match Badge */}
-                          <div className="bg-primary/10 px-4 py-2 rounded-full mb-3">
-                            <div className="flex items-center gap-2">
-                              <Heart className="w-4 h-4 text-primary fill-primary" />
-                              <span className="font-semibold text-primary">{flatmate.compatibility}% Match</span>
+              <TabsContent value="flatmates" className="mt-6 space-y-6">
+                {flatmates.length > 0 ? (
+                  <>
+                    <h3 className="mb-6">Current Flatmates ({flatmates.length})</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {flatmates.map((flatmate) => (
+                        <Card key={flatmate.id} className="shadow-xl hover:shadow-2xl transition-all border-2 hover:border-primary/50">
+                          <CardContent className="p-6">
+                            {/* Profile Photo - Centered and Large */}
+                            <div className="flex flex-col items-center mb-5">
+                              <Avatar className="w-32 h-32 border-4 border-white shadow-xl ring-4 ring-primary/10 mb-4">
+                                <AvatarImage src={flatmate.photo} className="object-cover" />
+                                <AvatarFallback className="text-xl">
+                                  {flatmate.name.split(' ').map(n => n[0]).join('')}
+                                </AvatarFallback>
+                              </Avatar>
+                              
+                              {/* Match Badge */}
+                              <div className="bg-primary/10 px-4 py-2 rounded-full mb-3">
+                                <div className="flex items-center gap-2">
+                                  <Heart className="w-4 h-4 text-primary fill-primary" />
+                                  <span className="font-semibold text-primary">{flatmate.compatibility}% Match</span>
+                                </div>
+                              </div>
+                              
+                              {/* Name and Basic Info */}
+                              <h3 className="text-center mb-1">{flatmate.name}</h3>
+                              <p className="text-sm text-gray-600 text-center">{flatmate.field}</p>
+                              <p className="text-xs text-gray-500 text-center">{flatmate.year}</p>
                             </div>
-                          </div>
-                          
-                          {/* Name and Basic Info */}
-                          <h3 className="text-center mb-1">{flatmate.name}</h3>
-                          <p className="text-sm text-gray-600 text-center">{flatmate.field}</p>
-                          <p className="text-xs text-gray-500 text-center">{flatmate.year}</p>
-                        </div>
 
-                        {/* Nationality */}
-                        <div className="flex items-center justify-center gap-2 mb-5 p-3 bg-gray-50 rounded-lg">
-                          <Globe className="w-4 h-4 text-gray-600" />
-                          <span className="text-sm font-medium text-gray-700">{flatmate.nationality}</span>
-                        </div>
+                            {/* Nationality */}
+                            <div className="flex items-center justify-center gap-2 mb-5 p-3 bg-gray-50 rounded-lg">
+                              <Globe className="w-4 h-4 text-gray-600" />
+                              <span className="text-sm font-medium text-gray-700">{flatmate.nationality}</span>
+                            </div>
 
-                        {/* Compatibility Progress */}
-                        <div className="mb-5">
-                          <div className="flex items-center justify-between mb-2 text-sm">
-                            <span className="text-gray-600">Compatibility Score</span>
-                            <span className="font-semibold">{flatmate.compatibility}%</span>
-                          </div>
-                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary transition-all duration-500"
-                              style={{ width: `${flatmate.compatibility}%` }}
-                            />
-                          </div>
-                        </div>
+                            {/* Compatibility Progress */}
+                            <div className="mb-5">
+                              <div className="flex items-center justify-between mb-2 text-sm">
+                                <span className="text-gray-600">Compatibility Score</span>
+                                <span className="font-semibold">{flatmate.compatibility}%</span>
+                              </div>
+                              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary transition-all duration-500"
+                                  style={{ width: `${flatmate.compatibility}%` }}
+                                />
+                              </div>
+                            </div>
 
-                        {/* View Profile Button */}
-                        <Button 
-                          variant="outline" 
-                          className="w-full border-2 hover:border-primary hover:bg-primary/5" 
-                          size="lg"
-                          onClick={() => setSelectedFlatmate(flatmate)}
-                        >
-                          View Full Profile
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                <div className="mt-6 p-5 bg-blue-50 border border-blue-100 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <Shield className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-medium text-blue-900 mb-1">AI Compatibility Matching</h4>
-                      <p className="text-sm text-blue-700">
-                        Our algorithm analyzes lifestyle, study habits, and preferences to calculate compatibility scores.
-                      </p>
+                            {/* View Profile Button */}
+                            <Button 
+                              variant="outline" 
+                              className="w-full border-2 hover:border-primary hover:bg-primary/5" 
+                              size="lg"
+                              onClick={() => setSelectedFlatmate(flatmate)}
+                            >
+                              View Full Profile
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
+
+                    <div className="mt-6 p-5 bg-blue-50 border border-blue-100 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Shield className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-blue-900 mb-1">AI Compatibility Matching</h4>
+                          <p className="text-sm text-blue-700">
+                            Our algorithm analyzes lifestyle, study habits, and preferences to calculate compatibility scores.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12">
+                    <Users className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-600 mb-2">No Students Currently Living Here</h3>
+                    <p className="text-gray-500">This property doesn't have any current tenants yet. Be the first to move in!</p>
                   </div>
-                </div>
+                )}
               </TabsContent>
             </Tabs>
 
             {/* Landlord Section */}
-            <div className="rounded-2xl p-8 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.15)] transition-all duration-300 border-0">
-              <h3 className="mb-6 flex items-center gap-2">
-                <User className="w-5 h-5 text-primary" />
-                Landlord Information
-              </h3>
-              <div className="flex flex-col sm:flex-row items-start gap-6 mb-6">
-                <div className="relative flex-shrink-0">
-                  <Avatar className="w-24 h-24 border-4 border-white shadow-lg ring-2 ring-primary/20">
-                    <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400" />
-                    <AvatarFallback>JD</AvatarFallback>
-                  </Avatar>
-                </div>
-                <div className="flex-1 w-full">
-                  <div className="flex items-center gap-2 mb-4">
-                    <h4 className="text-lg">John Davidson</h4>
-                    <Badge className="bg-green-500 hover:bg-green-600 text-white">
-                      <Shield className="w-3 h-3 mr-1" />
-                      Verified
-                    </Badge>
+            {property.landlord && (
+              <div className="rounded-2xl p-8 bg-white shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.15)] transition-all duration-300 border-0">
+                <h3 className="mb-6 flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />
+                  Landlord Information
+                </h3>
+                <div className="flex flex-col sm:flex-row items-start gap-6 mb-6">
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="w-24 h-24 border-4 border-white shadow-lg ring-2 ring-primary/20">
+                      <AvatarImage src={property.landlord.profileImage || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400'} />
+                      <AvatarFallback>{property.landlord.user?.name?.split(' ').map((n: string) => n[0]).join('') || 'LL'}</AvatarFallback>
+                    </Avatar>
+                    {property.landlord.reputationScore >= 80 && (
+                      <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 border-4 border-white shadow-lg">
+                        <Shield className="w-5 h-5 text-white" />
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-6">
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20">
-                      <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                        <TrendingUp className="w-5 h-5 text-white" />
+                  <div className="flex-1 w-full">
+                    <div className="flex items-center gap-2 mb-4">
+                      <h4 className="text-lg">{property.landlord.user?.name || 'Landlord'}</h4>
+                      {property.landlord.reputationScore >= 80 && (
+                        <Badge className="bg-green-500 hover:bg-green-600 text-white">
+                          <Shield className="w-3 h-3 mr-1" />
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-6">
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20">
+                        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                          <TrendingUp className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600">Reputation Score</p>
+                          <p className="font-semibold text-primary text-lg">{property.landlord.reputationScore || 0}/100</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-600">Reputation Score</p>
-                        <p className="font-semibold text-primary text-lg">920/1000</p>
-                      </div>
+
+                      {property.landlord.user?.email && (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <Mail className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div className="overflow-hidden flex-1">
+                            <p className="text-xs text-gray-600">Email</p>
+                            <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user.email}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {property.landlord.phone && (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <Phone className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-600">Phone</p>
+                            <p className="font-medium text-gray-900">{property.landlord.phone}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {property.landlord.nationality && (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                            <Flag className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-600">Nationality</p>
+                            <p className="font-medium text-gray-900">{property.landlord.nationality}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                        <Mail className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div className="overflow-hidden flex-1">
-                        <p className="text-xs text-gray-600">Email</p>
-                        <p className="font-medium text-gray-900 truncate text-sm">john.davidson@property.co.uk</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                        <Phone className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600">Phone</p>
-                        <p className="font-medium text-gray-900">+44 7700 900456</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                      <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                        <Flag className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-600">Nationality</p>
-                        <p className="font-medium text-gray-900">British</p>
-                      </div>
-                    </div>
+                    <Button 
+                      className="w-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all"
+                      onClick={() => onNavigate && onNavigate('messages')}
+                    >
+                      <Mail className="w-4 h-4 mr-2" />
+                      Message Landlord
+                    </Button>
                   </div>
-
-                  <Button 
-                    className="w-full bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all"
-                    onClick={() => onNavigate && onNavigate('messages')}
-                  >
-                    <Mail className="w-4 h-4 mr-2" />
-                    Message
-                  </Button>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Right Column - Sticky Sidebar */}
@@ -810,20 +867,30 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 <CardContent className="p-6">
                   <div className="mb-6">
                     <p className="text-3xl font-semibold mb-1">£{property.price}<span className="text-lg text-gray-500 font-normal">/month</span></p>
-                    <p className="text-sm text-gray-600">+ £{property.price * 1.5} security deposit</p>
+                    <p className="text-sm text-gray-600">+ £{property.deposit || (property.price * 1)} security deposit</p>
                   </div>
 
                   {/* Move in By */}
-                  <div className="mb-6 p-4 bg-gradient-to-r from-primary/10 to-purple-100 border border-primary/20 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calendar className="w-5 h-5 text-primary" />
-                      <h4 className="font-semibold text-gray-900">Move in By</h4>
+                  {(property.moveInBy || property.availableFrom) && (
+                    <div className="mb-6 p-4 bg-gradient-to-r from-primary/10 to-purple-100 border border-primary/20 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Calendar className="w-5 h-5 text-primary" />
+                        <h4 className="font-semibold text-gray-900">
+                          {property.moveInBy ? 'Move in By' : 'Available From'}
+                        </h4>
+                      </div>
+                      <p className="text-2xl font-semibold text-primary">
+                        {new Date(property.moveInBy || property.availableFrom).toLocaleDateString('en-US', { 
+                          day: 'numeric',
+                          month: 'long', 
+                          year: 'numeric' 
+                        })}
+                      </p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {property.moveInBy ? 'Deadline for moving in' : 'Property available from this date'}
+                      </p>
                     </div>
-                    <p className="text-2xl font-semibold text-primary">
-                      {new Date(2025, 11, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-1">Available from this date</p>
-                  </div>
+                  )}
 
                   <div className="space-y-3">
                     <Button 

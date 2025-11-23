@@ -179,8 +179,12 @@ export const landlordService = {
       // Add all text fields
       Object.keys(propertyData).forEach((key) => {
         if (key === 'images') return; // Handle images separately
-        if (key === 'amenities' || key === 'billsIncluded') {
-          formData.append(key, JSON.stringify(propertyData[key as keyof CreatePropertyData]));
+        if (key === 'amenities' || key === 'billsIncluded' || key === 'billPrices' || key === 'houseRules' || key === 'availabilityDates') {
+          // Stringify arrays and objects
+          const value = propertyData[key as keyof CreatePropertyData];
+          if (value !== undefined && value !== null) {
+            formData.append(key, JSON.stringify(value));
+          }
         } else {
           const value = propertyData[key as keyof CreatePropertyData];
           if (value !== undefined && value !== null) {

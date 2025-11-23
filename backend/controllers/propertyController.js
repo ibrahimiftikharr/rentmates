@@ -39,8 +39,27 @@ const createProperty = async (req, res) => {
       billPrices,
       availableFrom,
       minimumStay,
-      maximumStay
+      maximumStay,
+      availabilityDates,
+      moveInBy,
+      houseRules
     } = req.body;
+
+    console.log('📅 Raw availabilityDates from request:', availabilityDates);
+    console.log('📅 Type:', typeof availabilityDates);
+    
+    // Helper function to parse JSON or return value if already parsed
+    const parseIfString = (value) => {
+      if (!value) return undefined;
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          return value;
+        }
+      }
+      return value;
+    };
 
     // Create property
     const property = new Property({
@@ -55,15 +74,22 @@ const createProperty = async (req, res) => {
       furnished: furnished === 'true' || furnished === true,
       price: parseFloat(price),
       deposit: deposit ? parseFloat(deposit) : undefined,
-      amenities: amenities ? JSON.parse(amenities) : [],
-      billsIncluded: billsIncluded ? JSON.parse(billsIncluded) : [],
-      billPrices: billPrices ? JSON.parse(billPrices) : undefined,
+      amenities: parseIfString(amenities) || [],
+      billsIncluded: parseIfString(billsIncluded) || [],
+      billPrices: parseIfString(billPrices),
       availableFrom: availableFrom ? new Date(availableFrom) : undefined,
       minimumStay: minimumStay ? parseInt(minimumStay) : undefined,
       maximumStay: maximumStay ? parseInt(maximumStay) : undefined,
+      availabilityDates: parseIfString(availabilityDates) ? parseIfString(availabilityDates).map((d) => new Date(d)) : [],
+      moveInBy: moveInBy ? new Date(moveInBy) : undefined,
+      houseRules: parseIfString(houseRules) || { petsAllowed: false, smokingAllowed: false, guestsAllowed: true },
       images: [],
       status: 'active'
     });
+
+    console.log('Availability dates parsed:', property.availabilityDates);
+    console.log('Move in by:', property.moveInBy);
+    console.log('House rules:', property.houseRules);
 
     // Handle image uploads
     if (req.files && req.files.length > 0) {
@@ -146,7 +172,13 @@ const getProperty = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const property = await Property.findById(id).populate('landlord');
+    const property = await Property.findById(id).populate({
+      path: 'landlord',
+      populate: {
+        path: 'user',
+        select: 'name email'
+      }
+    });
     if (!property) {
       return res.status(404).json({ success: false, message: 'Property not found' });
     }
@@ -263,9 +295,26 @@ const deleteProperty = async (req, res) => {
 // ========================================
 const getAllProperties = async (req, res) => {
   try {
+    console.log('Fetching all active properties...');
+    
     const properties = await Property.find({ status: 'active' })
-      .populate('landlord', 'name reputationScore')
+      .populate({
+        path: 'landlord',
+        populate: {
+          path: 'user',
+          select: 'name email'
+        }
+      })
       .sort({ createdAt: -1 });
+
+    console.log(`Found ${properties.length} active properties`);
+    
+    // Log any properties without landlord populated
+    properties.forEach((prop, idx) => {
+      if (!prop.landlord) {
+        console.warn(`Property ${idx + 1} (${prop.title}) has no landlord!`);
+      }
+    });
 
     res.status(200).json({
       success: true,
@@ -289,6 +338,9 @@ const getAllProperties = async (req, res) => {
         availableFrom: prop.availableFrom,
         minimumStay: prop.minimumStay,
         maximumStay: prop.maximumStay,
+        availabilityDates: prop.availabilityDates,
+        moveInBy: prop.moveInBy,
+        houseRules: prop.houseRules,
         status: prop.status,
         views: prop.views,
         wishlistCount: prop.wishlistCount,
