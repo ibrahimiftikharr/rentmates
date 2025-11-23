@@ -19,7 +19,6 @@ interface HousingPreferencesCardProps {
 export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferencesCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     propertyType: profile.housingPreferences?.propertyType || [],
@@ -157,7 +156,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             Move-in Date
           </Label>
           {isEditing ? (
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
+            <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -165,23 +164,17 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
                     'w-full justify-start text-left font-normal text-sm',
                     !formData.moveInDate && 'text-muted-foreground'
                   )}
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setCalendarOpen(true);
-                  }}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {formData.moveInDate ? format(formData.moveInDate, 'PPP') : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start" side="bottom">
+              <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
                   selected={formData.moveInDate}
                   onSelect={(date) => {
                     setFormData({...formData, moveInDate: date});
-                    setCalendarOpen(false);
                   }}
                   disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                   initialFocus

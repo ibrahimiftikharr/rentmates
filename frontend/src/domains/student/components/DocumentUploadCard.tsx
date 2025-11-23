@@ -22,9 +22,7 @@ export function DocumentUploadCard({ profile, onUpload, onDelete }: DocumentUplo
 
   const documentTypes: DocumentType[] = [
     { id: 'profileImage', name: 'Profile Image', required: false },
-    { id: 'nationalId', name: 'National ID', required: true },
-    { id: 'passport', name: 'Passport', required: true },
-    { id: 'studentId', name: 'Student ID Card', required: false },
+    { id: 'passport', name: 'Passport/National ID', required: true },
     { id: 'proofOfEnrollment', name: 'Proof of Enrollment', required: false },
   ];
 

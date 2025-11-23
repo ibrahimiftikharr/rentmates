@@ -19,9 +19,16 @@ export function VerificationReputationProgressCard({ profile }: VerificationRepu
     },
     { 
       id: 'profile', 
-      title: 'Profile Completed', 
-      points: 30, 
-      completed: profile.profileSteps?.basicInfo && profile.profileSteps?.housingPreferences && profile.profileSteps?.bioCompleted,
+      title: 'Profile Information Completed', 
+      points: 25, 
+      completed: profile.profileSteps?.basicInfo,
+      icon: User 
+    },
+    { 
+      id: 'housing', 
+      title: 'Housing Preferences Completed', 
+      points: 5, 
+      completed: profile.profileSteps?.housingPreferences,
       icon: User 
     },
     { 
