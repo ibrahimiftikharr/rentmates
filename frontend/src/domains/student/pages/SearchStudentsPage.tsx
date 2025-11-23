@@ -1,29 +1,13 @@
-import { useState } from 'react';
-import { Search, SlidersHorizontal, GraduationCap, Globe, Heart, X, Users, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, SlidersHorizontal, GraduationCap, Globe, Heart, X, Users, Mail, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/shared/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { StudentProfilePage } from '../components/StudentProfilePage';
-
-interface Student {
-  id: number;
-  name: string;
-  photo: string;
-  field: string;
-  year: string;
-  compatibility: number;
-  nationality: string;
-  university: string;
-  bio: string;
-  interests: string[];
-  email: string;
-  phone: string;
-  lookingFor?: string;
-  budget?: string;
-  moveInDate?: string;
-}
+import { studentSearchService, type CompatibleStudent } from '../services/studentSearchService';
+import { toast } from 'sonner';
 
 interface SearchStudentsPageProps {
   onNavigate?: (page: string) => void;
@@ -34,113 +18,61 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
   const [selectedUniversity, setSelectedUniversity] = useState('all');
   const [selectedNationality, setSelectedNationality] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [students, setStudents] = useState<CompatibleStudent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filteredStudents, setFilteredStudents] = useState<CompatibleStudent[]>([]);
 
-  // Mock students data
-  const students: Student[] = [
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      photo: 'https://images.unsplash.com/photo-1655249481446-25d575f1c054?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHdvbWFufGVufDF8fHx8MTc2MjU3MDkyOXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      field: 'Computer Science',
-      year: 'Year 2',
-      compatibility: 92,
-      nationality: 'United Kingdom',
-      university: 'University of Manchester',
-      bio: 'Hey! I\'m Sarah, a second-year Computer Science student passionate about AI and machine learning. I love coding late at night and enjoy collaborative study sessions. Looking for like-minded flatmates who appreciate a clean, organized living space.',
-      interests: ['Coding', 'AI/ML', 'Gaming', 'Coffee', 'Tech Meetups', 'Hiking'],
-      email: 'sarah.j@student.manchester.ac.uk',
-      phone: '+44 7700 900123',
-      lookingFor: 'Shared flat near campus',
-      budget: '£600-800/month',
-      moveInDate: 'September 2025'
-    },
-    {
-      id: 2,
-      name: 'Emma Wilson',
-      photo: 'https://images.unsplash.com/photo-1580643735948-c52d25d9c07d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMHBvcnRyYWl0JTIwd29tYW58ZW58MXx8fHwxNzYyNTM2MTMzfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      field: 'Business Management',
-      year: 'Year 3',
-      compatibility: 87,
-      nationality: 'United States',
-      university: 'Imperial College London',
-      bio: 'Business student with a passion for entrepreneurship and innovation. I\'m organized, friendly, and love hosting small gatherings. Looking for a social yet respectful living environment.',
-      interests: ['Business', 'Networking', 'Yoga', 'Cooking', 'Travel', 'Photography'],
-      email: 'emma.w@imperial.ac.uk',
-      phone: '+44 7700 900456',
-      lookingFor: 'Private room in shared house',
-      budget: '£700-900/month',
-      moveInDate: 'January 2026'
-    },
-    {
-      id: 3,
-      name: 'Alex Chen',
-      photo: 'https://images.unsplash.com/photo-1678542230173-8e2c3eb87c85?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwb3J0cmFpdCUyMGFzaWFufGVufDF8fHx8MTc2MjYwMDg1NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      field: 'Engineering',
-      year: 'Year 1',
-      compatibility: 85,
-      nationality: 'China',
-      university: 'University of Cambridge',
-      bio: 'First-year Engineering student from China. I\'m quiet, respectful, and enjoy cooking Asian cuisine. I love studying in a peaceful environment and occasionally watching movies.',
-      interests: ['Engineering', 'Robotics', 'Cooking', 'Movies', 'Basketball', 'Music'],
-      email: 'alex.chen@cam.ac.uk',
-      phone: '+44 7700 900789',
-      lookingFor: 'Studio or shared flat',
-      budget: '£500-700/month',
-      moveInDate: 'October 2025'
-    },
-    {
-      id: 4,
-      name: 'Priya Sharma',
-      photo: 'https://images.unsplash.com/photo-1651684215020-f7a5b6610f23?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHNtaWxlfGVufDF8fHx8MTc2MjYxMDAxNXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      field: 'Medicine',
-      year: 'Year 4',
-      compatibility: 90,
-      nationality: 'India',
-      university: 'University of Oxford',
-      bio: 'Medical student in my fourth year. I maintain a disciplined schedule but love socializing on weekends. Looking for mature flatmates who understand the demands of medical school.',
-      interests: ['Medicine', 'Research', 'Dance', 'Volunteering', 'Reading', 'Meditation'],
-      email: 'priya.s@ox.ac.uk',
-      phone: '+44 7700 900321',
-      lookingFor: 'Quiet shared accommodation',
-      budget: '£650-850/month',
-      moveInDate: 'August 2025'
-    },
-    {
-      id: 5,
-      name: 'Lucas Müller',
-      photo: 'https://images.unsplash.com/photo-1624835567150-0c530a20d8cc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMHBvcnRyYWl0JTIwbWFufGVufDF8fHx8MTc2MjU1NTcwNHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      field: 'Architecture',
-      year: 'Year 2',
-      compatibility: 78,
-      nationality: 'Germany',
-      university: 'University College London',
-      bio: 'Architecture student with a love for design and creativity. I enjoy late-night design sessions and appreciate living with creative individuals. Clean and organized.',
-      interests: ['Architecture', 'Design', 'Photography', 'Art', 'Cycling', 'Museums'],
-      email: 'lucas.m@ucl.ac.uk',
-      phone: '+44 7700 900654',
-      lookingFor: 'Creative flatshare',
-      budget: '£700-950/month',
-      moveInDate: 'September 2025'
-    },
-    {
-      id: 6,
-      name: 'Olivia Brown',
-      photo: 'https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMG1hbnxlbnwxfHx8fDE3NjI2MDY4MDF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-      field: 'Psychology',
-      year: 'Year 3',
-      compatibility: 93,
-      nationality: 'Canada',
-      university: 'University of Manchester',
-      bio: 'Psychology major passionate about mental health and well-being. I\'m empathetic, friendly, and value open communication. Looking for supportive and understanding flatmates.',
-      interests: ['Psychology', 'Mental Health', 'Podcasts', 'Running', 'Book Clubs', 'Nature'],
-      email: 'olivia.b@manchester.ac.uk',
-      phone: '+44 7700 900987',
-      lookingFor: 'Female-only flatshare',
-      budget: '£600-800/month',
-      moveInDate: 'September 2025'
+  // Fetch students on mount
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  // Filter students when search or filters change
+  useEffect(() => {
+    applyFilters();
+  }, [searchQuery, selectedUniversity, selectedNationality, students]);
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      const data = await studentSearchService.getStudentsWithCompatibility();
+      setStudents(data);
+    } catch (error: any) {
+      console.error('Failed to fetch students:', error);
+      toast.error(error.message || 'Failed to load students');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const applyFilters = () => {
+    let results = [...students];
+
+    // Apply search filter
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase();
+      results = results.filter(student => 
+        student.name.toLowerCase().includes(searchLower) ||
+        student.course.toLowerCase().includes(searchLower) ||
+        student.university.toLowerCase().includes(searchLower) ||
+        student.nationality.toLowerCase().includes(searchLower) ||
+        student.bio?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply university filter
+    if (selectedUniversity !== 'all') {
+      results = results.filter(student => student.university === selectedUniversity);
+    }
+
+    // Apply nationality filter
+    if (selectedNationality !== 'all') {
+      results = results.filter(student => student.nationality === selectedNationality);
+    }
+
+    setFilteredStudents(results);
+  };
 
   // Get unique universities and nationalities for filters
   const universities = ['all', ...Array.from(new Set(students.map(s => s.university)))];
@@ -152,25 +84,19 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
     return 'bg-orange-500';
   };
 
-  // Filter students
-  const filteredStudents = students.filter(student => {
-    const matchesSearch = searchQuery === '' ||
-      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.field.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.university.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.nationality.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesUniversity = selectedUniversity === 'all' || student.university === selectedUniversity;
-    const matchesNationality = selectedNationality === 'all' || student.nationality === selectedNationality;
-
-    return matchesSearch && matchesUniversity && matchesNationality;
-  });
-
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedUniversity('all');
     setSelectedNationality('all');
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -327,15 +253,15 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
                             </AvatarFallback>
                           </Avatar>
                           {/* Compatibility Badge */}
-                          <div className={`absolute -bottom-1 -right-1 ${getCompatibilityColor(student.compatibility)} text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1`}>
+                          <div className={`absolute -bottom-1 -right-1 ${getCompatibilityColor(student.compatibilityScore)} text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1`}>
                             <Heart className="w-3.5 h-3.5 fill-white" />
-                            {student.compatibility}%
+                            {student.compatibilityScore}%
                           </div>
                         </div>
 
                         <h3 className="text-center mb-0.5">{student.name}</h3>
                         <p className="text-sm text-muted-foreground text-center">
-                          {student.field} • {student.year}
+                          {student.course} • {student.yearOfStudy}
                         </p>
                       </div>
                     </div>
@@ -362,12 +288,12 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-muted-foreground font-medium">Compatibility Match</span>
-                          <span className="font-semibold text-primary">{student.compatibility}%</span>
+                          <span className="font-semibold text-primary">{student.compatibilityScore}%</span>
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                           <div
-                            className={`h-full ${getCompatibilityColor(student.compatibility)} transition-all duration-500`}
-                            style={{ width: `${student.compatibility}%` }}
+                            className={`h-full ${getCompatibilityColor(student.compatibilityScore)} transition-all duration-500`}
+                            style={{ width: `${student.compatibilityScore}%` }}
                           />
                         </div>
                       </div>

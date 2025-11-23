@@ -7,4 +7,7 @@ const authenticateToken = require('../middleware/authenticateToken');
 router.get('/students', authenticateToken, publicStudentController.getPublicStudents);
 router.get('/students/:studentId', authenticateToken, publicStudentController.getPublicStudentProfile);
 
+// Get students with compatibility scores (for Student Dashboard)
+router.get('/students-compatibility', authenticateToken, publicStudentController.getStudentsWithCompatibility);
+
 module.exports = router;
