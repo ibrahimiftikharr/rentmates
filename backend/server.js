@@ -6,6 +6,7 @@ const authRouter = require('./routes/authRoutes.js');
 const landlordRouter = require('./routes/landlordRoutes.js');
 const propertyRouter = require('./routes/propertyRoutes.js');
 const studentRouter = require('./routes/studentRoutes.js');
+const publicStudentRouter = require('./routes/publicStudentRoutes.js');
 
 // Load environment variables
 dotenv.config();
@@ -56,6 +57,9 @@ app.use('/api/properties', propertyRouter);
 
 // Student routes (profile, documents, housing preferences)
 app.use('/api/student', studentRouter);
+
+// Public student routes (search students, view public profiles)
+app.use('/api/public', publicStudentRouter);
 
 // ========================================
 // START SERVER

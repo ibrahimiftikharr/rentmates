@@ -1,8 +1,11 @@
-import { ChevronLeft, MessageSquare, Mail, MapPin, Calendar, DollarSign, Home } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChevronLeft, MessageSquare, Mail, MapPin, Calendar, DollarSign, Home, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
-import { MOCK_STUDENTS } from './SearchStudentsPage';
+import { publicStudentService, PublicStudentProfile } from '@/shared/services/publicStudentService';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
 
 interface StudentProfilePageProps {
   studentId: string;
@@ -10,7 +13,33 @@ interface StudentProfilePageProps {
 }
 
 export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePageProps) {
-  const student = MOCK_STUDENTS.find(s => s.id === studentId);
+  const [student, setStudent] = useState<PublicStudentProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStudentProfile();
+  }, [studentId]);
+
+  const fetchStudentProfile = async () => {
+    try {
+      setLoading(true);
+      const profile = await publicStudentService.getStudentProfile(studentId);
+      setStudent(profile);
+    } catch (error: any) {
+      console.error('Failed to fetch student profile:', error);
+      toast.error(error.message || 'Failed to load student profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!student) {
     return (
@@ -50,7 +79,7 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start">
             {/* Profile Picture */}
             <img
-              src={student.photo}
+              src={student.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80'}
               alt={student.name}
               className="w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 rounded-full object-cover border-4 border-[#F4F5FA] mx-auto sm:mx-0"
             />
@@ -59,19 +88,31 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
             <div className="flex-1 text-center sm:text-left w-full">
               <h1 className="text-[#4A4A68] mb-2 text-xl sm:text-2xl">{student.name}</h1>
               <p className="text-[#8C57FF] mb-2 text-sm sm:text-base">
-                {student.degree} • {student.year}
+                {student.course} • {student.yearOfStudy}
               </p>
               <p className="text-muted-foreground mb-1 text-sm sm:text-base">{student.university}</p>
-              <p className="text-sm text-muted-foreground mb-4">{student.nationality}</p>
+              <p className="text-sm text-muted-foreground mb-2">{student.nationality}</p>
+              
+              {/* Trust Level Badge */}
+              <Badge className={`mb-4 ${
+                student.trustLevel === 'High' ? 'bg-green-500' :
+                student.trustLevel === 'Medium' ? 'bg-blue-500' :
+                student.trustLevel === 'Low' ? 'bg-orange-500' :
+                'bg-red-500'
+              } text-white`}>
+                {student.trustLevel} Trust • {student.reputationScore}/100
+              </Badge>
 
               {/* Send Message Button */}
-              <Button
-                onClick={handleSendMessage}
-                className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Send Message
-              </Button>
+              <div>
+                <Button
+                  onClick={handleSendMessage}
+                  className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Send Message
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -86,22 +127,31 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
               <CardTitle className="text-[#4A4A68] text-base sm:text-lg">About Me</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
-              <p className="text-[#4A4A68] leading-relaxed text-sm sm:text-base">{student.about}</p>
+              <p className="text-[#4A4A68] leading-relaxed text-sm sm:text-base">
+                {student.bio || 'No bio provided yet.'}
+              </p>
             </CardContent>
           </Card>
 
-          {/* Interests & Hobbies */}
+          {/* Profile Stats */}
           <Card className="shadow-lg">
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-[#4A4A68] text-base sm:text-lg">Interests & Hobbies</CardTitle>
+              <CardTitle className="text-[#4A4A68] text-base sm:text-lg">Verification Status</CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="flex flex-wrap gap-2">
-                {student.interests.map((interest, idx) => (
-                  <Badge key={idx} variant="outline" className="bg-white px-2.5 sm:px-3 py-1 text-xs sm:text-sm">
-                    {interest}
-                  </Badge>
-                ))}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[#8C57FF]">{student.reputationScore}</div>
+                  <div className="text-xs text-muted-foreground">Reputation</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[#8C57FF]">{student.completedTasks || 0}</div>
+                  <div className="text-xs text-muted-foreground">Tasks Done</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-[#8C57FF]">{student.documentsCount || 0}</div>
+                  <div className="text-xs text-muted-foreground">Documents</div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -120,10 +170,12 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-start gap-3">
-                  <MapPin className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
+                  <Home className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground">Looking For</p>
-                    <p className="text-sm text-[#4A4A68]">{student.housingPreferences.lookingFor}</p>
+                    <p className="text-xs text-muted-foreground">Property Type</p>
+                    <p className="text-sm text-[#4A4A68]">
+                      {student.housingPreferences.propertyType.join(', ') || 'Not specified'}
+                    </p>
                   </div>
                 </div>
 
@@ -131,7 +183,9 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
                   <DollarSign className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted-foreground">Budget</p>
-                    <p className="text-sm text-[#4A4A68]">{student.housingPreferences.budget}</p>
+                    <p className="text-sm text-[#4A4A68]">
+                      £{student.housingPreferences.budgetMin}–£{student.housingPreferences.budgetMax}/month
+                    </p>
                   </div>
                 </div>
 
@@ -139,7 +193,42 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
                   <Calendar className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-muted-foreground">Move-in Date</p>
-                    <p className="text-sm text-[#4A4A68]">{student.housingPreferences.moveInDate}</p>
+                    <p className="text-sm text-[#4A4A68]">
+                      {student.housingPreferences.moveInDate 
+                        ? format(new Date(student.housingPreferences.moveInDate), 'PPP')
+                        : 'Not specified'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground">Preferred Areas</p>
+                    <p className="text-sm text-[#4A4A68]">
+                      {student.housingPreferences.preferredAreas.length > 0
+                        ? student.housingPreferences.preferredAreas.join(', ')
+                        : 'No preference'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Additional Preferences */}
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground mb-2">Additional Preferences</p>
+                  <div className="flex flex-wrap gap-2">
+                    {student.housingPreferences.furnished && (
+                      <Badge variant="outline" className="text-xs">Furnished</Badge>
+                    )}
+                    {student.housingPreferences.billsIncluded && (
+                      <Badge variant="outline" className="text-xs">Bills Included</Badge>
+                    )}
+                    {student.housingPreferences.petsAllowed && (
+                      <Badge variant="outline" className="text-xs">Pets Allowed</Badge>
+                    )}
+                    {student.housingPreferences.smokingAllowed && (
+                      <Badge variant="outline" className="text-xs">Smoking Allowed</Badge>
+                    )}
                   </div>
                 </div>
               </div>

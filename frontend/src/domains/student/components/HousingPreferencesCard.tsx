@@ -4,9 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/shared/ui/popover';
-import { Calendar } from '@/shared/ui/calendar';
-import { format } from 'date-fns';
 import { cn } from '@/shared/ui/utils';
 import { StudentProfile } from '../services/studentService';
 import { Checkbox } from '@/shared/ui/checkbox';
@@ -24,7 +21,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
     propertyType: profile.housingPreferences?.propertyType || [],
     budgetMin: profile.housingPreferences?.budgetMin || 0,
     budgetMax: profile.housingPreferences?.budgetMax || 0,
-    moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate) : undefined,
+    moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate).toISOString().split('T')[0] : '',
     stayDuration: profile.housingPreferences?.stayDuration || '',
     preferredAreas: profile.housingPreferences?.preferredAreas?.join(', ') || '',
     petsAllowed: profile.housingPreferences?.petsAllowed || false,
@@ -55,7 +52,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
       propertyType: profile.housingPreferences?.propertyType || [],
       budgetMin: profile.housingPreferences?.budgetMin || 0,
       budgetMax: profile.housingPreferences?.budgetMax || 0,
-      moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate) : undefined,
+      moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate).toISOString().split('T')[0] : '',
       stayDuration: profile.housingPreferences?.stayDuration || '',
       preferredAreas: profile.housingPreferences?.preferredAreas?.join(', ') || '',
       petsAllowed: profile.housingPreferences?.petsAllowed || false,
@@ -155,40 +152,15 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             <CalendarIcon className="w-4 h-4 text-primary" />
             Move-in Date
           </Label>
-          {isEditing ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-full justify-start text-left font-normal text-sm',
-                    !formData.moveInDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {formData.moveInDate ? format(formData.moveInDate, 'PPP') : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={formData.moveInDate}
-                  onSelect={(date) => {
-                    setFormData({...formData, moveInDate: date});
-                  }}
-                  disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          ) : (
-            <Input 
-              id="move-in-date" 
-              value={formData.moveInDate ? format(formData.moveInDate, 'PPP') : 'Not set'}
-              disabled
-              className="bg-muted/50 text-sm"
-            />
-          )}
+          <Input 
+            id="move-in-date" 
+            type="date"
+            value={formData.moveInDate}
+            onChange={(e) => setFormData({...formData, moveInDate: e.target.value})}
+            disabled={!isEditing}
+            className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
+            min={new Date().toISOString().split('T')[0]}
+          />
         </div>
 
         {/* Stay Duration */}
