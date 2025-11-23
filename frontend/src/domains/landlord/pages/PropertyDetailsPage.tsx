@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { 
   ChevronLeft, 
   Edit, 
@@ -20,7 +21,8 @@ import {
   Clock,
   Sofa,
   FileText,
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -32,9 +34,10 @@ import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import { Calendar } from '@/shared/ui/calendar';
+import { landlordService } from '../services/landlordService';
+import { toast } from 'sonner';
 
 interface PropertyDetailsPageProps {
-  propertyId: string;
   onNavigate: (page: string) => void;
 }
 
@@ -80,17 +83,98 @@ const MOCK_PROPERTY = {
   availability: []
 };
 
-export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsPageProps) {
-  const [property, setProperty] = useState(MOCK_PROPERTY);
+export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
+  const { id } = useParams<{ id: string }>();
+  const [property, setProperty] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editMode, setEditMode] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
+  useEffect(() => {
+    console.log('PropertyDetailsPage mounted, id:', id);
+    if (id) {
+      fetchPropertyDetails();
+    }
+  }, [id]);
+
+  const fetchPropertyDetails = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching property with ID:', id);
+      const data = await landlordService.getProperty(id!);
+      console.log('Property data received:', data);
+      
+      // Transform backend data to match component expectations
+      const billsIncludedSet = new Set(data.billsIncluded || []);
+      
+      const transformedProperty = {
+        ...data,
+        rent: data.price?.toString() || '0',
+        size: data.area?.toString() || '',
+        flatmates: '0', // Not stored in backend yet
+        deposit: data.deposit?.toString() || '0',
+        minStay: data.minimumStay?.toString() || '',
+        maxStay: data.maximumStay?.toString() || '',
+        status: data.status || 'active',
+        propertyType: data.type || 'apartment',
+        furnishing: data.furnished ? 'fully' : 'unfurnished',
+        photos: data.images?.length > 0 ? data.images.map((url: string, index: number) => ({
+          url,
+          caption: index === 0 ? 'Main Image' : `Image ${index + 1}`
+        })) : [{ url: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80', caption: 'Default' }],
+        bills: {
+          wifi: { 
+            included: billsIncludedSet.has('WiFi') || billsIncludedSet.has('wifi'),
+            amount: data.billPrices?.wifi?.toString() || '0'
+          },
+          water: { 
+            included: billsIncludedSet.has('Water') || billsIncludedSet.has('water'),
+            amount: data.billPrices?.water?.toString() || '0'
+          },
+          electricity: { 
+            included: billsIncludedSet.has('Electricity') || billsIncludedSet.has('electricity'),
+            amount: data.billPrices?.electricity?.toString() || '0'
+          },
+          gas: { 
+            included: billsIncludedSet.has('Gas') || billsIncludedSet.has('gas'),
+            amount: data.billPrices?.gas?.toString() || '0'
+          },
+          councilTax: { 
+            included: billsIncludedSet.has('Council Tax') || billsIncludedSet.has('councilTax'),
+            amount: data.billPrices?.councilTax?.toString() || '0'
+          }
+        },
+        petsAllowed: data.houseRules?.petsAllowed || false,
+        smokingAllowed: data.houseRules?.smokingAllowed || false,
+        guestsAllowed: data.houseRules?.guestsAllowed !== false,
+        availability: (data.availabilityDates || []).map((dateStr: string | Date) => 
+          typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+        ),
+        amenities: data.amenities || []
+      };
+      
+      console.log('Transformed property:', transformedProperty);
+      setProperty(transformedProperty);
+    } catch (error: any) {
+      console.error('Failed to load property:', error);
+      toast.error(error.message || 'Failed to load property details');
+      // Don't navigate away immediately, set property to null to show error state
+      setProperty(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
+      case 'active':
         return 'bg-green-500/10 text-green-700 border-green-200';
       case 'pending':
+      case 'inactive':
         return 'bg-yellow-500/10 text-yellow-700 border-yellow-200';
       case 'rented':
         return 'bg-red-500/10 text-red-700 border-red-200';
@@ -100,6 +184,7 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
   };
 
   const calculateTotalBills = () => {
+    if (!property?.bills) return 0;
     const bills = property.bills;
     let total = 0;
     if (bills.wifi.included) total += parseFloat(bills.wifi.amount) || 0;
@@ -110,32 +195,123 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
     return total;
   };
 
-  const handleSave = () => {
-    setEditMode(null);
-    setShowSuccessToast(true);
-    setTimeout(() => setShowSuccessToast(false), 3000);
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      
+      // Transform property data back to backend format
+      const updateData = {
+        title: property.title,
+        description: property.description,
+        type: property.propertyType,
+        address: property.address,
+        bedrooms: parseInt(property.bedrooms) || 0,
+        bathrooms: parseInt(property.bathrooms) || 0,
+        area: property.size ? parseInt(property.size) : undefined,
+        furnished: property.furnishing === 'fully',
+        price: parseFloat(property.rent) || 0,
+        deposit: property.deposit ? parseFloat(property.deposit) : undefined,
+        minimumStay: property.minStay ? parseInt(property.minStay) : undefined,
+        maximumStay: property.maxStay ? parseInt(property.maxStay) : undefined,
+        amenities: property.amenities,
+        billsIncluded: Object.entries(property.bills)
+          .filter(([_, bill]: [string, any]) => bill.included)
+          .map(([key, _]: [string, any]) => {
+            const billNames: Record<string, string> = {
+              wifi: 'WiFi',
+              water: 'Water',
+              electricity: 'Electricity',
+              gas: 'Gas',
+              councilTax: 'Council Tax'
+            };
+            return billNames[key] || key;
+          }),
+        billPrices: {
+          wifi: parseFloat(property.bills.wifi.amount) || 0,
+          water: parseFloat(property.bills.water.amount) || 0,
+          electricity: parseFloat(property.bills.electricity.amount) || 0,
+          gas: parseFloat(property.bills.gas.amount) || 0,
+          councilTax: parseFloat(property.bills.councilTax.amount) || 0
+        },
+        houseRules: {
+          petsAllowed: property.petsAllowed,
+          smokingAllowed: property.smokingAllowed,
+          guestsAllowed: property.guestsAllowed
+        },
+        availabilityDates: property.availability.map((date: Date) => date.toISOString())
+      };
+
+      await landlordService.updateProperty(id!, updateData);
+      toast.success('Property updated successfully');
+      setEditMode(null);
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
+      
+      // Refresh property data
+      await fetchPropertyDetails();
+    } catch (error: any) {
+      console.error('Failed to update property:', error);
+      toast.error(error.message || 'Failed to update property');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDelete = () => {
-    // In real implementation, this would call an API
-    console.log('Deleting property:', propertyId);
-    onNavigate('my-properties');
+  const handleDelete = async () => {
+    try {
+      setDeleting(true);
+      await landlordService.deleteProperty(id!);
+      toast.success('Property deleted successfully');
+      onNavigate('my-properties');
+    } catch (error: any) {
+      console.error('Failed to delete property:', error);
+      toast.error(error.message || 'Failed to delete property');
+      setDeleting(false);
+      setShowDeleteModal(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-[#8C57FF]" />
+      </div>
+    );
+  }
+
+  if (!property) {
+    return (
+      <div className="p-8">
+        <div className="text-center py-20">
+          <h2 className="text-[#4A4A68] mb-2">Property not found</h2>
+          <Button onClick={() => onNavigate('my-properties')} className="bg-[#8C57FF] hover:bg-[#7645E8] mt-4">
+            Back to My Properties
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const toggleAmenity = (amenity: string) => {
-    setProperty(prev => ({
-      ...prev,
-      amenities: prev.amenities.includes(amenity)
-        ? prev.amenities.filter(a => a !== amenity)
-        : [...prev.amenities, amenity]
-    }));
+    setProperty(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        amenities: prev.amenities?.includes(amenity)
+          ? prev.amenities.filter(a => a !== amenity)
+          : [...(prev.amenities || []), amenity]
+      };
+    });
   };
 
   const removePhoto = (index: number) => {
-    setProperty(prev => ({
-      ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
-    }));
+    setProperty(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        photos: prev.photos?.filter((_, i) => i !== index) || []
+      };
+    });
   };
 
   return (
@@ -233,10 +409,20 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                     <Button
                       size="sm"
                       onClick={handleSave}
+                      disabled={saving}
                       className="bg-[#8C57FF] hover:bg-[#7645E8]"
                     >
-                      <Save className="h-4 w-4 mr-2" />
-                      Save Changes
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Changes
+                        </>
+                      )}
                     </Button>
                   </div>
                 )}
@@ -285,6 +471,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                     {editMode === 'overview' ? (
                       <Input
                         type="number"
+                        min="0"
+                        max="20"
                         value={property.bedrooms}
                         onChange={(e) => setProperty({ ...property, bedrooms: e.target.value })}
                         className="h-8"
@@ -307,6 +495,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                     {editMode === 'overview' ? (
                       <Input
                         type="number"
+                        min="0"
+                        max="20"
                         value={property.bathrooms}
                         onChange={(e) => setProperty({ ...property, bathrooms: e.target.value })}
                         className="h-8"
@@ -329,6 +519,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                     {editMode === 'overview' ? (
                       <Input
                         type="number"
+                        min="0"
+                        step="10"
                         value={property.size}
                         onChange={(e) => setProperty({ ...property, size: e.target.value })}
                         className="h-8"
@@ -357,6 +549,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">£</span>
                       <Input
                         type="number"
+                        min="0"
+                        step="10"
                         value={property.rent}
                         onChange={(e) => setProperty({ ...property, rent: e.target.value })}
                         className="pl-8"
@@ -375,6 +569,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">£</span>
                       <Input
                         type="number"
+                        min="0"
+                        step="10"
                         value={property.deposit}
                         onChange={(e) => setProperty({ ...property, deposit: e.target.value })}
                         className="pl-8"
@@ -391,6 +587,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                   {editMode === 'overview' ? (
                     <Input
                       type="number"
+                      min="0"
+                      max="20"
                       value={property.flatmates}
                       onChange={(e) => setProperty({ ...property, flatmates: e.target.value })}
                     />
@@ -405,6 +603,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                   {editMode === 'overview' ? (
                     <Input
                       type="number"
+                      min="1"
+                      max="60"
                       value={property.minStay}
                       onChange={(e) => setProperty({ ...property, minStay: e.target.value })}
                     />
@@ -419,6 +619,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                   {editMode === 'overview' ? (
                     <Input
                       type="number"
+                      min="1"
+                      max="60"
                       value={property.maxStay}
                       onChange={(e) => setProperty({ ...property, maxStay: e.target.value })}
                     />
@@ -565,10 +767,20 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                   <Button
                     size="sm"
                     onClick={handleSave}
+                    disabled={saving}
                     className="bg-[#8C57FF] hover:bg-[#7645E8]"
                   >
-                    <Save className="h-4 w-4 mr-2" />
-                    Save
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
@@ -689,10 +901,20 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                   <Button
                     size="sm"
                     onClick={handleSave}
+                    disabled={saving}
                     className="bg-[#8C57FF] hover:bg-[#7645E8]"
                   >
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Changes
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
@@ -735,6 +957,8 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                         {editMode === 'bills' ? (
                           <Input
                             type="number"
+                            min="0"
+                            step="5"
                             value={value.amount}
                             onChange={(e) =>
                               setProperty({
@@ -773,10 +997,20 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
               <h2 className="text-[#4A4A68]">Availability Calendar</h2>
               <Button
                 onClick={handleSave}
+                disabled={saving}
                 className="bg-[#8C57FF] hover:bg-[#7645E8]"
               >
-                <Save className="h-4 w-4 mr-2" />
-                Save Availability
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Availability
+                  </>
+                )}
               </Button>
             </div>
 
@@ -789,6 +1023,7 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                 mode="multiple"
                 selected={property.availability}
                 onSelect={(dates) => setProperty({ ...property, availability: dates || [] })}
+                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                 className="rounded-md border"
               />
             </div>
@@ -829,14 +1064,23 @@ export function PropertyDetailsPage({ propertyId, onNavigate }: PropertyDetailsP
                 variant="outline"
                 className="flex-1"
                 onClick={() => setShowDeleteModal(false)}
+                disabled={deleting}
               >
                 Cancel
               </Button>
               <Button
                 className="flex-1 bg-red-600 hover:bg-red-700"
                 onClick={handleDelete}
+                disabled={deleting}
               >
-                Delete Property
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Property'
+                )}
               </Button>
             </div>
           </Card>

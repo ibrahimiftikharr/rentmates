@@ -23,7 +23,6 @@ import '../styles/globals.css';
 export function LandlordDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -37,7 +36,6 @@ export function LandlordDashboard() {
 
   const handleNavigate = (page: string, id?: string) => {
     if (page === 'property-details') {
-      setSelectedPropertyId(id || null);
       navigate(`/landlord/property-details/${id}`);
     } else if (page === 'sign-contract') {
       setSelectedRequestId(id || null);
@@ -64,7 +62,7 @@ export function LandlordDashboard() {
             <Route path="/dashboard" element={<DashboardPage onNavigate={handleNavigate} />} />
             <Route path="/add-property" element={<AddPropertyPage onPublish={() => handleNavigate('my-properties')} onNavigate={handleNavigate} />} />
             <Route path="/my-properties" element={<MyPropertiesPage onNavigate={handleNavigate} onAddNew={() => handleNavigate('add-property')} />} />
-            <Route path="/property-details/:id" element={<PropertyDetailsPage propertyId={selectedPropertyId || ''} onNavigate={handleNavigate} />} />
+            <Route path="/property-details/:id" element={<PropertyDetailsPage onNavigate={handleNavigate} />} />
             <Route path="/visit-requests" element={<VisitRequestsPage />} />
             <Route path="/join-requests" element={<JoinRequestsPage onNavigate={handleNavigate} />} />
             <Route path="/sign-contract/:id" element={<SignContractPage requestId={selectedRequestId || ''} onNavigate={handleNavigate} onContractSigned={(reqId, contractId) => handleNavigate('view-contract', contractId)} />} />

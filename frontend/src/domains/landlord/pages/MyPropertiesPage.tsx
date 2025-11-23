@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, 
   Plus, 
@@ -7,66 +7,35 @@ import {
   Trash2, 
   Grid3x3, 
   List,
-  Home
+  Home,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
+import { landlordService } from '../services/landlordService';
+import { toast } from 'sonner';
 
 interface Property {
   id: string;
   title: string;
   address: string;
-  rent: string;
-  bedrooms: string;
-  bathrooms: string;
-  size: string;
-  status: 'available' | 'pending' | 'rented';
-  image: string;
+  price: number;
+  bedrooms: number;
+  bathrooms: number;
+  area?: number;
+  status: 'active' | 'inactive' | 'rented';
+  mainImage?: string;
+  images: string[];
   type: string;
+  description?: string;
+  furnished?: boolean;
+  amenities?: string[];
+  createdAt: string;
 }
 
-// Mock data - will be replaced with real data
-const MOCK_PROPERTIES: Property[] = [
-  {
-    id: '1',
-    title: 'Modern 2-Bed Flat in City Centre',
-    address: '123 High Street, London, SW1A 1AA',
-    rent: '1200',
-    bedrooms: '2',
-    bathrooms: '1',
-    size: '850',
-    status: 'available',
-    image: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80',
-    type: 'apartment'
-  },
-  {
-    id: '2',
-    title: 'Cosy Studio Near University',
-    address: '45 Park Lane, Manchester, M1 2AB',
-    rent: '650',
-    bedrooms: '1',
-    bathrooms: '1',
-    size: '450',
-    status: 'rented',
-    image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80',
-    type: 'studio'
-  },
-  {
-    id: '3',
-    title: 'Spacious 3-Bed House with Garden',
-    address: '78 Oak Avenue, Birmingham, B2 4QA',
-    rent: '1800',
-    bedrooms: '3',
-    bathrooms: '2',
-    size: '1200',
-    status: 'pending',
-    image: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80',
-    type: 'shared'
-  }
-];
 
 interface MyPropertiesPageProps {
   onNavigate: (page: string, propertyId?: string) => void;
@@ -74,18 +43,36 @@ interface MyPropertiesPageProps {
 }
 
 export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps) {
-  const [properties] = useState<Property[]>(MOCK_PROPERTIES);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  useEffect(() => {
+    fetchProperties();
+  }, []);
+
+  const fetchProperties = async () => {
+    try {
+      setLoading(true);
+      const data = await landlordService.getMyProperties();
+      setProperties(data);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load properties');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'available':
+      case 'active':
         return 'bg-green-500/10 text-green-700 border-green-200';
-      case 'pending':
+      case 'inactive':
         return 'bg-yellow-500/10 text-yellow-700 border-yellow-200';
       case 'rented':
         return 'bg-red-500/10 text-red-700 border-red-200';
@@ -101,11 +88,28 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
     return matchesSearch && matchesStatus;
   });
 
-  const handleDelete = (id: string) => {
-    // In real implementation, this would call an API
-    console.log('Deleting property:', id);
-    setDeleteConfirmId(null);
+  const handleDelete = async (id: string) => {
+    try {
+      setDeleting(true);
+      await landlordService.deleteProperty(id);
+      toast.success('Property deleted successfully');
+      setDeleteConfirmId(null);
+      // Refresh properties list
+      await fetchProperties();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete property');
+    } finally {
+      setDeleting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-[#8C57FF]" />
+      </div>
+    );
+  }
 
   if (properties.length === 0) {
     return (
@@ -170,9 +174,9 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Properties</SelectItem>
-              <SelectItem value="available">Available</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
               <SelectItem value="rented">Rented</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
 
@@ -219,7 +223,7 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
               {/* Property Image */}
               <div className="relative h-48 overflow-hidden">
                 <img
-                  src={property.image}
+                  src={property.mainImage || property.images?.[0] || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80'}
                   alt={property.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
@@ -237,13 +241,17 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
                   <span>{property.bedrooms} bed</span>
                   <span>•</span>
                   <span>{property.bathrooms} bath</span>
-                  <span>•</span>
-                  <span>{property.size} sqft</span>
+                  {property.area && (
+                    <>
+                      <span>•</span>
+                      <span>{property.area} sqft</span>
+                    </>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-[#8C57FF]">£{property.rent}</p>
+                    <p className="text-[#8C57FF]">£{property.price}</p>
                     <p className="text-xs text-muted-foreground">per month</p>
                   </div>
                 </div>
@@ -286,7 +294,7 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
                 {/* Property Image */}
                 <div className="relative w-64 h-48 flex-shrink-0">
                   <img
-                    src={property.image}
+                    src={property.mainImage || property.images?.[0] || 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80'}
                     alt={property.title}
                     className="w-full h-full object-cover"
                   />
@@ -305,14 +313,18 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
                       <span>{property.bedrooms} bed</span>
                       <span>•</span>
                       <span>{property.bathrooms} bath</span>
-                      <span>•</span>
-                      <span>{property.size} sqft</span>
+                      {property.area && (
+                        <>
+                          <span>•</span>
+                          <span>{property.area} sqft</span>
+                        </>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-[#8C57FF]">£{property.rent}</p>
+                      <p className="text-[#8C57FF]">£{property.price}</p>
                       <p className="text-xs text-muted-foreground">per month</p>
                     </div>
 
@@ -378,8 +390,16 @@ export function MyPropertiesPage({ onNavigate, onAddNew }: MyPropertiesPageProps
               <Button
                 className="flex-1 bg-red-600 hover:bg-red-700"
                 onClick={() => handleDelete(deleteConfirmId)}
+                disabled={deleting}
               >
-                Delete
+                {deleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
               </Button>
             </div>
           </Card>

@@ -215,20 +215,36 @@ const updateProperty = async (req, res) => {
     const allowedUpdates = [
       'title', 'description', 'type', 'address', 'city', 'country', 'postalCode',
       'university', 'distance', 'bedrooms', 'bathrooms', 'area', 'furnished',
-      'price', 'deposit', 'amenities', 'billsIncluded', 'availableFrom',
-      'minimumStay', 'maximumStay', 'status'
+      'price', 'deposit', 'amenities', 'billsIncluded', 'billPrices', 'availableFrom',
+      'minimumStay', 'maximumStay', 'availabilityDates', 'moveInBy', 'houseRules', 'status'
     ];
 
     allowedUpdates.forEach(field => {
       if (req.body[field] !== undefined) {
-        property[field] = req.body[field];
+        if (field === 'availabilityDates' && Array.isArray(req.body[field])) {
+          property[field] = req.body[field].map(d => new Date(d));
+        } else if (field === 'moveInBy' && req.body[field]) {
+          property[field] = new Date(req.body[field]);
+        } else {
+          property[field] = req.body[field];
+        }
       }
     });
 
+    console.log('✓ Property updated:', property.title);
+    console.log('Updated fields:', Object.keys(req.body));
+    if (req.body.availabilityDates) {
+      console.log('📅 Availability dates updated:', property.availabilityDates);
+    }
+    if (req.body.houseRules) {
+      console.log('🏠 House rules updated:', property.houseRules);
+    }
+    if (req.body.billPrices) {
+      console.log('💰 Bill prices updated:', property.billPrices);
+    }
+
     property.updatedAt = Date.now();
     await property.save();
-
-    console.log('✓ Property updated:', property.title);
 
     res.status(200).json({
       success: true,

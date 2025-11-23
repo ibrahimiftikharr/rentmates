@@ -1,20 +1,35 @@
 import { Award, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
+import { StudentProfile } from '../services/studentService';
 
-export function ReputationScoreSummaryCard() {
-  const score = 78;
+interface ReputationScoreSummaryCardProps {
+  profile: StudentProfile;
+}
+
+export function ReputationScoreSummaryCard({ profile }: ReputationScoreSummaryCardProps) {
+  const score = profile.reputationScore || 25; // Minimum is 25 (email verified)
   const maxScore = 100;
   const percentage = (score / maxScore) * 100;
   
-  // Determine trust level based on score
-  const getTrustLevel = (score: number) => {
-    if (score >= 90) return { level: 'Excellent', color: 'text-green-600', bgColor: 'bg-green-50' };
-    if (score >= 75) return { level: 'High', color: 'text-blue-600', bgColor: 'bg-blue-50' };
-    if (score >= 50) return { level: 'Medium', color: 'text-orange-600', bgColor: 'bg-orange-50' };
-    return { level: 'Low', color: 'text-red-600', bgColor: 'bg-red-50' };
+  // Get trust level from backend
+  const trustLevel = profile.trustLevel || 'Low';
+  
+  const getTrustLevelStyle = (level: string) => {
+    switch (level) {
+      case 'High':
+        return { color: 'text-green-600', bgColor: 'bg-green-50' };
+      case 'Medium':
+        return { color: 'text-blue-600', bgColor: 'bg-blue-50' };
+      case 'Low':
+        return { color: 'text-orange-600', bgColor: 'bg-orange-50' };
+      case 'Very Low':
+        return { color: 'text-red-600', bgColor: 'bg-red-50' };
+      default:
+        return { color: 'text-gray-600', bgColor: 'bg-gray-50' };
+    }
   };
 
-  const trustLevel = getTrustLevel(score);
+  const trustLevelStyle = getTrustLevelStyle(trustLevel);
 
   // Calculate stroke dash for circular progress
   const radius = 50;
@@ -94,16 +109,16 @@ export function ReputationScoreSummaryCard() {
                 <h3 className="font-medium text-sm sm:text-base">Reputation Score</h3>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground text-center sm:text-left">
-                Your trust level is <span className={`font-medium ${trustLevel.color}`}>{trustLevel.level}</span>
+                Your trust level is <span className={`font-medium ${trustLevelStyle.color}`}>{trustLevel}</span>
               </p>
             </div>
 
             {/* Trust Level Badge */}
             <div className="flex justify-center sm:justify-start">
-              <div className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg ${trustLevel.bgColor}`}>
-                <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 ${trustLevel.color}`} />
-                <span className={`text-xs sm:text-sm font-medium ${trustLevel.color}`}>
-                  {trustLevel.level} Trust Level
+              <div className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg ${trustLevelStyle.bgColor}`}>
+                <TrendingUp className={`w-3 h-3 sm:w-4 sm:h-4 ${trustLevelStyle.color}`} />
+                <span className={`text-xs sm:text-sm font-medium ${trustLevelStyle.color}`}>
+                  {trustLevel} Trust Level
                 </span>
               </div>
             </div>
@@ -111,15 +126,15 @@ export function ReputationScoreSummaryCard() {
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-2">
               <div className="text-center p-2 rounded-lg bg-muted/50">
-                <div className="text-sm sm:text-base font-medium text-primary">12</div>
-                <div className="text-xs text-muted-foreground">Tasks</div>
+                <div className="text-sm sm:text-base font-medium text-primary">{profile.completedTasks || 0}</div>
+                <div className="text-xs text-muted-foreground">Tasks Done</div>
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/50">
-                <div className="text-sm sm:text-base font-medium text-primary">5</div>
-                <div className="text-xs text-muted-foreground">Documents Uploaded</div>
+                <div className="text-sm sm:text-base font-medium text-primary">{profile.documentsCount || 0}</div>
+                <div className="text-xs text-muted-foreground">Documents</div>
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/50">
-                <div className="text-sm sm:text-base font-medium text-primary">98%</div>
+                <div className="text-sm sm:text-base font-medium text-primary">{score}%</div>
                 <div className="text-xs text-muted-foreground">Reliable</div>
               </div>
             </div>

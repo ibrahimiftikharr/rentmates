@@ -68,11 +68,108 @@ export interface Property {
   moveInBy?: string;
 }
 
+export interface StudentProfile {
+  id: string;
+  name: string;
+  email: string;
+  university?: string;
+  course?: string;
+  yearOfStudy?: string;
+  nationality?: string;
+  dateOfBirth?: string;
+  phone?: string;
+  housingPreferences?: {
+    propertyType?: string[];
+    budgetMin?: number;
+    budgetMax?: number;
+    moveInDate?: string;
+    stayDuration?: number;
+    preferredAreas?: string[];
+    requireFurnished?: boolean;
+    petsRequired?: boolean;
+  };
+  documents?: {
+    profileImage?: string;
+    nationalId?: string;
+    passport?: string;
+    studentId?: string;
+    proofOfEnrollment?: string;
+  };
+  bio?: string;
+  reputationScore: number;
+  trustLevel: string;
+  documentsCount: number;
+  completedTasks: number;
+  profileSteps?: {
+    basicInfo: boolean;
+    housingPreferences: boolean;
+    documentsUploaded: boolean;
+    bioCompleted: boolean;
+  };
+  isProfileComplete: boolean;
+}
+
 // ========================================
 // Student Service
 // ========================================
 
 export const studentService = {
+  /**
+   * Get student profile
+   */
+  async getProfile(): Promise<StudentProfile> {
+    try {
+      const { data } = await api.get('/student/profile');
+      return data.profile;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch profile');
+    }
+  },
+
+  /**
+   * Update student profile
+   */
+  async updateProfile(profileData: Partial<StudentProfile>): Promise<StudentProfile> {
+    try {
+      const { data } = await api.put('/student/profile', profileData);
+      return data.profile;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to update profile');
+    }
+  },
+
+  /**
+   * Upload document
+   */
+  async uploadDocument(file: File, documentType: string): Promise<{ documentUrl: string; reputationScore: number; documentsCount: number }> {
+    try {
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('documentType', documentType);
+
+      const { data } = await api.post('/student/profile/upload-document', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to upload document');
+    }
+  },
+
+  /**
+   * Delete document
+   */
+  async deleteDocument(documentType: string): Promise<{ reputationScore: number; documentsCount: number }> {
+    try {
+      const { data } = await api.delete(`/student/profile/document/${documentType}`);
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to delete document');
+    }
+  },
+
   /**
    * Get all active properties
    */

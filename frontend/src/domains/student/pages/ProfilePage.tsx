@@ -1,12 +1,91 @@
+import { useState, useEffect } from 'react';
 import { ProfileInfoCard } from '../components/ProfileInfoCard';
 import { HousingPreferencesCard } from '../components/HousingPreferencesCard';
 import { DocumentUploadCard } from '../components/DocumentUploadCard';
 import { VerificationReputationProgressCard } from '../components/VerificationReputationProgressCard';
 import { ReputationScoreSummaryCard } from '../components/ReputationScoreSummaryCard';
 import { Card, CardContent } from '@/shared/ui/card';
-import { Shield, TrendingUp, Zap, Star } from 'lucide-react';
+import { Shield, TrendingUp, Zap, Star, Loader2 } from 'lucide-react';
+import { studentService, StudentProfile } from '../services/studentService';
+import { toast } from 'sonner';
 
 export function ProfilePage() {
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      const data = await studentService.getProfile();
+      setProfile(data);
+    } catch (error: any) {
+      console.error('Failed to load profile:', error);
+      toast.error(error.message || 'Failed to load profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileUpdate = async (updates: Partial<StudentProfile>) => {
+    try {
+      const updatedProfile = await studentService.updateProfile(updates);
+      setProfile(updatedProfile);
+      toast.success('Profile updated successfully');
+      return updatedProfile;
+    } catch (error: any) {
+      console.error('Failed to update profile:', error);
+      toast.error(error.message || 'Failed to update profile');
+      throw error;
+    }
+  };
+
+  const handleDocumentUpload = async (file: File, documentType: string) => {
+    try {
+      const result = await studentService.uploadDocument(file, documentType);
+      toast.success('Document uploaded successfully');
+      // Refresh profile to get updated reputation score
+      await fetchProfile();
+      return result;
+    } catch (error: any) {
+      console.error('Failed to upload document:', error);
+      toast.error(error.message || 'Failed to upload document');
+      throw error;
+    }
+  };
+
+  const handleDocumentDelete = async (documentType: string) => {
+    try {
+      await studentService.deleteDocument(documentType);
+      toast.success('Document deleted successfully');
+      // Refresh profile to get updated reputation score
+      await fetchProfile();
+    } catch (error: any) {
+      console.error('Failed to delete document:', error);
+      toast.error(error.message || 'Failed to delete document');
+      throw error;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-muted-foreground">Failed to load profile</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -18,19 +97,23 @@ export function ProfilePage() {
       </div>
 
       {/* Section 1: Profile Information */}
-      <ProfileInfoCard />
+      <ProfileInfoCard profile={profile} onUpdate={handleProfileUpdate} />
 
       {/* Section 2: Housing Preferences */}
-      <HousingPreferencesCard />
+      <HousingPreferencesCard profile={profile} onUpdate={handleProfileUpdate} />
 
       {/* Section 3: Document Upload */}
-      <DocumentUploadCard />
+      <DocumentUploadCard 
+        profile={profile} 
+        onUpload={handleDocumentUpload}
+        onDelete={handleDocumentDelete}
+      />
 
       {/* Section 4: Verification & Reputation Progress */}
-      <VerificationReputationProgressCard />
+      <VerificationReputationProgressCard profile={profile} />
 
       {/* Section 5: Reputation Score Summary */}
-      <ReputationScoreSummaryCard />
+      <ReputationScoreSummaryCard profile={profile} />
 
       {/* Section 6: Benefits of Verification */}
       <Card className="shadow-lg bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">

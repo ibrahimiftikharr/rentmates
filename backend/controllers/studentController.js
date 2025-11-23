@@ -1,0 +1,266 @@
+const Student = require('../models/studentModel');
+const User = require('../models/userModel');
+
+// ========================================
+// GET STUDENT PROFILE
+// ========================================
+const getStudentProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const student = await Student.findOne({ user: userId }).populate('user', 'name email');
+    
+    if (!student) {
+      // Create a new student profile if it doesn't exist
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      const newStudent = new Student({
+        user: userId,
+        isEmailVerified: true,
+        reputationScore: 25 // Email verified bonus
+      });
+      await newStudent.save();
+      
+      const populatedStudent = await Student.findById(newStudent._id).populate('user', 'name email');
+      
+      return res.status(200).json({
+        success: true,
+        profile: {
+          id: populatedStudent._id,
+          name: user.name,
+          email: user.email,
+          university: populatedStudent.university,
+          course: populatedStudent.course,
+          yearOfStudy: populatedStudent.yearOfStudy,
+          nationality: populatedStudent.nationality,
+          dateOfBirth: populatedStudent.dateOfBirth,
+          phone: populatedStudent.phone,
+          housingPreferences: populatedStudent.housingPreferences,
+          documents: populatedStudent.documents,
+          bio: populatedStudent.bio,
+          reputationScore: populatedStudent.reputationScore,
+          trustLevel: populatedStudent.getTrustLevel(),
+          documentsCount: populatedStudent.getDocumentsCount(),
+          completedTasks: populatedStudent.getCompletedTasks(),
+          profileSteps: populatedStudent.profileSteps,
+          isProfileComplete: populatedStudent.isProfileComplete
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      profile: {
+        id: student._id,
+        name: student.user.name,
+        email: student.user.email,
+        university: student.university,
+        course: student.course,
+        yearOfStudy: student.yearOfStudy,
+        nationality: student.nationality,
+        dateOfBirth: student.dateOfBirth,
+        phone: student.phone,
+        housingPreferences: student.housingPreferences,
+        documents: student.documents,
+        bio: student.bio,
+        reputationScore: student.reputationScore,
+        trustLevel: student.getTrustLevel(),
+        documentsCount: student.getDocumentsCount(),
+        completedTasks: student.getCompletedTasks(),
+        profileSteps: student.profileSteps,
+        isProfileComplete: student.isProfileComplete
+      }
+    });
+  } catch (error) {
+    console.error('Get student profile error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch profile' });
+  }
+};
+
+// ========================================
+// UPDATE STUDENT PROFILE
+// ========================================
+const updateStudentProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const updates = req.body;
+
+    let student = await Student.findOne({ user: userId });
+    
+    if (!student) {
+      // Create profile if doesn't exist
+      student = new Student({ user: userId, isEmailVerified: true });
+    }
+
+    // Update basic info
+    if (updates.university !== undefined) student.university = updates.university;
+    if (updates.course !== undefined) student.course = updates.course;
+    if (updates.yearOfStudy !== undefined) student.yearOfStudy = updates.yearOfStudy;
+    if (updates.nationality !== undefined) student.nationality = updates.nationality;
+    if (updates.dateOfBirth !== undefined) student.dateOfBirth = updates.dateOfBirth;
+    if (updates.phone !== undefined) student.phone = updates.phone;
+    if (updates.bio !== undefined) student.bio = updates.bio;
+
+    // Update housing preferences
+    if (updates.housingPreferences !== undefined) {
+      student.housingPreferences = {
+        ...student.housingPreferences,
+        ...updates.housingPreferences
+      };
+    }
+
+    // Update wallet status
+    if (updates.walletLinked !== undefined) {
+      student.walletLinked = updates.walletLinked;
+    }
+
+    // Update profile steps
+    if (updates.profileSteps !== undefined) {
+      student.profileSteps = {
+        ...student.profileSteps,
+        ...updates.profileSteps
+      };
+    }
+
+    // Check and update profile step completion
+    if (updates.university || updates.course || updates.yearOfStudy || updates.nationality) {
+      const basicInfoComplete = !!(student.university && student.course && student.yearOfStudy && student.nationality);
+      student.profileSteps.basicInfo = basicInfoComplete;
+    }
+
+    if (updates.housingPreferences) {
+      const prefs = student.housingPreferences;
+      const prefsComplete = !!(prefs.budgetMin && prefs.budgetMax && prefs.moveInDate);
+      student.profileSteps.housingPreferences = prefsComplete;
+    }
+
+    if (updates.bio) {
+      student.profileSteps.bioCompleted = updates.bio.length > 0;
+    }
+
+    await student.save();
+
+    const populatedStudent = await Student.findById(student._id).populate('user', 'name email');
+
+    console.log('✓ Student profile updated');
+    console.log('Reputation score:', populatedStudent.reputationScore);
+    console.log('Trust level:', populatedStudent.getTrustLevel());
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      profile: {
+        id: populatedStudent._id,
+        name: populatedStudent.user.name,
+        email: populatedStudent.user.email,
+        university: populatedStudent.university,
+        course: populatedStudent.course,
+        yearOfStudy: populatedStudent.yearOfStudy,
+        nationality: populatedStudent.nationality,
+        dateOfBirth: populatedStudent.dateOfBirth,
+        phone: populatedStudent.phone,
+        housingPreferences: populatedStudent.housingPreferences,
+        documents: populatedStudent.documents,
+        bio: populatedStudent.bio,
+        reputationScore: populatedStudent.reputationScore,
+        trustLevel: populatedStudent.getTrustLevel(),
+        documentsCount: populatedStudent.getDocumentsCount(),
+        completedTasks: populatedStudent.getCompletedTasks(),
+        profileSteps: populatedStudent.profileSteps,
+        isProfileComplete: populatedStudent.isProfileComplete
+      }
+    });
+  } catch (error) {
+    console.error('Update student profile error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update profile' });
+  }
+};
+
+// ========================================
+// UPLOAD DOCUMENT
+// ========================================
+const uploadDocument = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { documentType } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    let student = await Student.findOne({ user: userId });
+    if (!student) {
+      student = new Student({ user: userId, isEmailVerified: true });
+    }
+
+    // Update document URL
+    student.documents[documentType] = req.file.path;
+
+    // Check if documents step is complete (at least one ID document uploaded)
+    if (documentType === 'nationalId' || documentType === 'passport') {
+      student.profileSteps.documentsUploaded = true;
+    }
+
+    await student.save();
+
+    console.log('✓ Document uploaded:', documentType);
+    console.log('New reputation score:', student.reputationScore);
+
+    res.status(200).json({
+      success: true,
+      message: 'Document uploaded successfully',
+      documentUrl: req.file.path,
+      reputationScore: student.reputationScore,
+      documentsCount: student.getDocumentsCount()
+    });
+  } catch (error) {
+    console.error('Upload document error:', error);
+    res.status(500).json({ success: false, message: 'Failed to upload document' });
+  }
+};
+
+// ========================================
+// DELETE DOCUMENT
+// ========================================
+const deleteDocument = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { documentType } = req.params;
+
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student profile not found' });
+    }
+
+    // Remove document
+    student.documents[documentType] = undefined;
+
+    // Update documents step if no ID documents remain
+    if ((documentType === 'nationalId' || documentType === 'passport') && 
+        !student.documents.nationalId && !student.documents.passport) {
+      student.profileSteps.documentsUploaded = false;
+    }
+
+    await student.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Document deleted successfully',
+      reputationScore: student.reputationScore,
+      documentsCount: student.getDocumentsCount()
+    });
+  } catch (error) {
+    console.error('Delete document error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete document' });
+  }
+};
+
+module.exports = {
+  getStudentProfile,
+  updateStudentProfile,
+  uploadDocument,
+  deleteDocument
+};
