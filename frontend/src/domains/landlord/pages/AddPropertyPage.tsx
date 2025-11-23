@@ -771,6 +771,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                 mode="multiple"
                 selected={propertyData.availability}
                 onSelect={(dates) => setPropertyData({ ...propertyData, availability: dates || [] })}
+                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                 className="rounded-md border"
               />
             </div>
