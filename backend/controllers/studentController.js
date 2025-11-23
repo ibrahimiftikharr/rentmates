@@ -38,6 +38,7 @@ const getStudentProfile = async (req, res) => {
           nationality: populatedStudent.nationality,
           dateOfBirth: populatedStudent.dateOfBirth,
           phone: populatedStudent.phone,
+          interests: populatedStudent.interests || [],
           housingPreferences: populatedStudent.housingPreferences,
           documents: populatedStudent.documents,
           bio: populatedStudent.bio,
@@ -63,6 +64,7 @@ const getStudentProfile = async (req, res) => {
         nationality: student.nationality,
         dateOfBirth: student.dateOfBirth,
         phone: student.phone,
+        interests: student.interests || [],
         housingPreferences: student.housingPreferences,
         documents: student.documents,
         bio: student.bio,
@@ -103,6 +105,7 @@ const updateStudentProfile = async (req, res) => {
     if (updates.dateOfBirth !== undefined) student.dateOfBirth = updates.dateOfBirth;
     if (updates.phone !== undefined) student.phone = updates.phone;
     if (updates.bio !== undefined) student.bio = updates.bio;
+    if (updates.interests !== undefined) student.interests = updates.interests;
 
     // Update housing preferences
     if (updates.housingPreferences !== undefined) {
@@ -162,6 +165,7 @@ const updateStudentProfile = async (req, res) => {
         nationality: populatedStudent.nationality,
         dateOfBirth: populatedStudent.dateOfBirth,
         phone: populatedStudent.phone,
+        interests: populatedStudent.interests || [],
         housingPreferences: populatedStudent.housingPreferences,
         documents: populatedStudent.documents,
         bio: populatedStudent.bio,

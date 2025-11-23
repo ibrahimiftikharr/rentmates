@@ -17,16 +17,19 @@ const studentSchema = new mongoose.Schema({
   dateOfBirth: { type: Date },
   phone: { type: String },
   
+  // Interests
+  interests: [{ type: String }],
+  
   // Housing Preferences
   housingPreferences: {
     propertyType: [{ type: String }], // ['studio', 'apartment', 'shared']
     budgetMin: { type: Number },
     budgetMax: { type: Number },
     moveInDate: { type: Date },
-    stayDuration: { type: Number }, // in months
-    preferredAreas: [{ type: String }],
-    requireFurnished: { type: Boolean, default: false },
-    petsRequired: { type: Boolean, default: false }
+    furnished: { type: Boolean, default: false },
+    billsIncluded: { type: Boolean, default: false },
+    petsAllowed: { type: Boolean, default: false },
+    smokingAllowed: { type: Boolean, default: false }
   },
 
   // Documents

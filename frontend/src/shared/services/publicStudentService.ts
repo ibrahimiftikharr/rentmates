@@ -15,6 +15,7 @@ export interface PublicStudentProfile {
   phone?: string;
   dateOfBirth?: string;
   bio: string;
+  interests: string[];
   reputationScore: number;
   trustLevel: string;
   completedTasks?: number;
@@ -24,8 +25,6 @@ export interface PublicStudentProfile {
     budgetMin: number;
     budgetMax: number;
     moveInDate?: Date;
-    stayDuration: string;
-    preferredAreas: string[];
     petsAllowed: boolean;
     smokingAllowed: boolean;
     furnished: boolean;

@@ -78,15 +78,16 @@ export interface StudentProfile {
   nationality?: string;
   dateOfBirth?: string;
   phone?: string;
+  interests?: string[];
   housingPreferences?: {
     propertyType?: string[];
     budgetMin?: number;
     budgetMax?: number;
     moveInDate?: string;
-    stayDuration?: number;
-    preferredAreas?: string[];
-    requireFurnished?: boolean;
-    petsRequired?: boolean;
+    furnished?: boolean;
+    billsIncluded?: boolean;
+    petsAllowed?: boolean;
+    smokingAllowed?: boolean;
   };
   documents?: {
     profileImage?: string;

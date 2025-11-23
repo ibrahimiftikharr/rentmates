@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Camera, Save, CheckCircle, Loader2 } from 'lucide-react';
+import { useState, KeyboardEvent } from 'react';
+import { Camera, Save, CheckCircle, Loader2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
@@ -18,6 +18,7 @@ interface ProfileInfoCardProps {
 export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [interestInput, setInterestInput] = useState('');
   
   const [formData, setFormData] = useState({
     university: profile.university || '',
@@ -26,7 +27,8 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
     nationality: profile.nationality || '',
     dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
     phone: profile.phone || '',
-    bio: profile.bio || ''
+    bio: profile.bio || '',
+    interests: profile.interests || []
   });
 
   const handleSave = async () => {
@@ -49,9 +51,32 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
       nationality: profile.nationality || '',
       dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
       phone: profile.phone || '',
-      bio: profile.bio || ''
+      bio: profile.bio || '',
+      interests: profile.interests || []
     });
+    setInterestInput('');
     setIsEditing(false);
+  };
+
+  const handleAddInterest = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && interestInput.trim()) {
+      e.preventDefault();
+      const newInterest = interestInput.trim();
+      if (!formData.interests.includes(newInterest)) {
+        setFormData({
+          ...formData,
+          interests: [...formData.interests, newInterest]
+        });
+      }
+      setInterestInput('');
+    }
+  };
+
+  const handleRemoveInterest = (interestToRemove: string) => {
+    setFormData({
+      ...formData,
+      interests: formData.interests.filter(interest => interest !== interestToRemove)
+    });
   };
 
   return (
@@ -206,6 +231,53 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
             <p className="text-xs text-muted-foreground text-right">
               {formData.bio.length}/500 characters
             </p>
+          )}
+        </div>
+
+        {/* Interests */}
+        <div className="space-y-2">
+          <Label htmlFor="interests" className="text-sm">Interests</Label>
+          {isEditing ? (
+            <>
+              <Input 
+                id="interests"
+                value={interestInput}
+                onChange={(e) => setInterestInput(e.target.value)}
+                onKeyDown={handleAddInterest}
+                placeholder="Type an interest and press Enter"
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Press Enter to add an interest</p>
+            </>
+          ) : null}
+          {formData.interests.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {formData.interests.map((interest, index) => (
+                <Badge 
+                  key={index} 
+                  variant="secondary" 
+                  className="text-xs px-3 py-1 flex items-center gap-1"
+                >
+                  {interest}
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveInterest(interest)}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {!isEditing && formData.interests.length === 0 && (
+            <Input 
+              value="No interests added yet"
+              disabled
+              className="bg-muted/50 text-sm"
+            />
           )}
         </div>
 

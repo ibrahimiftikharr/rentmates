@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, MessageSquare, Mail, MapPin, Calendar, DollarSign, Home, Loader2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Mail, Phone, MapPin, Calendar, DollarSign, Home, CheckCircle, Loader2, Award, FileText, Sparkles } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
+import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { publicStudentService, PublicStudentProfile } from '@/shared/services/publicStudentService';
 import { toast } from 'sonner';
@@ -63,224 +63,189 @@ export function StudentProfilePage({ studentId, onNavigate }: StudentProfilePage
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
-      {/* Back Button */}
-      <Button
-        onClick={() => onNavigate('search-students')}
-        variant="ghost"
-        className="mb-4 text-[#8C57FF] hover:text-[#7C47EF] hover:bg-[#8C57FF]/5"
-      >
-        <ChevronLeft className="h-4 w-4 mr-1" />
-        Back to Search
-      </Button>
+      {/* Header */}
+      <div className="mb-6">
+        <button
+          onClick={() => onNavigate('search-students')}
+          className="flex items-center text-[#8C57FF] hover:text-[#7C47EF] mb-4 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          <span className="text-sm font-medium">Back to Search</span>
+        </button>
+        <h1 className="text-2xl font-semibold text-[#4A4A68]">Student Profile</h1>
+      </div>
 
-      {/* Profile Header Card */}
-      <Card className="shadow-lg mb-4 sm:mb-6">
-        <CardContent className="p-4 sm:p-6 lg:p-8">
-          <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start">
-            {/* Profile Picture */}
+      {/* Profile Card */}
+      <Card className="p-6 mb-6 shadow-lg">
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* Profile Image */}
+          <div className="flex-shrink-0">
             <img
               src={student.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80'}
               alt={student.name}
-              className="w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32 rounded-full object-cover border-4 border-[#F4F5FA] mx-auto sm:mx-0"
+              className="w-32 h-32 rounded-full object-cover border-4 border-gray-100"
             />
+          </div>
 
-            {/* Basic Info */}
-            <div className="flex-1 text-center sm:text-left w-full">
-              <h1 className="text-[#4A4A68] mb-2 text-xl sm:text-2xl">{student.name}</h1>
-              <p className="text-[#8C57FF] mb-2 text-sm sm:text-base">
-                {student.course} • {student.yearOfStudy}
-              </p>
-              <p className="text-muted-foreground mb-1 text-sm sm:text-base">{student.university}</p>
-              <p className="text-sm text-muted-foreground mb-2">{student.nationality}</p>
-              
-              {/* Trust Level Badge */}
-              <Badge className={`mb-4 ${
-                student.trustLevel === 'High' ? 'bg-green-500' :
-                student.trustLevel === 'Medium' ? 'bg-blue-500' :
-                student.trustLevel === 'Low' ? 'bg-orange-500' :
-                'bg-red-500'
-              } text-white`}>
-                {student.trustLevel} Trust • {student.reputationScore}/100
-              </Badge>
-
-              {/* Send Message Button */}
+          {/* Profile Info */}
+          <div className="flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-4">
               <div>
-                <Button
-                  onClick={handleSendMessage}
-                  className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Send Message
-                </Button>
+                <h2 className="text-2xl font-bold text-[#4A4A68] mb-1">{student.name}</h2>
+                <p className="text-[#8C57FF] font-medium mb-2">{student.course}</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <Badge variant="secondary" className="text-xs">{student.yearOfStudy}</Badge>
+                  <Badge variant="secondary" className="text-xs">{student.nationality}</Badge>
+                  <Badge className={`text-xs ${
+                    student.trustLevel === 'High' ? 'bg-green-500' :
+                    student.trustLevel === 'Medium' ? 'bg-blue-500' :
+                    student.trustLevel === 'Low' ? 'bg-orange-500' :
+                    'bg-red-500'
+                  } text-white`}>
+                    {student.trustLevel} Trust Level
+                  </Badge>
+                </div>
+              </div>
+              <Button
+                onClick={handleSendMessage}
+                className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Message Student
+              </Button>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-[#8C57FF]">{student.reputationScore}</div>
+                <div className="text-xs text-gray-600">Reputation Score</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-[#8C57FF]">{student.completedTasks || 0}</div>
+                <div className="text-xs text-gray-600">Completed Tasks</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-[#8C57FF]">{student.documentsCount || 0}</div>
+                <div className="text-xs text-gray-600">Documents</div>
               </div>
             </div>
           </div>
-        </CardContent>
+        </div>
+
+        {/* Bio Section */}
+        {student.bio && (
+          <div className="mt-6 pt-6 border-t">
+            <h3 className="text-sm font-semibold text-[#4A4A68] mb-2">About</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">{student.bio}</p>
+          </div>
+        )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-        {/* Left Column - Main Info */}
-        <div className="lg:col-span-2 space-y-4 sm:space-y-5 lg:space-y-6">
-          {/* About Me */}
-          <Card className="shadow-lg">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-[#4A4A68] text-base sm:text-lg">About Me</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <p className="text-[#4A4A68] leading-relaxed text-sm sm:text-base">
-                {student.bio || 'No bio provided yet.'}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Contact Information */}
+        <Card className="p-6 shadow-lg">
+          <h3 className="text-lg font-semibold text-[#4A4A68] mb-4 flex items-center">
+            <Mail className="h-5 w-5 mr-2 text-[#8C57FF]" />
+            Contact Information
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center text-sm">
+              <Mail className="h-4 w-4 mr-3 text-gray-400" />
+              <span className="text-gray-600">Email:</span>
+              <a href={`mailto:${student.email}`} className="ml-2 text-[#8C57FF] hover:underline">
+                {student.email}
+              </a>
+            </div>
+            {student.phone && (
+              <div className="flex items-center text-sm">
+                <Phone className="h-4 w-4 mr-3 text-gray-400" />
+                <span className="text-gray-600">Phone:</span>
+                <span className="ml-2 text-[#4A4A68]">{student.phone}</span>
+              </div>
+            )}
+            <div className="flex items-center text-sm">
+              <MapPin className="h-4 w-4 mr-3 text-gray-400" />
+              <span className="text-gray-600">University:</span>
+              <span className="ml-2 text-[#4A4A68]">{student.university}</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Housing Preferences */}
+        <Card className="p-6 shadow-lg">
+          <h3 className="text-lg font-semibold text-[#4A4A68] mb-4 flex items-center">
+            <Home className="h-5 w-5 mr-2 text-[#8C57FF]" />
+            Housing Preferences
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Property Type</p>
+              <p className="text-sm text-[#4A4A68]">
+                {student.housingPreferences.propertyType.join(', ') || 'Any'}
               </p>
-            </CardContent>
-          </Card>
-
-          {/* Profile Stats */}
-          <Card className="shadow-lg">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-[#4A4A68] text-base sm:text-lg">Verification Status</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[#8C57FF]">{student.reputationScore}</div>
-                  <div className="text-xs text-muted-foreground">Reputation</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[#8C57FF]">{student.completedTasks || 0}</div>
-                  <div className="text-xs text-muted-foreground">Tasks Done</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-[#8C57FF]">{student.documentsCount || 0}</div>
-                  <div className="text-xs text-muted-foreground">Documents</div>
-                </div>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Budget Range</p>
+              <p className="text-sm text-[#4A4A68] flex items-center">
+                <DollarSign className="h-4 w-4 mr-1 text-[#8C57FF]" />
+                £{student.housingPreferences.budgetMin} - £{student.housingPreferences.budgetMax}/month
+              </p>
+            </div>
+            {student.housingPreferences.moveInDate && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Move-in Date</p>
+                <p className="text-sm text-[#4A4A68] flex items-center">
+                  <Calendar className="h-4 w-4 mr-1 text-[#8C57FF]" />
+                  {format(new Date(student.housingPreferences.moveInDate), 'PPP')}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Column - Additional Info */}
-        <div className="space-y-4 sm:space-y-5 lg:space-y-6">
-          {/* Housing Preferences */}
-          <Card className="shadow-lg">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-[#4A4A68] flex items-center gap-2 text-base sm:text-lg">
-                <Home className="h-4 w-4 sm:h-5 sm:w-5 text-[#8C57FF]" />
-                Housing Preferences
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-start gap-3">
-                  <Home className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground">Property Type</p>
-                    <p className="text-sm text-[#4A4A68]">
-                      {student.housingPreferences.propertyType.join(', ') || 'Not specified'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <DollarSign className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground">Budget</p>
-                    <p className="text-sm text-[#4A4A68]">
-                      £{student.housingPreferences.budgetMin}–£{student.housingPreferences.budgetMax}/month
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground">Move-in Date</p>
-                    <p className="text-sm text-[#4A4A68]">
-                      {student.housingPreferences.moveInDate 
-                        ? format(new Date(student.housingPreferences.moveInDate), 'PPP')
-                        : 'Not specified'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <MapPin className="h-4 w-4 text-[#8C57FF] mt-1 flex-shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-muted-foreground">Preferred Areas</p>
-                    <p className="text-sm text-[#4A4A68]">
-                      {student.housingPreferences.preferredAreas.length > 0
-                        ? student.housingPreferences.preferredAreas.join(', ')
-                        : 'No preference'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Additional Preferences */}
-                <div className="pt-2 border-t">
-                  <p className="text-xs text-muted-foreground mb-2">Additional Preferences</p>
-                  <div className="flex flex-wrap gap-2">
-                    {student.housingPreferences.furnished && (
-                      <Badge variant="outline" className="text-xs">Furnished</Badge>
-                    )}
-                    {student.housingPreferences.billsIncluded && (
-                      <Badge variant="outline" className="text-xs">Bills Included</Badge>
-                    )}
-                    {student.housingPreferences.petsAllowed && (
-                      <Badge variant="outline" className="text-xs">Pets Allowed</Badge>
-                    )}
-                    {student.housingPreferences.smokingAllowed && (
-                      <Badge variant="outline" className="text-xs">Smoking Allowed</Badge>
-                    )}
-                  </div>
-                </div>
+            )}
+            {student.housingPreferences.preferredAreas.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Preferred Areas</p>
+                <p className="text-sm text-[#4A4A68]">
+                  {student.housingPreferences.preferredAreas.join(', ')}
+                </p>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Contact Information */}
-          <Card className="shadow-lg">
-            <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-[#4A4A68] flex items-center gap-2 text-base sm:text-lg">
-                <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-[#8C57FF]" />
-                Contact Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-6 pt-0">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Email</p>
-                  <a
-                    href={`mailto:${student.email}`}
-                    className="text-sm text-[#8C57FF] hover:text-[#7C47EF] break-all"
-                  >
-                    {student.email}
-                  </a>
-                </div>
-
-                <div className="pt-3 border-t">
-                  <Button
-                    onClick={handleSendMessage}
-                    variant="outline"
-                    className="w-full text-[#8C57FF] hover:text-[#7C47EF] hover:border-[#8C57FF]"
-                  >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Send Message
-                  </Button>
-                </div>
+            )}
+            {student.housingPreferences.stayDuration && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Stay Duration</p>
+                <p className="text-sm text-[#4A4A68]">{student.housingPreferences.stayDuration}</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Bottom Back Button */}
-      <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t">
-        <Button
-          onClick={() => onNavigate('search-students')}
-          variant="outline"
-          className="w-full sm:w-auto"
-        >
-          <ChevronLeft className="h-4 w-4 mr-2" />
-          Back to Search Students
-        </Button>
+            )}
+            <div>
+              <p className="text-xs text-gray-500 mb-2">Additional Preferences</p>
+              <div className="flex flex-wrap gap-2">
+                {student.housingPreferences.furnished && (
+                  <Badge variant="outline" className="text-xs">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Furnished
+                  </Badge>
+                )}
+                {student.housingPreferences.billsIncluded && (
+                  <Badge variant="outline" className="text-xs">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Bills Included
+                  </Badge>
+                )}
+                {student.housingPreferences.petsAllowed && (
+                  <Badge variant="outline" className="text-xs">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Pets Allowed
+                  </Badge>
+                )}
+                {student.housingPreferences.smokingAllowed && (
+                  <Badge variant="outline" className="text-xs">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Smoking Allowed
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );

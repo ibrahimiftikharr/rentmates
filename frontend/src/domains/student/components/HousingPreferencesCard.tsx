@@ -6,7 +6,6 @@ import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { cn } from '@/shared/ui/utils';
 import { StudentProfile } from '../services/studentService';
-import { Checkbox } from '@/shared/ui/checkbox';
 
 interface HousingPreferencesCardProps {
   profile: StudentProfile;
@@ -22,22 +21,13 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
     budgetMin: profile.housingPreferences?.budgetMin || 0,
     budgetMax: profile.housingPreferences?.budgetMax || 0,
     moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate).toISOString().split('T')[0] : '',
-    stayDuration: profile.housingPreferences?.stayDuration || '',
-    preferredAreas: profile.housingPreferences?.preferredAreas?.join(', ') || '',
-    petsAllowed: profile.housingPreferences?.petsAllowed || false,
-    smokingAllowed: profile.housingPreferences?.smokingAllowed || false,
-    furnished: profile.housingPreferences?.furnished || false,
-    billsIncluded: profile.housingPreferences?.billsIncluded || false,
   });
 
   const handleSave = async () => {
     try {
       setIsSaving(true);
       await onUpdate({
-        housingPreferences: {
-          ...formData,
-          preferredAreas: formData.preferredAreas.split(',').map(a => a.trim()).filter(a => a),
-        }
+        housingPreferences: formData
       });
       setIsEditing(false);
     } catch (error) {
@@ -53,12 +43,6 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
       budgetMin: profile.housingPreferences?.budgetMin || 0,
       budgetMax: profile.housingPreferences?.budgetMax || 0,
       moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate).toISOString().split('T')[0] : '',
-      stayDuration: profile.housingPreferences?.stayDuration || '',
-      preferredAreas: profile.housingPreferences?.preferredAreas?.join(', ') || '',
-      petsAllowed: profile.housingPreferences?.petsAllowed || false,
-      smokingAllowed: profile.housingPreferences?.smokingAllowed || false,
-      furnished: profile.housingPreferences?.furnished || false,
-      billsIncluded: profile.housingPreferences?.billsIncluded || false,
     });
     setIsEditing(false);
   };
@@ -161,83 +145,6 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
             min={new Date().toISOString().split('T')[0]}
           />
-        </div>
-
-        {/* Stay Duration */}
-        <div className="space-y-2">
-          <Label htmlFor="stayDuration" className="text-sm">Stay Duration</Label>
-          <Input 
-            id="stayDuration" 
-            value={formData.stayDuration}
-            onChange={(e) => setFormData({...formData, stayDuration: e.target.value})}
-            disabled={!isEditing}
-            className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
-            placeholder="e.g., 6 months, 1 year"
-          />
-        </div>
-
-        {/* Preferred Areas */}
-        <div className="space-y-2">
-          <Label htmlFor="preferredAreas" className="text-sm">Preferred Areas (comma-separated)</Label>
-          <Input 
-            id="preferredAreas" 
-            value={formData.preferredAreas}
-            onChange={(e) => setFormData({...formData, preferredAreas: e.target.value})}
-            disabled={!isEditing}
-            className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
-            placeholder="e.g., City Centre, University District"
-          />
-        </div>
-
-        {/* Preferences Checkboxes */}
-        <div className="space-y-3">
-          <Label className="text-sm">Additional Preferences</Label>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="petsAllowed" 
-                checked={formData.petsAllowed}
-                onCheckedChange={(checked) => setFormData({...formData, petsAllowed: checked as boolean})}
-                disabled={!isEditing}
-              />
-              <Label htmlFor="petsAllowed" className="text-sm font-normal cursor-pointer">
-                Pets Allowed
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="smokingAllowed" 
-                checked={formData.smokingAllowed}
-                onCheckedChange={(checked) => setFormData({...formData, smokingAllowed: checked as boolean})}
-                disabled={!isEditing}
-              />
-              <Label htmlFor="smokingAllowed" className="text-sm font-normal cursor-pointer">
-                Smoking Allowed
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="furnished" 
-                checked={formData.furnished}
-                onCheckedChange={(checked) => setFormData({...formData, furnished: checked as boolean})}
-                disabled={!isEditing}
-              />
-              <Label htmlFor="furnished" className="text-sm font-normal cursor-pointer">
-                Furnished
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="billsIncluded" 
-                checked={formData.billsIncluded}
-                onCheckedChange={(checked) => setFormData({...formData, billsIncluded: checked as boolean})}
-                disabled={!isEditing}
-              />
-              <Label htmlFor="billsIncluded" className="text-sm font-normal cursor-pointer">
-                Bills Included
-              </Label>
-            </div>
-          </div>
         </div>
 
         {/* Action Buttons */}
