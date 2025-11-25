@@ -131,16 +131,10 @@ export function VisitRequestsPage() {
   const fetchVisitRequests = async () => {
     try {
       setIsLoading(true);
-      console.log('Fetching landlord visit requests...');
       const response = await visitRequestService.getLandlordVisitRequests();
-      console.log('Received visit requests:', response);
-      console.log('Response length:', response?.length);
-      console.log('Response type:', typeof response);
-      console.log('Is array:', Array.isArray(response));
       
       // Transform backend data to match UI structure
       const transformedRequests: VisitRequest[] = response.map((request: VisitRequestType) => {
-        console.log('Transforming request:', request);
         return {
           id: request._id,
           propertyName: request.property?.title || 'Property',
@@ -160,8 +154,6 @@ export function VisitRequestsPage() {
         };
       });
 
-      console.log('Transformed requests:', transformedRequests);
-      console.log('First transformed request:', JSON.stringify(transformedRequests[0], null, 2));
       setRequests(transformedRequests);
     } catch (error: any) {
       console.error('Error fetching visit requests:', error);
@@ -187,9 +179,6 @@ export function VisitRequestsPage() {
   };
 
   const filteredRequests = requests.filter(req => req.visitType === activeTab);
-  console.log('Active tab:', activeTab);
-  console.log('Total requests:', requests.length);
-  console.log('Filtered requests:', filteredRequests.length);
 
   const handleConfirm = async (id: string) => {
     const request = requests.find(r => r.id === id);
@@ -216,9 +205,16 @@ export function VisitRequestsPage() {
       return;
     }
 
+    // Validate Google Meet link
+    const meetLinkRegex = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
+    if (!meetLinkRegex.test(meetLink.trim())) {
+      toast.error('Please enter a valid Google Meet link (e.g., https://meet.google.com/abc-defg-hij)');
+      return;
+    }
+
     try {
       setIsConfirming(true);
-      await visitRequestService.confirmVisitRequest(showMeetLinkModal!, meetLink);
+      await visitRequestService.confirmVisitRequest(showMeetLinkModal!, meetLink.trim());
       setShowMeetLinkModal(null);
       setMeetLink('');
       toast.success('Virtual visit confirmed with meeting link!');
@@ -474,6 +470,7 @@ export function VisitRequestsPage() {
                     selected={rescheduleDate}
                     onSelect={setRescheduleDate}
                     className="rounded-md border"
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                   />
                 </div>
               </div>
