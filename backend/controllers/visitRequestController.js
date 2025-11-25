@@ -93,7 +93,9 @@ const createVisitRequest = async (req, res) => {
     // Emit Socket.IO event to landlord
     const io = req.app.get('io');
     if (io) {
-      const landlordRoom = `landlord_${property.landlord._id}`;
+      // Use the landlord's User ID for the room (not the Landlord model ID)
+      const landlordUserId = visitRequest.landlord.user._id || visitRequest.landlord.user;
+      const landlordRoom = `landlord_${landlordUserId}`;
       
       // Emit new_visit_request event for VisitRequestsPage
       io.to(landlordRoom).emit('new_visit_request', {

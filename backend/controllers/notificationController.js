@@ -1,5 +1,6 @@
 const Notification = require('../models/notificationModel');
 const Student = require('../models/studentModel');
+const Landlord = require('../models/landlordModel');
 
 // Get notifications for current user
 const getNotifications = async (req, res) => {
@@ -21,7 +22,14 @@ const getNotifications = async (req, res) => {
       recipientId = student._id;
       recipientModel = 'Student';
     } else if (userRole === 'landlord') {
-      recipientId = userId;
+      const landlord = await Landlord.findOne({ user: userId });
+      if (!landlord) {
+        return res.status(404).json({
+          success: false,
+          message: 'Landlord profile not found'
+        });
+      }
+      recipientId = landlord._id;
       recipientModel = 'Landlord';
     }
 
@@ -31,7 +39,7 @@ const getNotifications = async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .limit(50);
-
+    
     const unreadCount = await Notification.countDocuments({
       recipient: recipientId,
       recipientModel,

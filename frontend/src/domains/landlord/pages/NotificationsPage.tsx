@@ -129,17 +129,21 @@ export function NotificationsPage() {
       fetchNotifications();
     });
 
+    // Listen for visit request events
+    socketService.on('new_visit_request', () => {
+      fetchNotifications();
+    });
+
     return () => {
       socketService.off('new_notification');
+      socketService.off('new_visit_request');
     };
   }, []);
 
   const fetchNotifications = async () => {
     try {
       setIsLoading(true);
-      console.log('Fetching notifications...');
       const response = await notificationService.getNotifications();
-      console.log('Received notifications:', response);
 
       // Transform backend notifications to match UI structure
       const transformedNotifications: Notification[] = response.notifications.map((notif: NotificationType) => ({
@@ -155,7 +159,6 @@ export function NotificationsPage() {
       setNotifications(transformedNotifications);
       setUnreadCount(response.unreadCount);
     } catch (error: any) {
-      console.error('Error fetching notifications:', error);
       toast.error(error.message || 'Failed to fetch notifications');
     } finally {
       setIsLoading(false);
