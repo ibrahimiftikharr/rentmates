@@ -26,7 +26,7 @@ class SocketService {
       const user = authService.getCurrentUser();
       if (user) {
         this.socket?.emit('join_room', {
-          userId: user.role === 'student' ? user.studentId : user.id,
+          userId: user.id, // Use the User ID, not profile ID
           role: user.role
         });
       }

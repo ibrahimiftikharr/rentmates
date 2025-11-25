@@ -11,6 +11,7 @@ const studentRouter = require('./routes/studentRoutes.js');
 const publicStudentRouter = require('./routes/publicStudentRoutes.js');
 const visitRequestRouter = require('./routes/visitRequestRoutes.js');
 const notificationRouter = require('./routes/notificationRoutes.js');
+const messageRouter = require('./routes/messageRoutes.js');
 
 // Load environment variables
 dotenv.config();
@@ -51,7 +52,25 @@ io.on('connection', (socket) => {
     const { userId, role } = data;
     const roomName = `${role}_${userId}`;
     socket.join(roomName);
-    console.log(`User joined room: ${roomName}`);
+    socket.join(`user_${userId}`); // Also join generic user room for messaging
+    console.log(`User joined rooms: ${roomName}, user_${userId}`);
+  });
+
+  // Typing indicator
+  socket.on('typing', (data) => {
+    const { recipientId, isTyping } = data;
+    io.to(`user_${recipientId}`).emit('user_typing', {
+      userId: data.userId,
+      isTyping
+    });
+  });
+
+  // Online status
+  socket.on('user_online', (userId) => {
+    socket.broadcast.emit('user_status_change', {
+      userId,
+      isOnline: true
+    });
   });
 
   socket.on('disconnect', () => {
@@ -101,6 +120,9 @@ app.use('/api/visit-requests', visitRequestRouter);
 
 // Notification routes
 app.use('/api/notifications', notificationRouter);
+
+// Message routes
+app.use('/api/messages', messageRouter);
 
 // Log all registered routes for debugging
 console.log('\n📋 Registered routes:');

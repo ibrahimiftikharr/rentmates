@@ -65,6 +65,11 @@ export function LandlordDashboard() {
     });
 
     socketService.on('new_notification', (data: any) => {
+      // Don't show toast for message notifications if user is on messages page
+      if (data.type === 'message' && window.location.pathname.includes('/messages')) {
+        return;
+      }
+      
       toast.info(data.title, {
         description: data.message,
       });
