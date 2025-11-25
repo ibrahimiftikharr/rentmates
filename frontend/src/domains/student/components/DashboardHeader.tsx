@@ -5,7 +5,9 @@ import { Button } from '@/shared/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/shared/ui/dropdown-menu';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '@/domains/auth/services/authService';
+import { studentService } from '@/domains/student/services/studentService';
 import { toast } from 'sonner';
+import { useState, useEffect } from 'react';
 
 interface DashboardHeaderProps {
   currentPage: string;
@@ -54,6 +56,32 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
 export function DashboardHeader({ currentPage, onNavigate }: DashboardHeaderProps) {
   const pageInfo = pageTitles[currentPage] || pageTitles.dashboard;
   const navigate = useNavigate();
+  const [profileImage, setProfileImage] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+
+  useEffect(() => {
+    fetchProfileData();
+
+    // Listen for profile image updates
+    const handleProfileUpdate = () => {
+      fetchProfileData();
+    };
+    window.addEventListener('profileImageUpdated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('profileImageUpdated', handleProfileUpdate);
+    };
+  }, []);
+
+  const fetchProfileData = async () => {
+    try {
+      const profile = await studentService.getProfile();
+      setProfileImage(profile.documents?.profileImage || '');
+      setUserName(profile.name || '');
+    } catch (error) {
+      console.error('Failed to fetch profile data:', error);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -104,8 +132,8 @@ export function DashboardHeader({ currentPage, onNavigate }: DashboardHeaderProp
             <DropdownMenuTrigger asChild>
               <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
                 <Avatar className="cursor-pointer w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0">
-                  <AvatarImage src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  {profileImage && <AvatarImage src={profileImage} />}
+                  <AvatarFallback>{userName ? userName.split(' ').map(n => n[0]).join('').toUpperCase() : 'ST'}</AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>

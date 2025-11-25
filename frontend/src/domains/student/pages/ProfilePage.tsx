@@ -49,6 +49,10 @@ export function ProfilePage() {
       toast.success('Document uploaded successfully');
       // Refresh profile to get updated reputation score
       await fetchProfile();
+      // Dispatch event to update header if profile image was uploaded
+      if (documentType === 'profileImage') {
+        window.dispatchEvent(new CustomEvent('profileImageUpdated'));
+      }
       return result;
     } catch (error: any) {
       console.error('Failed to upload document:', error);

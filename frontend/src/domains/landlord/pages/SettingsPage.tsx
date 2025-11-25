@@ -110,6 +110,8 @@ export function SettingsPage() {
       const imageUrl = await landlordService.uploadProfileImage(file);
       setProfile((prev) => prev ? { ...prev, profileImage: imageUrl } : null);
       toast.success('Profile image updated!');
+      // Dispatch event to update header
+      window.dispatchEvent(new CustomEvent('profileImageUpdated'));
     } catch (error: any) {
       toast.error(error.message);
     } finally {

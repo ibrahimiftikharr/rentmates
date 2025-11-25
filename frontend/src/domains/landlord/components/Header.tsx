@@ -4,7 +4,9 @@ import { Badge } from '@/shared/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/shared/ui/dropdown-menu';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '@/domains/auth/services/authService';
+import { landlordService } from '@/domains/landlord/services/landlordService';
 import { toast } from 'sonner';
+import { useState, useEffect } from 'react';
 
 interface HeaderProps {
   currentPage: string;
@@ -28,6 +30,32 @@ const pageLabels: Record<string, string> = {
 
 export function Header({ currentPage, onNavigate }: HeaderProps) {
   const navigate = useNavigate();
+  const [profileImage, setProfileImage] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+
+  useEffect(() => {
+    fetchProfileData();
+
+    // Listen for profile image updates
+    const handleProfileUpdate = () => {
+      fetchProfileData();
+    };
+    window.addEventListener('profileImageUpdated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('profileImageUpdated', handleProfileUpdate);
+    };
+  }, []);
+
+  const fetchProfileData = async () => {
+    try {
+      const profile = await landlordService.getProfile();
+      setProfileImage(profile.profileImage || '');
+      setUserName(profile.name || '');
+    } catch (error) {
+      console.error('Failed to fetch profile data:', error);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -72,8 +100,8 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
             <DropdownMenuTrigger asChild>
               <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 hover:opacity-80 transition-opacity">
                 <Avatar className="h-7 w-7 sm:h-9 sm:w-9">
-                  <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=landlord" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  {profileImage && <AvatarImage src={profileImage} />}
+                  <AvatarFallback>{userName ? userName.split(' ').map(n => n[0]).join('').toUpperCase() : 'LL'}</AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
