@@ -204,8 +204,14 @@ export function NotificationsPage() {
     }
   };
 
-  const deleteNotification = (id: string) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+  const deleteNotification = async (id: string) => {
+    try {
+      await notificationService.deleteNotification(id);
+      setNotifications(notifications.filter(n => n.id !== id));
+      toast.success('Notification deleted');
+    } catch (error: any) {
+      toast.error('Failed to delete notification');
+    }
   };
 
   return (

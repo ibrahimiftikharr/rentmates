@@ -78,4 +78,15 @@ export const notificationService = {
       throw new Error(error.response?.data?.message || 'Failed to mark all as read');
     }
   },
+
+  /**
+   * Delete notification
+   */
+  async deleteNotification(notificationId: string): Promise<void> {
+    try {
+      await api.delete(`/notifications/${notificationId}`);
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to delete notification');
+    }
+  },
 };

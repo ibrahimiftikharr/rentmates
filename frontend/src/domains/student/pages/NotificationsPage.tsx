@@ -12,7 +12,7 @@ interface NotificationsPageProps {
 }
 
 interface Notification {
-  id: number;
+  id: string;
   title: string;
   message: string;
   time: string;
@@ -62,7 +62,7 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
 
       // Transform backend notifications to match UI structure
       const transformedNotifications: Notification[] = response.notifications.map((notif: NotificationType) => ({
-        id: parseInt(notif._id.slice(-6), 16), // Convert last 6 chars of ObjectId to number
+        id: notif._id,
         title: notif.title,
         message: notif.message,
         time: getTimeAgo(notif.createdAt),
@@ -113,19 +113,23 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
     }
   };
 
-  const handleClearAll = () => {
-    setNotifications([]);
-    toast.success('All notifications cleared');
+  const handleClearAll = async () => {
+    try {
+      // Delete all notifications from backend
+      await Promise.all(
+        notifications.map(notif => notificationService.deleteNotification(notif.id))
+      );
+      setNotifications([]);
+      setUnreadCount(0);
+      toast.success('All notifications cleared');
+    } catch (error: any) {
+      toast.error('Failed to clear all notifications');
+    }
   };
 
-  const handleMarkRead = async (id: number) => {
-    const notification = notifications.find(n => n.id === id);
-    if (!notification) return;
-
+  const handleMarkRead = async (id: string) => {
     try {
-      // Convert back to MongoDB ObjectId format (approximate)
-      const notifId = notification.id.toString(16).padStart(24, '0');
-      await notificationService.markAsRead(notifId);
+      await notificationService.markAsRead(id);
       
       setNotifications(prev => 
         prev.map(notif => 
@@ -139,9 +143,14 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
     }
   };
 
-  const handleDelete = (id: number) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
-    toast.success('Notification deleted');
+  const handleDelete = async (id: string) => {
+    try {
+      await notificationService.deleteNotification(id);
+      setNotifications(prev => prev.filter(notif => notif.id !== id));
+      toast.success('Notification deleted');
+    } catch (error: any) {
+      toast.error('Failed to delete notification');
+    }
   };
 
   return (

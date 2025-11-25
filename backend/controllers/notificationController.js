@@ -111,7 +111,14 @@ const markAllAsRead = async (req, res) => {
       recipientId = student._id;
       recipientModel = 'Student';
     } else if (userRole === 'landlord') {
-      recipientId = userId;
+      const landlord = await Landlord.findOne({ user: userId });
+      if (!landlord) {
+        return res.status(404).json({
+          success: false,
+          message: 'Landlord profile not found'
+        });
+      }
+      recipientId = landlord._id;
       recipientModel = 'Landlord';
     }
 
@@ -153,7 +160,14 @@ const getUnreadCount = async (req, res) => {
       recipientId = student._id;
       recipientModel = 'Student';
     } else if (userRole === 'landlord') {
-      recipientId = userId;
+      const landlord = await Landlord.findOne({ user: userId });
+      if (!landlord) {
+        return res.status(404).json({
+          success: false,
+          message: 'Landlord profile not found'
+        });
+      }
+      recipientId = landlord._id;
       recipientModel = 'Landlord';
     }
 
@@ -176,9 +190,71 @@ const getUnreadCount = async (req, res) => {
   }
 };
 
+// Delete notification
+const deleteNotification = async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    // Get the recipient ID based on role
+    let recipientId;
+    if (userRole === 'student') {
+      const student = await Student.findOne({ user: userId });
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student profile not found'
+        });
+      }
+      recipientId = student._id;
+    } else if (userRole === 'landlord') {
+      const landlord = await Landlord.findOne({ user: userId });
+      if (!landlord) {
+        return res.status(404).json({
+          success: false,
+          message: 'Landlord profile not found'
+        });
+      }
+      recipientId = landlord._id;
+    }
+
+    // Find and verify ownership before deleting
+    const notification = await Notification.findById(notificationId);
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: 'Notification not found'
+      });
+    }
+
+    // Ensure the notification belongs to the requesting user
+    if (notification.recipient.toString() !== recipientId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this notification'
+      });
+    }
+
+    await Notification.findByIdAndDelete(notificationId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete notification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete notification'
+    });
+  }
+};
+
 module.exports = {
   getNotifications,
   markAsRead,
   markAllAsRead,
-  getUnreadCount
+  getUnreadCount,
+  deleteNotification
 };
