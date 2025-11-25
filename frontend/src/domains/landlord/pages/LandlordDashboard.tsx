@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
@@ -17,6 +17,8 @@ import { MessagesPage } from './MessagesPage';
 import { WalletPage } from './WalletPage';
 import { SettingsPage } from './SettingsPage';
 import { NotificationsPage } from './NotificationsPage';
+import { socketService } from '@/shared/services/socketService';
+import { toast } from 'sonner';
 import '../styles/index.css';
 import '../styles/globals.css';
 
@@ -50,6 +52,30 @@ export function LandlordDashboard() {
       navigate(`/landlord/${page}`);
     }
   };
+
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    socketService.connect();
+
+    // Listen for real-time visit request notifications
+    socketService.on('new_visit_request', (data: any) => {
+      toast.info('New visit request received!', {
+        description: data.message,
+      });
+    });
+
+    socketService.on('new_notification', (data: any) => {
+      toast.info(data.title, {
+        description: data.message,
+      });
+    });
+
+    return () => {
+      socketService.off('new_visit_request');
+      socketService.off('new_notification');
+      socketService.disconnect();
+    };
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#F4F5FA] overflow-hidden">

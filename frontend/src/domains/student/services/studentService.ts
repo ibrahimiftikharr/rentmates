@@ -236,4 +236,53 @@ export const studentService = {
       return 0;
     }
   },
+
+  /**
+   * Get wishlist
+   */
+  async getWishlist(): Promise<Property[]> {
+    try {
+      const { data } = await api.get('/student/wishlist');
+      return data.wishlist;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch wishlist');
+    }
+  },
+
+  /**
+   * Add property to wishlist
+   */
+  async addToWishlist(propertyId: string): Promise<void> {
+    try {
+      await api.post('/student/wishlist', { propertyId });
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to add to wishlist');
+    }
+  },
+
+  /**
+   * Remove property from wishlist
+   */
+  async removeFromWishlist(propertyId: string): Promise<void> {
+    try {
+      console.log('Removing property from wishlist:', propertyId);
+      const response = await api.delete(`/student/wishlist/${propertyId}`);
+      console.log('Remove from wishlist response:', response.data);
+    } catch (error: any) {
+      console.error('Remove from wishlist error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to remove from wishlist');
+    }
+  },
+
+  /**
+   * Check if property is in wishlist
+   */
+  async isInWishlist(propertyId: string): Promise<boolean> {
+    try {
+      const { data } = await api.get('/student/wishlist');
+      return data.wishlist.some((prop: Property) => prop.id === propertyId);
+    } catch (error: any) {
+      return false;
+    }
+  },
 };

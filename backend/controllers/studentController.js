@@ -1,5 +1,6 @@
 const Student = require('../models/studentModel');
 const User = require('../models/userModel');
+const Property = require('../models/propertyModel');
 
 // ========================================
 // GET STUDENT PROFILE
@@ -283,9 +284,20 @@ const getWishlist = async (req, res) => {
       });
     }
 
+    // Transform wishlist to ensure id field exists
+    const wishlist = (student.wishlist || []).map(property => {
+      const propObj = property.toObject ? property.toObject() : property;
+      return {
+        ...propObj,
+        id: propObj._id || propObj.id
+      };
+    });
+
+    console.log('Wishlist fetched:', wishlist.length, 'items');
+
     res.status(200).json({
       success: true,
-      wishlist: student.wishlist || []
+      wishlist
     });
   } catch (error) {
     console.error('Get wishlist error:', error);
@@ -343,6 +355,8 @@ const removeFromWishlist = async (req, res) => {
     const userId = req.user.id;
     const { propertyId } = req.params;
 
+    console.log('Removing property from wishlist:', propertyId, 'for user:', userId);
+
     if (!propertyId) {
       return res.status(400).json({
         success: false,
@@ -359,10 +373,17 @@ const removeFromWishlist = async (req, res) => {
       });
     }
 
+    console.log('Current wishlist length:', student.wishlist.length);
+
     student.wishlist = student.wishlist.filter(
       id => id.toString() !== propertyId
     );
+    
+    console.log('New wishlist length:', student.wishlist.length);
+    
     await student.save();
+
+    console.log('Wishlist updated successfully');
 
     res.status(200).json({
       success: true,

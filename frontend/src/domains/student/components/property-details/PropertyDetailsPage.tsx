@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Heart, Share2, MapPin, BedDouble, Bath, Ruler, Calendar, Home, Users, Shield, TrendingUp, User, Check, X as XIcon, ChevronLeft, ChevronRight, Flag, DollarSign, Mail, Phone, Globe } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
@@ -10,6 +10,8 @@ import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Textarea } from '@/shared/ui/textarea';
 import { toast } from 'sonner';
+import { studentService } from '../../services/studentService';
+import { visitRequestService } from '@/shared/services/visitRequestService';
 
 interface PropertyDetailsPageProps {
   property: any;
@@ -50,6 +52,37 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   const [visitCalendarMonth, setVisitCalendarMonth] = useState(new Date().getMonth());
   const [visitCalendarYear, setVisitCalendarYear] = useState(new Date().getFullYear());
   const [selectedFlatmate, setSelectedFlatmate] = useState<Flatmate | null>(null);
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isSchedulingVisit, setIsSchedulingVisit] = useState(false);
+
+  useEffect(() => {
+    checkWishlistStatus();
+  }, [property.id]);
+
+  const checkWishlistStatus = async () => {
+    try {
+      const wishlist = await studentService.getWishlist();
+      setIsWishlisted(wishlist.some(p => p.id === property.id));
+    } catch (error) {
+      console.error('Failed to check wishlist status:', error);
+    }
+  };
+
+  const toggleWishlist = async () => {
+    try {
+      if (isWishlisted) {
+        await studentService.removeFromWishlist(property.id);
+        setIsWishlisted(false);
+        toast.success('Removed from wishlist');
+      } else {
+        await studentService.addToWishlist(property.id);
+        setIsWishlisted(true);
+        toast.success('Added to wishlist');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update wishlist');
+    }
+  };
 
   // Extract bills from property data
   const bills = [
@@ -180,7 +213,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
     toast.success('Join request sent successfully!');
   };
 
-  const handleBookVisit = () => {
+  const handleBookVisit = async () => {
     if (!selectedDate) {
       toast.error('Please select a date');
       return;
@@ -189,8 +222,26 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
       toast.error('Please select a time');
       return;
     }
-    setOpenVisitDialog(false);
-    toast.success(`${visitType === 'virtual' ? 'Virtual' : 'In-person'} visit scheduled for ${selectedDate.toLocaleDateString()} at ${selectedTime} UTC`);
+
+    setIsSchedulingVisit(true);
+    try {
+      await visitRequestService.createVisitRequest({
+        propertyId: property.id,
+        visitType,
+        visitDate: selectedDate.toISOString(),
+        visitTime: selectedTime,
+      });
+      
+      setOpenVisitDialog(false);
+      setSelectedDate(null);
+      setSelectedTime('');
+      setVisitType('virtual');
+      toast.success(`${visitType === 'virtual' ? 'Virtual' : 'In-person'} visit request sent to landlord successfully!`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to schedule visit. Please try again.');
+    } finally {
+      setIsSchedulingVisit(false);
+    }
   };
 
   const handleDateClick = (day: number | null) => {
@@ -375,9 +426,14 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
               <Share2 className="w-4 h-4" />
               <span className="hidden sm:inline">Share</span>
             </Button>
-            <Button variant="outline" size="sm" className="gap-2 px-2 sm:px-4">
-              <Heart className="w-4 h-4" />
-              <span className="hidden sm:inline">Save</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className={`gap-2 px-2 sm:px-4 ${isWishlisted ? 'text-red-500 border-red-500' : ''}`}
+              onClick={toggleWishlist}
+            >
+              <Heart className={`w-4 h-4 ${isWishlisted ? 'fill-current' : ''}`} />
+              <span className="hidden sm:inline">{isWishlisted ? 'Saved' : 'Save'}</span>
             </Button>
           </div>
         </div>
@@ -1231,11 +1287,11 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenVisitDialog(false)}>
+            <Button variant="outline" onClick={() => setOpenVisitDialog(false)} disabled={isSchedulingVisit}>
               Cancel
             </Button>
-            <Button onClick={handleBookVisit}>
-              Schedule Visit
+            <Button onClick={handleBookVisit} disabled={isSchedulingVisit}>
+              {isSchedulingVisit ? 'Scheduling...' : 'Schedule Visit'}
             </Button>
           </DialogFooter>
         </DialogContent>

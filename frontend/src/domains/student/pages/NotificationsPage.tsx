@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { Bell, Check, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bell, Check, Trash2, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { toast } from 'sonner';
+import { notificationService, Notification as NotificationType } from '@/shared/services/notificationService';
+import { socketService } from '@/shared/services/socketService';
 
 interface NotificationsPageProps {
   onNavigate: (page: string) => void;
@@ -19,52 +21,96 @@ interface Notification {
 }
 
 export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    { 
-      id: 1,
-      title: 'Profile Verified', 
-      message: 'Your identity has been successfully verified!', 
-      time: '5 minutes ago',
-      read: false,
-      type: 'success'
-    },
-    { 
-      id: 2,
-      title: 'New Message', 
-      message: 'John Doe sent you a message about the apartment listing', 
-      time: '1 hour ago',
-      read: false,
-      type: 'info'
-    },
-    { 
-      id: 3,
-      title: 'Document Uploaded', 
-      message: 'Your passport document has been uploaded successfully', 
-      time: '2 hours ago',
-      read: true,
-      type: 'success'
-    },
-    { 
-      id: 4,
-      title: 'Reputation Updated', 
-      message: 'You earned +5 reputation points for completing your profile', 
-      time: '1 day ago',
-      read: true,
-      type: 'info'
-    },
-    { 
-      id: 5,
-      title: 'Verification Pending', 
-      message: 'Your visa document is pending verification', 
-      time: '2 days ago',
-      read: true,
-      type: 'warning'
-    },
-  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
-    toast.success('All notifications marked as read');
+  useEffect(() => {
+    fetchNotifications();
+
+    // Listen for real-time notifications
+    socketService.on('new_notification', () => {
+      fetchNotifications();
+    });
+
+    socketService.on('visit_confirmed', () => {
+      fetchNotifications();
+    });
+
+    socketService.on('visit_rescheduled', () => {
+      fetchNotifications();
+    });
+
+    socketService.on('visit_rejected', () => {
+      fetchNotifications();
+    });
+
+    return () => {
+      socketService.off('new_notification');
+      socketService.off('visit_confirmed');
+      socketService.off('visit_rescheduled');
+      socketService.off('visit_rejected');
+    };
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Fetching student notifications...');
+      const response = await notificationService.getNotifications();
+      console.log('Received notifications:', response);
+
+      // Transform backend notifications to match UI structure
+      const transformedNotifications: Notification[] = response.notifications.map((notif: NotificationType) => ({
+        id: parseInt(notif._id.slice(-6), 16), // Convert last 6 chars of ObjectId to number
+        title: notif.title,
+        message: notif.message,
+        time: getTimeAgo(notif.createdAt),
+        read: notif.read,
+        type: getNotificationType(notif.type),
+      }));
+
+      setNotifications(transformedNotifications);
+      setUnreadCount(response.unreadCount);
+    } catch (error: any) {
+      console.error('Error fetching notifications:', error);
+      toast.error(error.message || 'Failed to fetch notifications');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+    const weeks = Math.floor(days / 7);
+    return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+  };
+
+  const getNotificationType = (type: string): 'success' | 'info' | 'warning' => {
+    if (type === 'visit_confirmed') return 'success';
+    if (type === 'visit_rejected') return 'warning';
+    return 'info';
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
+      setUnreadCount(0);
+      toast.success('All notifications marked as read');
+    } catch (error: any) {
+      toast.error('Failed to mark all as read');
+    }
   };
 
   const handleClearAll = () => {
@@ -72,21 +118,31 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
     toast.success('All notifications cleared');
   };
 
-  const handleMarkRead = (id: number) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
-    toast.success('Notification marked as read');
+  const handleMarkRead = async (id: number) => {
+    const notification = notifications.find(n => n.id === id);
+    if (!notification) return;
+
+    try {
+      // Convert back to MongoDB ObjectId format (approximate)
+      const notifId = notification.id.toString(16).padStart(24, '0');
+      await notificationService.markAsRead(notifId);
+      
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === id ? { ...notif, read: true } : notif
+        )
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+      toast.success('Notification marked as read');
+    } catch (error: any) {
+      toast.error('Failed to mark as read');
+    }
   };
 
   const handleDelete = (id: number) => {
     setNotifications(prev => prev.filter(notif => notif.id !== id));
     toast.success('Notification deleted');
   };
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -121,7 +177,12 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
       </div>
 
       {/* Notifications List */}
-      {notifications.length > 0 ? (
+      {isLoading ? (
+        <Card className="p-12 text-center">
+          <Loader2 className="h-12 w-12 text-primary mx-auto mb-4 animate-spin" />
+          <p className="text-muted-foreground">Loading notifications...</p>
+        </Card>
+      ) : notifications.length > 0 ? (
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

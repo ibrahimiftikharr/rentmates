@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calendar as CalendarIcon,
   Clock,
@@ -10,7 +10,8 @@ import {
   RefreshCw,
   ExternalLink,
   Copy,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
@@ -21,6 +22,9 @@ import { Label } from '@/shared/ui/label';
 import { Textarea } from '@/shared/ui/textarea';
 import { Calendar } from '@/shared/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
+import { visitRequestService, VisitRequest as VisitRequestType } from '@/shared/services/visitRequestService';
+import { socketService } from '@/shared/services/socketService';
+import { toast } from 'sonner';
 
 interface VisitRequest {
   id: string;
@@ -95,7 +99,8 @@ const MOCK_REQUESTS: VisitRequest[] = [
 ];
 
 export function VisitRequestsPage() {
-  const [requests, setRequests] = useState<VisitRequest[]>(MOCK_REQUESTS);
+  const [requests, setRequests] = useState<VisitRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'physical' | 'virtual'>('physical');
   const [showRescheduleModal, setShowRescheduleModal] = useState<string | null>(null);
   const [showDisapproveModal, setShowDisapproveModal] = useState<string | null>(null);
@@ -104,7 +109,67 @@ export function VisitRequestsPage() {
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [disapproveReason, setDisapproveReason] = useState('');
   const [meetLink, setMeetLink] = useState('');
-  const [showToast, setShowToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [landlordNotes, setLandlordNotes] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+
+  useEffect(() => {
+    fetchVisitRequests();
+
+    // Listen for real-time updates
+    socketService.on('new_visit_request', () => {
+      fetchVisitRequests();
+      toast.info('New visit request received');
+    });
+
+    return () => {
+      socketService.off('new_visit_request');
+    };
+  }, []);
+
+  const fetchVisitRequests = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Fetching landlord visit requests...');
+      const response = await visitRequestService.getLandlordVisitRequests();
+      console.log('Received visit requests:', response);
+      console.log('Response length:', response?.length);
+      console.log('Response type:', typeof response);
+      console.log('Is array:', Array.isArray(response));
+      
+      // Transform backend data to match UI structure
+      const transformedRequests: VisitRequest[] = response.map((request: VisitRequestType) => {
+        console.log('Transforming request:', request);
+        return {
+          id: request._id,
+          propertyName: request.property?.title || 'Property',
+          propertyAddress: request.property?.location || request.property?.address || 'Address not available',
+          propertyId: request.property?._id || '',
+          studentName: request.student?.fullName || request.student?.user?.name || 'Student',
+          studentId: request.student?._id || '',
+          studentPhoto: request.student?.profilePicture || 'https://via.placeholder.com/100',
+          visitType: request.visitType === 'virtual' ? 'virtual' : 'physical',
+          requestedDate: request.visitDate ? new Date(request.visitDate).toISOString().split('T')[0] : '',
+          requestedTime: request.visitTime || '',
+          status: request.status === 'confirmed' || request.status === 'rescheduled' ? 'confirmed' : 
+                  request.status === 'rejected' ? 'disapproved' : 
+                  request.status === 'completed' ? 'completed' : 'pending',
+          meetLink: request.meetLink,
+          notes: request.landlordNotes,
+        };
+      });
+
+      console.log('Transformed requests:', transformedRequests);
+      console.log('First transformed request:', JSON.stringify(transformedRequests[0], null, 2));
+      setRequests(transformedRequests);
+    } catch (error: any) {
+      console.error('Error fetching visit requests:', error);
+      toast.error(error.message || 'Failed to fetch visit requests');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -122,91 +187,100 @@ export function VisitRequestsPage() {
   };
 
   const filteredRequests = requests.filter(req => req.visitType === activeTab);
+  console.log('Active tab:', activeTab);
+  console.log('Total requests:', requests.length);
+  console.log('Filtered requests:', filteredRequests.length);
 
-  const handleConfirm = (id: string) => {
+  const handleConfirm = async (id: string) => {
     const request = requests.find(r => r.id === id);
     
     if (request?.visitType === 'virtual') {
       setShowMeetLinkModal(id);
     } else {
-      setRequests(requests.map(req => 
-        req.id === id ? { ...req, status: 'confirmed' } : req
-      ));
-      showSuccessToast('Visit confirmed successfully!');
+      try {
+        setIsConfirming(true);
+        await visitRequestService.confirmVisitRequest(id);
+        toast.success('Visit confirmed successfully!');
+        await fetchVisitRequests();
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to confirm visit');
+      } finally {
+        setIsConfirming(false);
+      }
     }
   };
 
-  const handleConfirmWithMeetLink = () => {
+  const handleConfirmWithMeetLink = async () => {
     if (!meetLink.trim()) {
-      showErrorToast('Please enter a valid Google Meet link');
+      toast.error('Please enter a valid Google Meet link');
       return;
     }
 
-    setRequests(requests.map(req => 
-      req.id === showMeetLinkModal ? { ...req, status: 'confirmed', meetLink } : req
-    ));
-    setShowMeetLinkModal(null);
-    setMeetLink('');
-    showSuccessToast('Virtual visit confirmed with meeting link!');
+    try {
+      setIsConfirming(true);
+      await visitRequestService.confirmVisitRequest(showMeetLinkModal!, meetLink);
+      setShowMeetLinkModal(null);
+      setMeetLink('');
+      toast.success('Virtual visit confirmed with meeting link!');
+      await fetchVisitRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to confirm visit');
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
-  const handleReschedule = () => {
+  const handleReschedule = async () => {
     if (!rescheduleDate || !rescheduleTime) {
-      showErrorToast('Please select both date and time');
+      toast.error('Please select both date and time');
       return;
     }
 
-    const request = requests.find(r => r.id === showRescheduleModal);
-
-    setRequests(requests.map(req => 
-      req.id === showRescheduleModal 
-        ? { 
-            ...req, 
-            requestedDate: rescheduleDate.toISOString().split('T')[0],
-            requestedTime: rescheduleTime,
-            status: 'confirmed'
-          } 
-        : req
-    ));
-    
-    const rescheduledRequestId = showRescheduleModal;
-    setShowRescheduleModal(null);
-    setRescheduleDate(undefined);
-    setRescheduleTime('');
-    showSuccessToast('Visit rescheduled successfully!');
-
-    // If it's a virtual visit, prompt for meet link
-    if (request?.visitType === 'virtual') {
-      setTimeout(() => {
-        setShowMeetLinkModal(rescheduledRequestId);
-      }, 500);
+    try {
+      setIsRescheduling(true);
+      await visitRequestService.rescheduleVisitRequest(
+        showRescheduleModal!,
+        rescheduleDate.toISOString(),
+        rescheduleTime,
+        landlordNotes
+      );
+      
+      setShowRescheduleModal(null);
+      setRescheduleDate(undefined);
+      setRescheduleTime('');
+      setLandlordNotes('');
+      toast.success('Visit rescheduled successfully!');
+      await fetchVisitRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to reschedule visit');
+    } finally {
+      setIsRescheduling(false);
     }
   };
 
-  const handleDisapprove = () => {
-    setRequests(requests.map(req => 
-      req.id === showDisapproveModal 
-        ? { ...req, status: 'disapproved', notes: disapproveReason } 
-        : req
-    ));
-    setShowDisapproveModal(null);
-    setDisapproveReason('');
-    showSuccessToast('Visit request disapproved');
+  const handleDisapprove = async () => {
+    if (!disapproveReason.trim()) {
+      toast.error('Please provide a reason for rejection');
+      return;
+    }
+
+    try {
+      setIsRejecting(true);
+      await visitRequestService.rejectVisitRequest(showDisapproveModal!, disapproveReason);
+      setShowDisapproveModal(null);
+      setDisapproveReason('');
+      toast.success('Visit request declined');
+      await fetchVisitRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to reject visit');
+    } finally {
+      setIsRejecting(false);
+    }
   };
 
   const copyMeetLink = (link: string) => {
     navigator.clipboard.writeText(link);
-    showSuccessToast('Meeting link copied to clipboard!');
-  };
-
-  const showSuccessToast = (message: string) => {
-    setShowToast({ message, type: 'success' });
-    setTimeout(() => setShowToast(null), 3000);
-  };
-
-  const showErrorToast = (message: string) => {
-    setShowToast({ message, type: 'error' });
-    setTimeout(() => setShowToast(null), 3000);
+    toast.success('Meeting link copied to clipboard!');
   };
 
   return (
@@ -231,7 +305,15 @@ export function VisitRequestsPage() {
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4">
-          {filteredRequests.length === 0 ? (
+          {isLoading ? (
+            <Card className="p-12 text-center">
+              <div className="flex flex-col items-center">
+                <Loader2 className="h-12 w-12 text-[#8C57FF] mb-4 animate-spin" />
+                <h3 className="text-[#4A4A68] mb-2">Loading visit requests...</h3>
+                <p className="text-muted-foreground">Please wait while we fetch your data</p>
+              </div>
+            </Card>
+          ) : filteredRequests.length === 0 ? (
             <Card className="p-12 text-center">
               <div className="flex flex-col items-center">
                 {activeTab === 'physical' ? (
@@ -327,8 +409,9 @@ export function VisitRequestsPage() {
                           size="sm"
                           onClick={() => handleConfirm(request.id)}
                           className="bg-green-600 hover:bg-green-700"
+                          disabled={isConfirming}
                         >
-                          <Check className="h-4 w-4 mr-1" />
+                          {isConfirming ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
                           Confirm
                         </Button>
                         <Button
@@ -376,7 +459,7 @@ export function VisitRequestsPage() {
       {/* Reschedule Modal */}
       {showRescheduleModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="p-6 max-w-lg w-full">
+          <Card className="p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-2 mb-4">
               <RefreshCw className="h-5 w-5 text-[#8C57FF]" />
               <h3 className="text-[#4A4A68]">Reschedule Visit</h3>
@@ -414,6 +497,17 @@ export function VisitRequestsPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <Label>Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Add any notes for the student about the reschedule..."
+                  value={landlordNotes}
+                  onChange={(e) => setLandlordNotes(e.target.value)}
+                  className="mt-1.5"
+                  rows={3}
+                />
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -424,15 +518,18 @@ export function VisitRequestsPage() {
                   setShowRescheduleModal(null);
                   setRescheduleDate(undefined);
                   setRescheduleTime('');
+                  setLandlordNotes('');
                 }}
+                disabled={isRescheduling}
               >
                 Cancel
               </Button>
               <Button
                 className="flex-1 bg-[#8C57FF] hover:bg-[#7645E8]"
                 onClick={handleReschedule}
+                disabled={isRescheduling}
               >
-                Confirm Reschedule
+                {isRescheduling ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rescheduling...</> : 'Confirm Reschedule'}
               </Button>
             </div>
           </Card>
@@ -468,14 +565,16 @@ export function VisitRequestsPage() {
                   setShowDisapproveModal(null);
                   setDisapproveReason('');
                 }}
+                disabled={isRejecting}
               >
                 Cancel
               </Button>
               <Button
                 className="flex-1 bg-red-600 hover:bg-red-700"
                 onClick={handleDisapprove}
+                disabled={isRejecting}
               >
-                Disapprove
+                {isRejecting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Rejecting...</> : 'Disapprove'}
               </Button>
             </div>
           </Card>
@@ -514,31 +613,19 @@ export function VisitRequestsPage() {
                   setShowMeetLinkModal(null);
                   setMeetLink('');
                 }}
+                disabled={isConfirming}
               >
                 Cancel
               </Button>
               <Button
                 className="flex-1 bg-[#8C57FF] hover:bg-[#7645E8]"
                 onClick={handleConfirmWithMeetLink}
+                disabled={isConfirming}
               >
-                Confirm Visit
+                {isConfirming ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Confirming...</> : 'Confirm Visit'}
               </Button>
             </div>
           </Card>
-        </div>
-      )}
-
-      {/* Toast Notifications */}
-      {showToast && (
-        <div className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 ${
-          showToast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-        } text-white`}>
-          {showToast.type === 'success' ? (
-            <Check className="h-5 w-5" />
-          ) : (
-            <X className="h-5 w-5" />
-          )}
-          {showToast.message}
         </div>
       )}
     </div>

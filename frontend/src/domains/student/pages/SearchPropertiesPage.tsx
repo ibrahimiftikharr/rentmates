@@ -76,6 +76,28 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
     fetchProperties();
   }, []);
 
+  useEffect(() => {
+    if (properties.length > 0) {
+      loadWishlistStatus();
+    }
+  }, [properties.length]);
+
+  const loadWishlistStatus = async () => {
+    try {
+      const wishlist = await studentService.getWishlist();
+      const wishlistIds = wishlist.map(p => p.id);
+      
+      setProperties(prev =>
+        prev.map(prop => ({
+          ...prop,
+          isWishlisted: wishlistIds.includes(prop.id)
+        }))
+      );
+    } catch (error) {
+      console.error('Failed to load wishlist status:', error);
+    }
+  };
+
   const fetchProperties = async () => {
     try {
       setLoading(true);
@@ -186,21 +208,40 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
     toast.success('All filters cleared');
   };
 
-  const toggleWishlist = (propertyId: string) => {
-    setProperties(prev =>
-      prev.map(prop =>
-        prop.id === propertyId
-          ? { ...prop, isWishlisted: !prop.isWishlisted }
-          : prop
-      )
-    );
+  const toggleWishlist = async (propertyId: string) => {
     const property = properties.find(p => p.id === propertyId);
-    if (property) {
-      toast.success(
-        property.isWishlisted
-          ? 'Removed from wishlist'
-          : 'Added to wishlist'
+    if (!property) return;
+
+    const wasWishlisted = property.isWishlisted;
+
+    try {
+      // Optimistically update UI
+      setProperties(prev =>
+        prev.map(prop =>
+          prop.id === propertyId
+            ? { ...prop, isWishlisted: !prop.isWishlisted }
+            : prop
+        )
       );
+
+      // Call API
+      if (wasWishlisted) {
+        await studentService.removeFromWishlist(propertyId);
+        toast.success('Removed from wishlist');
+      } else {
+        await studentService.addToWishlist(propertyId);
+        toast.success('Added to wishlist');
+      }
+    } catch (error: any) {
+      // Revert on error
+      setProperties(prev =>
+        prev.map(prop =>
+          prop.id === propertyId
+            ? { ...prop, isWishlisted: wasWishlisted }
+            : prop
+        )
+      );
+      toast.error(error.message || 'Failed to update wishlist');
     }
   };
 

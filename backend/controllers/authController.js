@@ -1,5 +1,7 @@
 const { generateOTP, sendOTPEmail, sendPasswordResetEmail } = require('../services/emailService');
 const User = require('../models/userModel');
+const Student = require('../models/studentModel');
+const Landlord = require('../models/landlordModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -91,6 +93,16 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Get student or landlord ID based on role
+    let profileId = null;
+    if (user.role === 'student') {
+      const student = await Student.findOne({ user: user._id });
+      profileId = student ? student._id.toString() : null;
+    } else if (user.role === 'landlord') {
+      const landlord = await Landlord.findOne({ user: user._id });
+      profileId = landlord ? landlord._id.toString() : null;
+    }
+
     // Generate JWT token for authenticated session
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },
@@ -99,7 +111,7 @@ const login = async (req, res) => {
     );
 
     // Return success with token and user data
-    res.json({
+    const response = {
       message: 'Login successful',
       token,
       user: {
@@ -108,7 +120,16 @@ const login = async (req, res) => {
         name: user.name,
         role: user.role
       }
-    });
+    };
+
+    // Add studentId or landlordId based on role
+    if (user.role === 'student' && profileId) {
+      response.user.studentId = profileId;
+    } else if (user.role === 'landlord' && profileId) {
+      response.user.landlordId = profileId;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });

@@ -1,12 +1,15 @@
-import { Bell, Check, X, User, Calendar, DollarSign, FileText, Home, AlertCircle } from 'lucide-react';
+import { Bell, Check, X, User, Calendar, DollarSign, FileText, Home, AlertCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { notificationService, Notification as NotificationType } from '@/shared/services/notificationService';
+import { socketService } from '@/shared/services/socketService';
+import { toast } from 'sonner';
 
 interface Notification {
   id: string;
-  type: 'visit-request' | 'join-request' | 'payment' | 'contract' | 'maintenance' | 'system';
+  type: 'visit-request' | 'join-request' | 'payment' | 'contract' | 'maintenance' | 'system' | 'visit_request' | 'visit_confirmed' | 'visit_rescheduled' | 'visit_rejected';
   title: string;
   message: string;
   timestamp: string;
@@ -70,6 +73,10 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 const getNotificationIcon = (type: string) => {
   switch (type) {
     case 'visit-request':
+    case 'visit_request':
+    case 'visit_confirmed':
+    case 'visit_rescheduled':
+    case 'visit_rejected':
       return <Calendar className="h-5 w-5 text-blue-600" />;
     case 'join-request':
       return <User className="h-5 w-5 text-purple-600" />;
@@ -89,6 +96,10 @@ const getNotificationIcon = (type: string) => {
 const getNotificationColor = (type: string) => {
   switch (type) {
     case 'visit-request':
+    case 'visit_request':
+    case 'visit_confirmed':
+    case 'visit_rescheduled':
+    case 'visit_rejected':
       return 'bg-blue-500/10 border-blue-200';
     case 'join-request':
       return 'bg-purple-500/10 border-purple-200';
@@ -106,17 +117,88 @@ const getNotificationColor = (type: string) => {
 };
 
 export function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const markAsRead = (id: string) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+  useEffect(() => {
+    fetchNotifications();
+
+    // Listen for real-time notifications
+    socketService.on('new_notification', () => {
+      fetchNotifications();
+    });
+
+    return () => {
+      socketService.off('new_notification');
+    };
+  }, []);
+
+  const fetchNotifications = async () => {
+    try {
+      setIsLoading(true);
+      console.log('Fetching notifications...');
+      const response = await notificationService.getNotifications();
+      console.log('Received notifications:', response);
+
+      // Transform backend notifications to match UI structure
+      const transformedNotifications: Notification[] = response.notifications.map((notif: NotificationType) => ({
+        id: notif._id,
+        type: notif.type as any,
+        title: notif.title,
+        message: notif.message,
+        timestamp: getTimeAgo(notif.createdAt),
+        read: notif.read,
+        actionable: notif.type === 'visit_request' || notif.type === 'join-request',
+      }));
+
+      setNotifications(transformedNotifications);
+      setUnreadCount(response.unreadCount);
+    } catch (error: any) {
+      console.error('Error fetching notifications:', error);
+      toast.error(error.message || 'Failed to fetch notifications');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const getTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+    const weeks = Math.floor(days / 7);
+    return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
+  };
+
+  const markAsRead = async (id: string) => {
+    try {
+      await notificationService.markAsRead(id);
+      setNotifications(notifications.map(n => 
+        n.id === id ? { ...n, read: true } : n
+      ));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error: any) {
+      toast.error('Failed to mark notification as read');
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+      toast.success('All notifications marked as read');
+    } catch (error: any) {
+      toast.error('Failed to mark all as read');
+    }
   };
 
   const deleteNotification = (id: string) => {
@@ -147,7 +229,12 @@ export function NotificationsPage() {
 
       {/* Notifications List */}
       <div className="space-y-3">
-        {notifications.length === 0 ? (
+        {isLoading ? (
+          <Card className="p-12 text-center shadow-lg">
+            <Loader2 className="h-12 w-12 text-[#8C57FF] mx-auto mb-4 animate-spin" />
+            <p className="text-muted-foreground">Loading notifications...</p>
+          </Card>
+        ) : notifications.length === 0 ? (
           <Card className="p-12 text-center shadow-lg">
             <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">No notifications yet</p>

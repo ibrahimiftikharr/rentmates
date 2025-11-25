@@ -1,84 +1,102 @@
-import { useState } from 'react';
-import { Heart, MapPin, DollarSign, BedDouble, Bath, Maximize, Eye, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Heart, MapPin, DollarSign, BedDouble, Bath, Maximize, Eye, Trash2, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { toast } from 'sonner';
+import { studentService, Property } from '../services/studentService';
+import { PropertyDetailsPage } from '../components/property-details/PropertyDetailsPage';
 
-interface WishlistProperty {
-  id: string;
-  title: string;
-  address: string;
-  price: number;
-  bedrooms: number;
-  bathrooms: number;
-  area: number;
-  imageUrl: string;
-  landlord: string;
-  availability: string;
+interface WishlistPageProps {
+  onNavigate?: (page: string, propertyId?: string) => void;
 }
 
-export function WishlistPage() {
-  const [wishlistItems, setWishlistItems] = useState<WishlistProperty[]>([
-    {
-      id: '1',
-      title: 'Modern Student Apartment',
-      address: '123 University Ave, Boston, MA',
-      price: 1200,
-      bedrooms: 2,
-      bathrooms: 1,
-      area: 750,
-      imageUrl: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&q=80',
-      landlord: 'John Smith',
-      availability: 'Available Now',
-    },
-    {
-      id: '2',
-      title: 'Cozy Studio Near Campus',
-      address: '456 College St, Boston, MA',
-      price: 950,
-      bedrooms: 1,
-      bathrooms: 1,
-      area: 500,
-      imageUrl: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&q=80',
-      landlord: 'Sarah Johnson',
-      availability: 'Available Dec 1',
-    },
-    {
-      id: '3',
-      title: 'Spacious 3BR House',
-      address: '789 Student Lane, Boston, MA',
-      price: 2100,
-      bedrooms: 3,
-      bathrooms: 2,
-      area: 1200,
-      imageUrl: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80',
-      landlord: 'Michael Brown',
-      availability: 'Available Jan 1',
-    },
-  ]);
+export function WishlistPage({ onNavigate }: WishlistPageProps) {
+  const [wishlistItems, setWishlistItems] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
-  const handleRemove = (id: string) => {
-    setWishlistItems(prev => prev.filter(item => item.id !== id));
-    toast.success('Property removed from wishlist');
+  useEffect(() => {
+    fetchWishlist();
+  }, []);
+
+  const fetchWishlist = async () => {
+    try {
+      setLoading(true);
+      const wishlist = await studentService.getWishlist();
+      setWishlistItems(wishlist);
+    } catch (error: any) {
+      console.error('Failed to load wishlist:', error);
+      toast.error(error.message || 'Failed to load wishlist');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleViewProperty = (property: WishlistProperty) => {
-    toast.info(`Opening details for ${property.title}`);
-    // This would navigate to property details page
+  const handleRemove = async (propertyId: string) => {
+    const previousItems = [...wishlistItems];
+    
+    try {
+      // Optimistically update UI first
+      setWishlistItems(prev => prev.filter(item => item.id !== propertyId));
+      
+      // Call backend to remove
+      await studentService.removeFromWishlist(propertyId);
+      
+      toast.success('Property removed from wishlist');
+      
+      // If viewing details of removed property, close it
+      if (selectedProperty?.id === propertyId) {
+        setSelectedProperty(null);
+      }
+    } catch (error: any) {
+      // Rollback on error
+      setWishlistItems(previousItems);
+      console.error('Failed to remove from wishlist:', error);
+      toast.error(error.message || 'Failed to remove property');
+    }
   };
+
+  const handleViewProperty = (property: Property) => {
+    setSelectedProperty(property);
+  };
+
+  const handleBrowseProperties = () => {
+    if (onNavigate) {
+      onNavigate('search');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="mb-2">My Wishlist</h1>
-          <p className="text-muted-foreground">
-            {wishlistItems.length} {wishlistItems.length === 1 ? 'property' : 'properties'} saved
-          </p>
-        </div>
-      </div>
+    <>
+      {selectedProperty ? (
+        <PropertyDetailsPage
+          property={selectedProperty}
+          onClose={() => {
+            setSelectedProperty(null);
+            fetchWishlist(); // Refresh wishlist in case it was removed from details page
+          }}
+          onNavigate={onNavigate}
+        />
+      ) : (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="mb-2">My Wishlist</h1>
+              <p className="text-muted-foreground">
+                {wishlistItems.length} {wishlistItems.length === 1 ? 'property' : 'properties'} saved
+              </p>
+            </div>
+          </div>
 
       {/* Wishlist Items */}
       {wishlistItems.length === 0 ? (
@@ -88,7 +106,7 @@ export function WishlistPage() {
           <p className="text-muted-foreground mb-6">
             Start adding properties to your wishlist to keep track of your favorites
           </p>
-          <Button className="bg-primary hover:bg-primary/90">
+          <Button className="bg-primary hover:bg-primary/90" onClick={handleBrowseProperties}>
             Browse Properties
           </Button>
         </Card>
@@ -98,7 +116,7 @@ export function WishlistPage() {
             <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
               <div className="relative h-48">
                 <img
-                  src={property.imageUrl}
+                  src={property.mainImage || property.images?.[0] || 'https://via.placeholder.com/400x300'}
                   alt={property.title}
                   className="w-full h-full object-cover"
                 />
@@ -106,7 +124,7 @@ export function WishlistPage() {
                   <Heart className="w-6 h-6 text-red-500 fill-red-500" />
                 </div>
                 <Badge className="absolute top-3 left-3 bg-green-500 text-white">
-                  {property.availability}
+                  {property.availableFrom ? `Available ${new Date(property.availableFrom).toLocaleDateString()}` : 'Available Now'}
                 </Badge>
               </div>
               
@@ -132,15 +150,17 @@ export function WishlistPage() {
                     <Bath className="w-4 h-4" />
                     <span>{property.bathrooms} Bath</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Maximize className="w-4 h-4" />
-                    <span>{property.area} sqft</span>
-                  </div>
+                  {property.area && (
+                    <div className="flex items-center gap-1">
+                      <Maximize className="w-4 h-4" />
+                      <span>{property.area} sqft</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 text-sm mb-3">
                   <span className="text-muted-foreground">Landlord:</span>
-                  <span className="line-clamp-1">{property.landlord}</span>
+                  <span className="line-clamp-1">{property.landlord?.name || 'N/A'}</span>
                 </div>
 
                 <div className="flex gap-2">
@@ -164,6 +184,8 @@ export function WishlistPage() {
           ))}
         </div>
       )}
-    </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { CollapsibleSidebar } from '../components/CollapsibleSidebar';
 import { DashboardHeader } from '../components/DashboardHeader';
@@ -17,6 +17,8 @@ import { VisitRequestsPage } from './VisitRequestsPage';
 import { JoinRequestsPage } from './JoinRequestsPage';
 import { SecurityDepositPage } from './SecurityDepositPage';
 import { Toaster } from '@/shared/ui/sonner';
+import { socketService } from '@/shared/services/socketService';
+import { toast } from 'sonner';
 import '../styles/index.css';
 import '../styles/globals.css';
 
@@ -36,6 +38,44 @@ export function StudentDashboard() {
     navigate(`/student/${page}`);
   };
 
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    socketService.connect();
+
+    // Listen for real-time visit notifications
+    socketService.on('visit_confirmed', (data: any) => {
+      toast.success(`Your visit request has been confirmed!`, {
+        description: data.message,
+      });
+    });
+
+    socketService.on('visit_rescheduled', (data: any) => {
+      toast.info(`Your visit has been rescheduled`, {
+        description: data.message,
+      });
+    });
+
+    socketService.on('visit_rejected', (data: any) => {
+      toast.error(`Your visit request was declined`, {
+        description: data.message,
+      });
+    });
+
+    socketService.on('new_notification', (data: any) => {
+      toast.info(data.title, {
+        description: data.message,
+      });
+    });
+
+    return () => {
+      socketService.off('visit_confirmed');
+      socketService.off('visit_rescheduled');
+      socketService.off('visit_rejected');
+      socketService.off('new_notification');
+      socketService.disconnect();
+    };
+  }, []);
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <CollapsibleSidebar currentPage={currentPage} onNavigate={handleNavigate} />
@@ -54,7 +94,7 @@ export function StudentDashboard() {
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/notifications" element={<NotificationsPage onNavigate={handleNavigate} />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/wishlist" element={<WishlistPage />} />
+            <Route path="/wishlist" element={<WishlistPage onNavigate={handleNavigate} />} />
             <Route path="/visit-requests" element={<VisitRequestsPage />} />
             <Route path="/join-requests" element={<JoinRequestsPage />} />
             <Route path="/security-deposit" element={<SecurityDepositPage />} />

@@ -26,6 +26,7 @@ export interface User {
   email: string;
   name: string;
   role: 'student' | 'landlord';
+  studentId?: string; // For students, this is the Student model ID
 }
 
 export interface LoginCredentials {
