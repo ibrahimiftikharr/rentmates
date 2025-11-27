@@ -12,6 +12,7 @@ const publicStudentRouter = require('./routes/publicStudentRoutes.js');
 const visitRequestRouter = require('./routes/visitRequestRoutes.js');
 const notificationRouter = require('./routes/notificationRoutes.js');
 const messageRouter = require('./routes/messageRoutes.js');
+const walletRouter = require('./routes/walletRoutes.js');
 
 // Load environment variables
 dotenv.config();
@@ -39,7 +40,8 @@ const io = socketIo(server, {
 app.set('io', io);
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://ibrahimiftikhar0864_db_user:iUKh7mLZxiEUYjbQ@rentmates.a4rija4.mongodb.net/?appName=RentMates';
+//const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://ibrahimiftikhar0864_db_user:iUKh7mLZxiEUYjbQ@rentmates.a4rija4.mongodb.net/?appName=RentMates';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/Rentmates'; 
 
 // ========================================
 // SOCKET.IO CONNECTION
@@ -123,6 +125,9 @@ app.use('/api/notifications', notificationRouter);
 
 // Message routes
 app.use('/api/messages', messageRouter);
+
+// Wallet routes (deposits, withdrawals, rent payments)
+app.use('/api/wallet', walletRouter);
 
 // Log all registered routes for debugging
 console.log('\n📋 Registered routes:');

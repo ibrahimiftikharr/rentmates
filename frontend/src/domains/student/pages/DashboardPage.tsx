@@ -1,17 +1,39 @@
-import { Heart, CalendarCheck, UserPlus, Home, Search, Wallet, MessageSquare, FileSignature, Bell } from 'lucide-react';
+import { Heart, CalendarCheck, UserPlus, Home, Search, Wallet, MessageSquare, FileSignature, Bell, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
+import { Button } from '@/shared/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { payRent } from '@/shared/services/walletService';
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
 }
 
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const [showPayRentDialog, setShowPayRentDialog] = useState(false);
+  const [isPayingRent, setIsPayingRent] = useState(false);
+  const [landlordId] = useState('673abc123def456789012345'); // Temporary hardcoded landlord ID for testing
+  
   const stats = [
     { title: 'Wishlisted Properties', value: '3', icon: Heart, color: 'text-red-600', bg: 'bg-red-100' },
     { title: 'Visit Requests', value: '4', icon: CalendarCheck, color: 'text-green-600', bg: 'bg-green-100' },
     { title: 'Join Requests', value: '2', icon: UserPlus, color: 'text-blue-600', bg: 'bg-blue-100' },
     { title: 'Active Contracts', value: '1', icon: FileSignature, color: 'text-purple-600', bg: 'bg-purple-100' },
   ];
+
+  const handlePayRent = async () => {
+    setIsPayingRent(true);
+    try {
+      const result = await payRent(landlordId, 2); // 2 USDT hardcoded rent amount
+      toast.success(result.message || 'Rent paid successfully!');
+      setShowPayRentDialog(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to pay rent');
+    } finally {
+      setIsPayingRent(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -129,14 +151,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 <p className="text-sm text-muted-foreground">Saved properties</p>
               </button>
               <button 
-                onClick={() => onNavigate('visit-requests')}
-                className="p-4 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-all text-left"
+                onClick={() => setShowPayRentDialog(true)}
+                className="p-4 rounded-lg border border-border hover:border-green-500 hover:bg-green-50 transition-all text-left"
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-                  <CalendarCheck className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center mb-3">
+                  <DollarSign className="w-5 h-5 text-green-600" />
                 </div>
-                <p className="font-medium">Visit Requests</p>
-                <p className="text-sm text-muted-foreground">Schedule visits</p>
+                <p className="font-medium">Pay Rent</p>
+                <p className="text-sm text-muted-foreground">2 USDT</p>
               </button>
               <button 
                 onClick={() => onNavigate('wallet')}
@@ -152,6 +174,53 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pay Rent Dialog */}
+      <Dialog open={showPayRentDialog} onOpenChange={setShowPayRentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pay Rent</DialogTitle>
+            <DialogDescription>
+              Pay your monthly rent of 2 USDT to your landlord
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Card className="bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Rent Amount:</span>
+                  <span className="text-lg font-bold">2.00 USDT</span>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Transaction Fee:</span>
+                  <span className="text-sm font-medium">Gas fees apply</span>
+                </div>
+              </div>
+            </Card>
+            <div className="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
+              <p>✓ This will deduct 2 USDT from your RentMates balance</p>
+              <p>✓ Your landlord will receive the payment instantly</p>
+              <p>✓ Transaction is recorded on the blockchain</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowPayRentDialog(false)}
+              disabled={isPayingRent}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handlePayRent}
+              disabled={isPayingRent}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isPayingRent ? 'Processing...' : 'Pay 2 USDT'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 3D Illustration Section */}
       <div className="bg-gradient-to-r from-primary/10 to-blue-500/10 rounded-2xl p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row items-center justify-between gap-4 overflow-hidden">

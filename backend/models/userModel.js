@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema({
   isVerified: { type: Boolean, default: false },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
+  walletAddress: { type: String, default: null },
+  offChainBalance: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 

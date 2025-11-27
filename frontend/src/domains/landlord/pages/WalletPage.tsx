@@ -1,593 +1,375 @@
-import { useState } from 'react';
-import { 
-  Wallet,
-  Info,
-  TrendingUp,
-  Download,
-  Upload,
-  Filter,
-  Calendar as CalendarIcon,
-  Check,
-  Clock,
-  X as XIcon
-} from 'lucide-react';
-import { Card } from '@/shared/ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
-import { Badge } from '@/shared/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shared/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '@/shared/ui/popover';
-import { Calendar } from '@/shared/ui/calendar';
+import { Input } from '@/shared/ui/input';
+import { Alert, AlertDescription } from '@/shared/ui/alert';
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { 
+  connectMetaMask, 
+  connectWalletToBackend, 
+  getWalletBalance, 
+  depositToVault, 
+  recordDeposit,
+  withdrawFromVault,
+  getUSDTBalance,
+  USDT_ADDRESS,
+  VAULT_ADDRESS
+} from '@/shared/services/walletService';
 
-interface Transaction {
-  id: string;
-  date: string;
-  type: 'deposit' | 'rent' | 'refund' | 'withdrawal' | 'termination_fee';
-  amount: string;
-  status: 'completed' | 'pending' | 'failed';
-  description: string;
-}
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: '1',
-    date: '2025-11-08',
-    type: 'rent',
-    amount: '1200',
-    status: 'completed',
-    description: 'Rent received from Michael Chen'
-  },
-  {
-    id: '2',
-    date: '2025-11-07',
-    type: 'deposit',
-    amount: '500',
-    status: 'completed',
-    description: 'Wallet top-up'
-  },
-  {
-    id: '3',
-    date: '2025-11-06',
-    type: 'rent',
-    amount: '1800',
-    status: 'completed',
-    description: 'Rent received from Sarah Johnson'
-  },
-  {
-    id: '4',
-    date: '2025-11-05',
-    type: 'withdrawal',
-    amount: '2000',
-    status: 'pending',
-    description: 'Withdrawal to external wallet'
-  },
-  {
-    id: '5',
-    date: '2025-11-04',
-    type: 'refund',
-    amount: '500',
-    status: 'completed',
-    description: 'Security deposit refund'
-  },
-  {
-    id: '6',
-    date: '2025-11-03',
-    type: 'termination_fee',
-    amount: '2',
-    status: 'completed',
-    description: 'Contract termination gas fee'
-  },
-  {
-    id: '7',
-    date: '2025-11-01',
-    type: 'rent',
-    amount: '850',
-    status: 'completed',
-    description: 'Rent received from Emma Williams'
-  }
-];
 
 export function WalletPage() {
-  const [isConnected, setIsConnected] = useState(true);
-  const [transactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
-  const [toDate, setToDate] = useState<Date | undefined>(undefined);
-  const [showDepositModal, setShowDepositModal] = useState(false);
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [showToast, setShowToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [fromDateOpen, setFromDateOpen] = useState(false);
-  const [toDateOpen, setToDateOpen] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [onChainBalance, setOnChainBalance] = useState<string>('0');
+  const [offChainBalance, setOffChainBalance] = useState<number>(0);
+  const [depositAmount, setDepositAmount] = useState<string>('');
+  const [withdrawAmount, setWithdrawAmount] = useState<string>('');
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const walletAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
-  const network = 'Ethereum Mainnet';
-  const totalBalance = '1250.50';
-  const totalEarnings = '4800.00';
+  useEffect(() => {
+    fetchBalance();
+  }, []);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge className="bg-green-500/10 text-green-700 border-green-200 whitespace-nowrap">✅ Completed</Badge>;
-      case 'pending':
-        return <Badge className="bg-orange-500/10 text-orange-700 border-orange-200 whitespace-nowrap">⏳ Pending</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-500/10 text-red-700 border-red-200 whitespace-nowrap">❌ Failed</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'deposit':
-        return 'Deposit';
-      case 'rent':
-        return 'Rent Received';
-      case 'refund':
-        return 'Refund';
-      case 'withdrawal':
-        return 'Withdrawal';
-      case 'termination_fee':
-        return 'Termination Fee';
-      default:
-        return type;
-    }
-  };
-
-  const filteredTransactions = transactions.filter(tx => {
-    // Filter by type
-    const matchesType = typeFilter === 'all' || tx.type === typeFilter;
-    
-    // Filter by date range
-    let matchesDate = true;
-    if (fromDate || toDate) {
-      const txDate = new Date(tx.date);
-      if (fromDate && toDate) {
-        matchesDate = txDate >= fromDate && txDate <= toDate;
-      } else if (fromDate) {
-        matchesDate = txDate >= fromDate;
-      } else if (toDate) {
-        matchesDate = txDate <= toDate;
+  const fetchBalance = async () => {
+    try {
+      setIsRefreshing(true);
+      const data = await getWalletBalance();
+      
+      if (data.success) {
+        setWalletAddress(data.walletAddress || '');
+        setOnChainBalance(data.onChainBalance || '0');
+        setOffChainBalance(data.offChainBalance || 0);
       }
+    } catch (error: any) {
+      console.error('Error fetching balance:', error);
+    } finally {
+      setIsRefreshing(false);
     }
-    
-    return matchesType && matchesDate;
-  });
-
-  const clearDateRange = () => {
-    setFromDate(undefined);
-    setToDate(undefined);
   };
 
-  const handleConnect = () => {
-    setIsConnected(true);
-    showSuccessToast('✅ Wallet connected successfully!');
+  const handleConnectWallet = async () => {
+    setIsConnecting(true);
+    setMessage(null);
+
+    try {
+      const address = await connectMetaMask();
+      await connectWalletToBackend(address);
+      
+      setWalletAddress(address);
+      toast.success('Wallet connected successfully!');
+      setMessage({ type: 'success', text: 'Wallet connected successfully!' });
+      
+      await fetchBalance();
+      
+      const balance = await getUSDTBalance(address);
+      setOnChainBalance(balance);
+    } catch (error: any) {
+      console.error('Connection error:', error);
+      toast.error(error.message || 'Failed to connect wallet');
+      setMessage({ type: 'error', text: error.message || 'Failed to connect wallet' });
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    showSuccessToast('Wallet disconnected');
+  const handleDeposit = async () => {
+    if (!depositAmount || parseFloat(depositAmount) <= 0) {
+      toast.error('Please enter a valid amount');
+      setMessage({ type: 'error', text: 'Please enter a valid amount' });
+      return;
+    }
+
+    if (!walletAddress) {
+      toast.error('Please connect your wallet first');
+      setMessage({ type: 'error', text: 'Please connect your wallet first' });
+      return;
+    }
+
+    setIsDepositing(true);
+    setMessage(null);
+
+    try {
+      toast.info('Please confirm the transaction in MetaMask...');
+      setMessage({ type: 'success', text: 'Please confirm the transaction in MetaMask...' });
+      
+      const txHash = await depositToVault(depositAmount);
+      await recordDeposit(depositAmount, txHash);
+      
+      toast.success(`Successfully deposited ${depositAmount} USDT!`);
+      setMessage({ type: 'success', text: `Successfully deposited ${depositAmount} USDT!` });
+      setDepositAmount('');
+      
+      await fetchBalance();
+      const balance = await getUSDTBalance(walletAddress);
+      setOnChainBalance(balance);
+    } catch (error: any) {
+      console.error('Deposit error:', error);
+      toast.error(error.message || 'Deposit failed');
+      setMessage({ type: 'error', text: error.message || 'Deposit failed' });
+    } finally {
+      setIsDepositing(false);
+    }
   };
 
-  const handleDeposit = () => {
-    setShowDepositModal(false);
-    showSuccessToast('✅ Deposit initiated successfully!');
+  const handleWithdraw = async () => {
+    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      toast.error('Please enter a valid amount');
+      setMessage({ type: 'error', text: 'Please enter a valid amount' });
+      return;
+    }
+
+    if (!walletAddress) {
+      toast.error('Please connect your wallet first');
+      setMessage({ type: 'error', text: 'Please connect your wallet first' });
+      return;
+    }
+
+    if (parseFloat(withdrawAmount) > offChainBalance) {
+      toast.error('Insufficient balance');
+      setMessage({ type: 'error', text: 'Insufficient balance' });
+      return;
+    }
+
+    setIsWithdrawing(true);
+    setMessage(null);
+
+    try {
+      toast.info('Processing withdrawal...');
+      setMessage({ type: 'success', text: 'Processing withdrawal...' });
+      
+      await withdrawFromVault(withdrawAmount);
+      
+      toast.success(`Successfully withdrew ${withdrawAmount} USDT!`);
+      setMessage({ type: 'success', text: `Successfully withdrew ${withdrawAmount} USDT!` });
+      setWithdrawAmount('');
+      
+      await fetchBalance();
+      const balance = await getUSDTBalance(walletAddress);
+      setOnChainBalance(balance);
+    } catch (error: any) {
+      console.error('Withdraw error:', error);
+      toast.error(error.message || 'Withdrawal failed');
+      setMessage({ type: 'error', text: error.message || 'Withdrawal failed' });
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
-  const handleWithdraw = () => {
-    setShowWithdrawModal(false);
-    showSuccessToast('✅ Withdrawal request submitted!');
+  const handleRefresh = async () => {
+    await fetchBalance();
+    if (walletAddress) {
+      const balance = await getUSDTBalance(walletAddress);
+      setOnChainBalance(balance);
+    }
+    toast.success('Balances refreshed');
   };
 
-  const showSuccessToast = (message: string) => {
-    setShowToast({ message, type: 'success' });
-    setTimeout(() => setShowToast(null), 3000);
+  const shortenAddress = (address: string) => {
+    if (!address) return '';
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
   return (
-    <div className="p-4 md:p-8">
-      {/* Header */}
-      <div className="mb-6 md:mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-[#4A4A68]">💼 Wallet Management</h1>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button className="focus:outline-none">
-                  <Info className="h-5 w-5 text-[#8C57FF] cursor-help" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-sm">All transactions occur securely through blockchain smart contracts.</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <div>
+          <h1 className="mb-2">Wallet Management</h1>
+          <p className="text-muted-foreground text-sm md:text-base">
+            Manage your USDT deposits and withdrawals
+          </p>
         </div>
-        <p className="text-muted-foreground text-sm md:text-base">Connect your wallet, manage funds, and track on-chain earnings.</p>
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
-      {/* Wallet Connection Panel */}
-      <Card className="p-4 md:p-6 mb-4 md:mb-6 shadow-lg">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-3 flex-1">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 md:h-6 md:w-6 text-[#8C57FF]" />
-                <h3 className="text-[#4A4A68]">Wallet Connection</h3>
-              </div>
-              {isConnected ? (
-                <Badge className="bg-green-500/10 text-green-700 border-green-200 w-fit">✅ Wallet Connected</Badge>
-              ) : (
-                <Badge className="bg-gray-500/10 text-gray-700 border-gray-200 w-fit">⚠️ Wallet Not Connected</Badge>
-              )}
-            </div>
-            
-            {isConnected && (
-              <div className="space-y-2 sm:ml-7 md:ml-9">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                  <p className="text-sm text-muted-foreground">Address:</p>
-                  <code className="text-xs sm:text-sm text-[#4A4A68] bg-[#F4F5FA] px-2 py-1 rounded">
-                    {walletAddress.slice(0, 6)}...{walletAddress.slice(-6)}
-                  </code>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
-                  <p className="text-sm text-muted-foreground">Network:</p>
-                  <p className="text-sm text-[#4A4A68]">{network}</p>
-                </div>
-              </div>
-            )}
-          </div>
+      {message && (
+        <Alert variant={message.type === 'error' ? 'destructive' : 'default'}>
+          {message.type === 'success' ? (
+            <CheckCircle className="h-4 w-4" />
+          ) : (
+            <XCircle className="h-4 w-4" />
+          )}
+          <AlertDescription>{message.text}</AlertDescription>
+        </Alert>
+      )}
 
-          <div className="flex gap-3">
-            {!isConnected ? (
-              <Button
-                onClick={handleConnect}
-                className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-              >
-                🟩 Connect Wallet
-              </Button>
-            ) : (
-              <Button
-                onClick={handleDisconnect}
-                variant="outline"
-                className="text-red-600 hover:text-red-700 hover:border-red-300 w-full sm:w-auto"
-              >
-                🔴 Disconnect Wallet
-              </Button>
-            )}
-          </div>
-        </div>
-        {!isConnected && (
-          <p className="text-xs text-muted-foreground mt-4 sm:ml-7 md:ml-9">
-            Connect MetaMask to enable all wallet features.
-          </p>
-        )}
+      {/* Connect Wallet Card */}
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="w-5 h-5 text-primary" />
+            Wallet Connection
+          </CardTitle>
+          <CardDescription>
+            Connect your MetaMask wallet to manage funds
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!walletAddress ? (
+            <Button 
+              onClick={handleConnectWallet} 
+              disabled={isConnecting}
+              className="w-full"
+            >
+              {isConnecting ? 'Connecting...' : 'Connect MetaMask Wallet'}
+            </Button>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <span className="text-sm font-medium">Connected Wallet</span>
+                <span className="text-sm font-mono">{shortenAddress(walletAddress)}</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Full address: {walletAddress}
+              </div>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       {/* Balance Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-        <Card className="p-4 md:p-6 shadow-lg border-l-4 border-l-[#8C57FF]">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <Wallet className="h-4 w-4 md:h-5 md:w-5 text-[#8C57FF]" />
-                <p className="text-xs md:text-sm text-muted-foreground">Total Wallet Balance</p>
-              </div>
-              <h2 className="text-[#4A4A68] mb-1">{totalBalance} USDT</h2>
-              <p className="text-xs text-muted-foreground">Includes deposits and earned rent</p>
-            </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-[#8C57FF]/10 rounded-full flex items-center justify-center flex-shrink-0">
-              <Wallet className="h-5 w-5 md:h-6 md:w-6 text-[#8C57FF]" />
-            </div>
-          </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-lg">Wallet Balance</CardTitle>
+            <CardDescription>USDT in your MetaMask wallet</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{parseFloat(onChainBalance).toFixed(2)} USDT</div>
+            <div className="text-xs text-muted-foreground mt-1">Available for deposit</div>
+          </CardContent>
         </Card>
 
-        <Card className="p-4 md:p-6 shadow-lg border-l-4 border-l-green-500">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
-                <p className="text-xs md:text-sm text-muted-foreground">Total Earnings from Rentals</p>
-              </div>
-              <h2 className="text-[#4A4A68] mb-1">{totalEarnings} USDT</h2>
-              <p className="text-xs text-muted-foreground">Earnings from tenant rent payments</p>
-            </div>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-green-500/10 rounded-full flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
-            </div>
-          </div>
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-lg">Available Balance</CardTitle>
+            <CardDescription>Your balance in RentMates</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{offChainBalance.toFixed(2)} USDT</div>
+            <div className="text-xs text-muted-foreground mt-1">Available for rent payments</div>
+          </CardContent>
         </Card>
       </div>
 
-      {/* Deposit & Withdraw Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-        <Card className="p-4 md:p-6 shadow-md hover:shadow-lg transition-shadow cursor-pointer group">
-          <div className="flex items-start gap-3 md:gap-4">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/20 transition-colors">
-              <Upload className="h-5 w-5 md:h-6 md:w-6 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-[#4A4A68] mb-1 text-sm md:text-base">💰 Add USDT to your wallet</h3>
-              <p className="text-xs md:text-sm text-muted-foreground mb-3">Transfers USDT from your connected wallet into the platform wallet.</p>
-              <Button 
-                onClick={() => setShowDepositModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 w-full text-sm"
-                disabled={!isConnected}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Deposit Now
-              </Button>
-            </div>
-          </div>
-        </Card>
+      {/* Manage Funds Card */}
+      {walletAddress && (
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-primary" />
+              USDT Deposits & Withdrawals
+            </CardTitle>
+            <CardDescription>
+              Manage your USDT balance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Deposit Section */}
+              <div className="space-y-4 p-4 rounded-lg border border-border bg-card">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                    <ArrowDownToLine className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Deposit</h3>
+                    <p className="text-sm text-muted-foreground">Add USDT to your wallet</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Input
+                    type="number"
+                    placeholder="Amount (USDT)"
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    disabled={!walletAddress || isDepositing}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <Button 
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  onClick={handleDeposit}
+                  disabled={!walletAddress || isDepositing || !depositAmount}
+                >
+                  <ArrowDownToLine className="w-4 h-4 mr-2" />
+                  {isDepositing ? 'Depositing...' : 'Deposit Now'}
+                </Button>
+                <div className="text-xs text-muted-foreground">
+                  Vault Contract: {shortenAddress(VAULT_ADDRESS)}
+                </div>
+              </div>
 
-        <Card className="p-4 md:p-6 shadow-md hover:shadow-lg transition-shadow cursor-pointer group">
-          <div className="flex items-start gap-3 md:gap-4">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-green-500/20 transition-colors">
-              <Download className="h-5 w-5 md:h-6 md:w-6 text-green-600" />
+              {/* Withdraw Section */}
+              <div className="space-y-4 p-4 rounded-lg border border-border bg-card">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                    <ArrowUpFromLine className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Withdraw</h3>
+                    <p className="text-sm text-muted-foreground">Withdraw USDT from your wallet</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Input
+                    type="number"
+                    placeholder="Amount (USDT)"
+                    value={withdrawAmount}
+                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                    disabled={!walletAddress || isWithdrawing}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <Button 
+                  className="w-full bg-orange-600 hover:bg-orange-700"
+                  onClick={handleWithdraw}
+                  disabled={!walletAddress || isWithdrawing || !withdrawAmount}
+                >
+                  <ArrowUpFromLine className="w-4 h-4 mr-2" />
+                  {isWithdrawing ? 'Withdrawing...' : 'Withdraw Now'}
+                </Button>
+                <div className="text-xs text-muted-foreground">
+                  Available: {offChainBalance.toFixed(2)} USDT
+                </div>
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className="text-[#4A4A68] mb-1 text-sm md:text-base">💸 Withdraw USDT from your wallet</h3>
-              <p className="text-xs md:text-sm text-muted-foreground mb-3">Send your rental earnings to your external wallet.</p>
-              <Button 
-                onClick={() => setShowWithdrawModal(true)}
-                className="bg-green-600 hover:bg-green-700 w-full text-sm"
-                disabled={!isConnected}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Withdraw Now
-              </Button>
-            </div>
-          </div>
+          </CardContent>
         </Card>
-      </div>
+      )}
 
-      {/* Transaction History */}
+      {/* Contract Info */}
       <Card className="shadow-lg">
-        <div className="p-4 md:p-6 border-b">
-          <h3 className="text-[#4A4A68] mb-1">Transaction History</h3>
-          <p className="text-xs md:text-sm text-muted-foreground">View all deposits, withdrawals, and rental income transactions.</p>
-        </div>
-
-        {/* Filters */}
-        <div className="p-3 md:p-4 border-b bg-[#F4F5FA]/50 flex flex-col sm:flex-row flex-wrap gap-2 md:gap-4">
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="w-full sm:w-[180px] md:w-[200px]">
-              <div className="flex items-center">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filter by Type" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Transactions</SelectItem>
-              <SelectItem value="deposit">Deposit</SelectItem>
-              <SelectItem value="rent">Rent Received</SelectItem>
-              <SelectItem value="refund">Refund</SelectItem>
-              <SelectItem value="withdrawal">Withdrawal</SelectItem>
-              <SelectItem value="termination_fee">Termination Fee</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <div className="relative w-full sm:w-[180px] md:w-[200px]">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start text-left"
-              onClick={() => setFromDateOpen(!fromDateOpen)}
-            >
-              <CalendarIcon className="h-4 w-4 mr-2" />
-              <span className="truncate">
-                {fromDate ? fromDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'From Date'}
-              </span>
-            </Button>
-            {fromDateOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50">
-                <Calendar
-                  mode="single"
-                  selected={fromDate}
-                  onSelect={(date) => {
-                    setFromDate(date);
-                    setFromDateOpen(false);
-                  }}
-                  initialFocus
-                />
-              </div>
-            )}
+        <CardHeader>
+          <CardTitle className="text-sm">Contract Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">USDT Token:</span>
+            <span className="font-mono">{shortenAddress(USDT_ADDRESS)}</span>
           </div>
-
-          <div className="relative w-full sm:w-[180px] md:w-[200px]">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start text-left"
-              onClick={() => setToDateOpen(!toDateOpen)}
-            >
-              <CalendarIcon className="h-4 w-4 mr-2" />
-              <span className="truncate">
-                {toDate ? toDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'To Date'}
-              </span>
-            </Button>
-            {toDateOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50">
-                <Calendar
-                  mode="single"
-                  selected={toDate}
-                  onSelect={(date) => {
-                    setToDate(date);
-                    setToDateOpen(false);
-                  }}
-                  initialFocus
-                />
-              </div>
-            )}
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Vault Contract:</span>
+            <span className="font-mono">{shortenAddress(VAULT_ADDRESS)}</span>
           </div>
-
-          {(fromDate || toDate) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearDateRange}
-              className="text-[#8C57FF] hover:text-[#7645E8] w-full sm:w-auto"
-            >
-              <XIcon className="h-4 w-4 mr-1" />
-              Clear Dates
-            </Button>
-          )}
-        </div>
-
-        {/* Table with Horizontal Scroll */}
-        <div className="overflow-x-auto">
-          <div className="inline-block min-w-full align-middle">
-            <table className="min-w-full w-full">
-              <thead>
-                <tr className="border-b bg-[#F4F5FA]">
-                  <th className="text-left py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Date</th>
-                  <th className="text-left py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Type</th>
-                  <th className="text-left py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] min-w-[200px]">Description</th>
-                  <th className="text-right py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Amount</th>
-                  <th className="text-center py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
-                      No transactions found
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTransactions.map((transaction) => (
-                    <tr key={transaction.id} className="border-b hover:bg-[#F4F5FA]/30 transition-colors">
-                      <td className="py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#4A4A68] whitespace-nowrap">
-                        {new Date(transaction.date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </td>
-                      <td className="py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#4A4A68] whitespace-nowrap">
-                        {getTypeLabel(transaction.type)}
-                      </td>
-                      <td className="py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-muted-foreground">
-                        {transaction.description}
-                      </td>
-                      <td className={`py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-right whitespace-nowrap ${
-                        transaction.type === 'deposit' || transaction.type === 'rent' 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }`}>
-                        {transaction.type === 'deposit' || transaction.type === 'rent' ? '+' : '-'}
-                        ${transaction.amount}
-                      </td>
-                      <td className="py-3 md:py-4 px-3 md:px-6 text-center">
-                        {getStatusBadge(transaction.status)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Network:</span>
+            <span>Polygon Amoy Testnet</span>
           </div>
-        </div>
+        </CardContent>
       </Card>
-
-      {/* Deposit Modal */}
-      {showDepositModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="p-4 md:p-6 max-w-md w-full">
-            <div className="flex items-center gap-2 mb-4">
-              <Upload className="h-5 w-5 text-blue-600" />
-              <h3 className="text-[#4A4A68]">Deposit USDT</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Enter the amount of USDT you want to deposit from your connected wallet.
-            </p>
-            <div className="mb-6">
-              <label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</label>
-              <input 
-                type="number" 
-                placeholder="0.00" 
-                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8C57FF]"
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowDepositModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-                onClick={handleDeposit}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                Confirm Deposit
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Withdraw Modal */}
-      {showWithdrawModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="p-4 md:p-6 max-w-md w-full">
-            <div className="flex items-center gap-2 mb-4">
-              <Download className="h-5 w-5 text-green-600" />
-              <h3 className="text-[#4A4A68]">Withdraw USDT</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              Enter the amount of USDT you want to withdraw to your external wallet.
-            </p>
-            <div className="mb-4">
-              <label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</label>
-              <input 
-                type="number" 
-                placeholder="0.00" 
-                className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8C57FF]"
-              />
-            </div>
-            <div className="mb-6 p-3 bg-yellow-500/10 border border-yellow-200 rounded-lg">
-              <p className="text-xs text-[#4A4A68]">
-                Available balance: <strong>{totalBalance} USDT</strong>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A small gas fee will be applied to this transaction.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowWithdrawModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 bg-green-600 hover:bg-green-700"
-                onClick={handleWithdraw}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                Confirm Withdrawal
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Toast Notifications */}
-      {showToast && (
-        <div className={`fixed bottom-4 right-4 px-4 md:px-6 py-2 md:py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 ${
-          showToast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-        } text-white text-sm md:text-base max-w-[90vw] md:max-w-none`}>
-          {showToast.type === 'success' ? (
-            <Check className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
-          ) : (
-            <XIcon className="h-4 w-4 md:h-5 md:w-5 flex-shrink-0" />
-          )}
-          <span className="truncate">{showToast.message}</span>
-        </div>
-      )}
     </div>
   );
 }
