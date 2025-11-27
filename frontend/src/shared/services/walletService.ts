@@ -211,47 +211,79 @@ export const depositToVault = async (amount: string): Promise<string> => {
  * Get auth token from localStorage
  */
 const getAuthToken = (): string => {
-  return localStorage.getItem('token') || '';
+  const token = localStorage.getItem('token');
+  if (!token) {
+    console.warn('No auth token found in localStorage');
+  }
+  return token || '';
 };
 
 /**
  * Connect wallet to backend (save wallet address)
  */
 export const connectWalletToBackend = async (walletAddress: string) => {
-  const response = await fetch(`${API_URL}/wallet/connect`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getAuthToken()}`
-    },
-    body: JSON.stringify({ walletAddress })
-  });
+  try {
+    console.log('Connecting wallet to backend:', walletAddress);
+    const token = getAuthToken();
+    console.log('Auth token present:', !!token);
+    
+    const response = await fetch(`${API_URL}/wallet/connect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ walletAddress })
+    });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to connect wallet to backend');
+    console.log('Backend response status:', response.status);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('Backend error:', error);
+      throw new Error(error.error || 'Failed to connect wallet to backend');
+    }
+
+    const result = await response.json();
+    console.log('Wallet connected successfully:', result);
+    return result;
+  } catch (error: any) {
+    console.error('Error in connectWalletToBackend:', error);
+    throw error;
   }
-
-  return await response.json();
 };
 
 /**
  * Get wallet balance from backend
  */
 export const getWalletBalance = async () => {
-  const response = await fetch(`${API_URL}/wallet/balance`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${getAuthToken()}`
+  try {
+    console.log('Fetching wallet balance from backend');
+    const token = getAuthToken();
+    console.log('Auth token present:', !!token);
+    
+    const response = await fetch(`${API_URL}/wallet/balance`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    console.log('Balance response status:', response.status);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('Balance fetch error:', error);
+      throw new Error(error.error || 'Failed to fetch balance');
     }
-  });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to fetch balance');
+    const result = await response.json();
+    console.log('Balance fetched successfully:', result);
+    return result;
+  } catch (error: any) {
+    console.error('Error in getWalletBalance:', error);
+    throw error;
   }
-
-  return await response.json();
 };
 
 /**

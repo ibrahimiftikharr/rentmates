@@ -1,27 +1,17 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../shared/ui/card';
-import { Button } from '../../../shared/ui/button';
-import { Input } from '../../../shared/ui/input';
-import { Label } from '../../../shared/ui/label';
-import { Switch } from '../../../shared/ui/switch';
-import { Badge } from '../../../shared/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../../../shared/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui/popover';
-import { Calendar } from '../../../shared/ui/calendar';
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
+import { Badge } from '../ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
 import { Wallet, ArrowDownToLine, ArrowUpFromLine, Clock, CheckCircle, XCircle, CalendarIcon, Filter } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from 'sonner@2.0.3';
 import { format } from 'date-fns';
-import {
-  connectMetaMask,
-  getUSDTBalance,
-  depositToVault,
-  recordDeposit,
-  getWalletBalance,
-  connectWalletToBackend,
-  withdrawFromVault,
-  payRent
-} from '../../../shared/services/walletService';
 
 type TransactionType = 'Deposit' | 'Withdraw' | 'Loan Repayment';
 type TransactionStatus = 'Completed' | 'Pending' | 'Failed';
@@ -38,14 +28,12 @@ export function WalletPage() {
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
   const [network, setNetwork] = useState('');
-  const [balance, setBalance] = useState(0);
-  const [onChainBalance, setOnChainBalance] = useState('0');
+  const [balance, setBalance] = useState(1250.50);
   const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [autoRepayment, setAutoRepayment] = useState(false);
   const [openPayRentDialog, setOpenPayRentDialog] = useState(false);
   const [isPayingRent, setIsPayingRent] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   // Filter states
   const [filterType, setFilterType] = useState<string>('all');
@@ -54,7 +42,6 @@ export function WalletPage() {
   const [fromDateOpen, setFromDateOpen] = useState(false);
   const [toDateOpen, setToDateOpen] = useState(false);
 
-  // Mock transaction data (kept as-is)
   const [transactions] = useState<Transaction[]>([
     { id: '1', date: 'Nov 5, 2025', type: 'Deposit', amount: 500, status: 'Completed' },
     { id: '2', date: 'Nov 4, 2025', type: 'Loan Repayment', amount: 150, status: 'Completed' },
@@ -67,94 +54,31 @@ export function WalletPage() {
 
   const nextRepayment = {
     date: 'Nov 15, 2025',
-    amount: 2, // 2 USDT as per user requirement
+    amount: 150,
     daysUntil: 9,
   };
 
-  // Load wallet state on mount
-  useEffect(() => {
-    const loadWalletState = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const balanceData = await getWalletBalance();
-        if (balanceData.walletAddress) {
-          setIsConnected(true);
-          setWalletAddress(balanceData.walletAddress);
-          setBalance(balanceData.offChainBalance);
-          setOnChainBalance(balanceData.onChainBalance);
-          setNetwork('Polygon Amoy Testnet');
-        }
-      } catch (error) {
-        console.error('Error loading wallet state:', error);
-      }
-    };
-
-    loadWalletState();
-  }, []);
-
-  const handleConnectWallet = async () => {
-    setIsProcessing(true);
-    try {
-      // Connect MetaMask
-      const address = await connectMetaMask();
-      
-      // Connect to backend
-      await connectWalletToBackend(address);
-      
-      // Get balances
-      const balanceData = await getWalletBalance();
-      const usdtBalance = await getUSDTBalance(address);
-      
+  const handleConnectWallet = () => {
+    // Mock wallet connection
+    setTimeout(() => {
       setIsConnected(true);
-      setWalletAddress(address);
-      setBalance(balanceData.offChainBalance);
-      setOnChainBalance(usdtBalance);
-      setNetwork('Polygon Amoy Testnet');
-      
+      setWalletAddress('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb');
+      setNetwork('Ethereum Mainnet');
       toast.success('MetaMask wallet connected successfully!');
-    } catch (error: any) {
-      console.error('Wallet connection error:', error);
-      toast.error(error.message || 'Failed to connect wallet');
-    } finally {
-      setIsProcessing(false);
-    }
+    }, 1000);
   };
 
-  const handleDeposit = async () => {
+  const handleDeposit = () => {
     if (!depositAmount || parseFloat(depositAmount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
-
-    setIsProcessing(true);
-    try {
-      // Deposit to vault
-      const txHash = await depositToVault(depositAmount);
-      
-      // Record deposit in backend
-      await recordDeposit(depositAmount, txHash);
-      
-      // Refresh balance
-      const balanceData = await getWalletBalance();
-      setBalance(balanceData.offChainBalance);
-      
-      // Refresh on-chain balance
-      const usdtBalance = await getUSDTBalance(walletAddress);
-      setOnChainBalance(usdtBalance);
-      
-      toast.success(`Deposited ${depositAmount} USDT successfully!`);
-      setDepositAmount('');
-    } catch (error: any) {
-      console.error('Deposit error:', error);
-      toast.error(error.message || 'Deposit failed');
-    } finally {
-      setIsProcessing(false);
-    }
+    setBalance(prev => prev + parseFloat(depositAmount));
+    toast.success(`Deposited ${depositAmount} USDT successfully!`);
+    setDepositAmount('');
   };
 
-  const handleWithdraw = async () => {
+  const handleWithdraw = () => {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
@@ -163,28 +87,9 @@ export function WalletPage() {
       toast.error('Insufficient balance');
       return;
     }
-
-    setIsProcessing(true);
-    try {
-      // Withdraw from vault
-      await withdrawFromVault(withdrawAmount);
-      
-      // Refresh balance
-      const balanceData = await getWalletBalance();
-      setBalance(balanceData.offChainBalance);
-      
-      // Refresh on-chain balance
-      const usdtBalance = await getUSDTBalance(walletAddress);
-      setOnChainBalance(usdtBalance);
-      
-      toast.success(`Withdrawn ${withdrawAmount} USDT successfully!`);
-      setWithdrawAmount('');
-    } catch (error: any) {
-      console.error('Withdraw error:', error);
-      toast.error(error.message || 'Withdrawal failed');
-    } finally {
-      setIsProcessing(false);
-    }
+    setBalance(prev => prev - parseFloat(withdrawAmount));
+    toast.success(`Withdrawn ${withdrawAmount} USDT successfully!`);
+    setWithdrawAmount('');
   };
 
   const getStatusIcon = (status: TransactionStatus) => {
@@ -209,31 +114,22 @@ export function WalletPage() {
     }
   };
 
-  const handlePayRent = async () => {
+  const handlePayRent = () => {
     setIsPayingRent(true);
     
-    try {
+    setTimeout(() => {
       if (balance < nextRepayment.amount) {
-        toast.error('Insufficient balance to pay rent');
+        setIsPayingRent(false);
         setOpenPayRentDialog(false);
+        toast.error('Insufficient balance to pay rent');
         return;
       }
 
-      // Pay rent (hardcoded 2 USDT, landlordId is placeholder)
-      await payRent('placeholder-landlord-id', nextRepayment.amount);
-      
-      // Refresh balance
-      const balanceData = await getWalletBalance();
-      setBalance(balanceData.offChainBalance);
-      
+      setBalance(prev => prev - nextRepayment.amount);
+      setIsPayingRent(false);
       setOpenPayRentDialog(false);
       toast.success(`Rent of $${nextRepayment.amount} USDT paid successfully!`);
-    } catch (error: any) {
-      console.error('Pay rent error:', error);
-      toast.error(error.message || 'Failed to pay rent');
-    } finally {
-      setIsPayingRent(false);
-    }
+    }, 1500);
   };
 
   // Filter transactions based on type and date range
@@ -296,10 +192,9 @@ export function WalletPage() {
               <Button 
                 className="bg-primary hover:bg-primary/90"
                 onClick={handleConnectWallet}
-                disabled={isProcessing}
               >
                 <Wallet className="w-5 h-5" />
-                <span className="ml-2">{isProcessing ? 'Connecting...' : 'Connect Wallet'}</span>
+                <span className="ml-2">Connect Wallet</span>
               </Button>
               <p className="text-sm text-muted-foreground text-center max-w-md">
                 By connecting your wallet, you agree to our Terms of Service and Privacy Policy
@@ -328,21 +223,6 @@ export function WalletPage() {
                   </div>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIsConnected(false);
-                  setWalletAddress('');
-                  setBalance(0);
-                  setOnChainBalance('0');
-                  setNetwork('');
-                  toast.success('Wallet disconnected');
-                }}
-                className="mt-3 text-red-600 hover:text-red-700 hover:border-red-300"
-              >
-                🔴 Disconnect Wallet
-              </Button>
             </div>
           )}
         </CardContent>
@@ -368,9 +248,6 @@ export function WalletPage() {
                 <span className="text-5xl font-semibold text-primary">{balance.toFixed(2)}</span>
                 <span className="text-2xl text-muted-foreground">USDT</span>
               </div>
-              <p className="text-sm text-muted-foreground mt-3">
-                On-chain (MetaMask): {parseFloat(onChainBalance).toFixed(2)} USDT
-              </p>
             </div>
 
             {/* Deposit and Withdraw Sections */}
@@ -394,16 +271,14 @@ export function WalletPage() {
                     placeholder="0.00"
                     value={depositAmount}
                     onChange={(e) => setDepositAmount(e.target.value)}
-                    disabled={isProcessing}
                   />
                 </div>
                 <Button 
                   className="w-full bg-green-600 hover:bg-green-700"
                   onClick={handleDeposit}
-                  disabled={isProcessing}
                 >
                   <ArrowDownToLine className="w-4 h-4 mr-2" />
-                  {isProcessing ? 'Processing...' : 'Deposit Now'}
+                  Deposit Now
                 </Button>
               </div>
 
@@ -426,16 +301,14 @@ export function WalletPage() {
                     placeholder="0.00"
                     value={withdrawAmount}
                     onChange={(e) => setWithdrawAmount(e.target.value)}
-                    disabled={isProcessing}
                   />
                 </div>
                 <Button 
                   className="w-full bg-orange-600 hover:bg-orange-700"
                   onClick={handleWithdraw}
-                  disabled={isProcessing}
                 >
                   <ArrowUpFromLine className="w-4 h-4 mr-2" />
-                  {isProcessing ? 'Processing...' : 'Withdraw Now'}
+                  Withdraw Now
                 </Button>
               </div>
             </div>

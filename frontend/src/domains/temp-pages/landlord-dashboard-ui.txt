@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Wallet,
   Info,
@@ -11,25 +11,13 @@ import {
   Clock,
   X as XIcon
 } from 'lucide-react';
-import { Card } from '../../../shared/ui/card';
-import { Button } from '../../../shared/ui/button';
-import { Badge } from '../../../shared/ui/badge';
-import { Input } from '../../../shared/ui/input';
-import { Label } from '../../../shared/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../shared/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui/popover';
-import { Calendar } from '../../../shared/ui/calendar';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../shared/ui/dialog';
-import {
-  connectMetaMask,
-  getUSDTBalance,
-  depositToVault,
-  recordDeposit,
-  getWalletBalance,
-  connectWalletToBackend,
-  withdrawFromVault
-} from '../../../shared/services/walletService';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
 
 interface Transaction {
   id: string;
@@ -40,7 +28,6 @@ interface Transaction {
   description: string;
 }
 
-// Mock transaction data (kept as-is)
 const MOCK_TRANSACTIONS: Transaction[] = [
   {
     id: '1',
@@ -101,47 +88,21 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 ];
 
 export function WalletPage() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
+  const [isConnected, setIsConnected] = useState(true);
   const [transactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
   const [typeFilter, setTypeFilter] = useState('all');
   const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [showToast, setShowToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [fromDateOpen, setFromDateOpen] = useState(false);
   const [toDateOpen, setToDateOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [balance, setBalance] = useState('0');
-  const [onChainBalance, setOnChainBalance] = useState('0');
 
-  const network = 'Polygon Amoy Testnet';
-  const totalEarnings = '4800.00'; // Mock data
-
-  // Load wallet state on mount
-  useEffect(() => {
-    const loadWalletState = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
-        const balanceData = await getWalletBalance();
-        if (balanceData.walletAddress) {
-          setIsConnected(true);
-          setWalletAddress(balanceData.walletAddress);
-          setBalance(balanceData.offChainBalance.toString());
-          setOnChainBalance(balanceData.onChainBalance);
-        }
-      } catch (error) {
-        console.error('Error loading wallet state:', error);
-      }
-    };
-
-    loadWalletState();
-  }, []);
+  const walletAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
+  const network = 'Ethereum Mainnet';
+  const totalBalance = '1250.50';
+  const totalEarnings = '4800.00';
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -198,107 +159,28 @@ export function WalletPage() {
     setToDate(undefined);
   };
 
-  const handleConnect = async () => {
-    setIsProcessing(true);
-    try {
-      // Connect MetaMask
-      const address = await connectMetaMask();
-      
-      // Connect to backend
-      await connectWalletToBackend(address);
-      
-      // Get balances
-      const balanceData = await getWalletBalance();
-      const usdtBalance = await getUSDTBalance(address);
-      
-      setIsConnected(true);
-      setWalletAddress(address);
-      setBalance(balanceData.offChainBalance.toString());
-      setOnChainBalance(usdtBalance);
-      
-      showSuccessToast('✅ Wallet connected successfully!');
-    } catch (error: any) {
-      console.error('Wallet connection error:', error);
-      showErrorToast(error.message || 'Failed to connect wallet');
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleConnect = () => {
+    setIsConnected(true);
+    showSuccessToast('✅ Wallet connected successfully!');
   };
 
   const handleDisconnect = () => {
     setIsConnected(false);
-    setWalletAddress('');
-    setBalance('0');
     showSuccessToast('Wallet disconnected');
   };
 
-  const handleDeposit = async () => {
-    if (!depositAmount || parseFloat(depositAmount) <= 0) {
-      showErrorToast('Please enter a valid amount');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      // Deposit to vault
-      const txHash = await depositToVault(depositAmount);
-      
-      // Record deposit in backend
-      await recordDeposit(depositAmount, txHash);
-      
-      // Refresh balance
-      const balanceData = await getWalletBalance();
-      setBalance(balanceData.offChainBalance.toString());
-      
-      setShowDepositModal(false);
-      setDepositAmount('');
-      showSuccessToast('✅ Deposit initiated successfully!');
-    } catch (error: any) {
-      console.error('Deposit error:', error);
-      showErrorToast(error.message || 'Deposit failed');
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleDeposit = () => {
+    setShowDepositModal(false);
+    showSuccessToast('✅ Deposit initiated successfully!');
   };
 
-  const handleWithdraw = async () => {
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
-      showErrorToast('Please enter a valid amount');
-      return;
-    }
-
-    if (parseFloat(withdrawAmount) > parseFloat(balance)) {
-      showErrorToast('Insufficient balance');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      // Withdraw from vault
-      await withdrawFromVault(withdrawAmount);
-      
-      // Refresh balance
-      const balanceData = await getWalletBalance();
-      setBalance(balanceData.offChainBalance.toString());
-      
-      setShowWithdrawModal(false);
-      setWithdrawAmount('');
-      showSuccessToast('✅ Withdrawal request submitted!');
-    } catch (error: any) {
-      console.error('Withdraw error:', error);
-      showErrorToast(error.message || 'Withdrawal failed');
-    } finally {
-      setIsProcessing(false);
-    }
+  const handleWithdraw = () => {
+    setShowWithdrawModal(false);
+    showSuccessToast('✅ Withdrawal request submitted!');
   };
 
   const showSuccessToast = (message: string) => {
     setShowToast({ message, type: 'success' });
-    setTimeout(() => setShowToast(null), 3000);
-  };
-
-  const showErrorToast = (message: string) => {
-    setShowToast({ message, type: 'error' });
     setTimeout(() => setShowToast(null), 3000);
   };
 
@@ -361,9 +243,8 @@ export function WalletPage() {
               <Button
                 onClick={handleConnect}
                 className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
-                disabled={isProcessing}
               >
-                {isProcessing ? '⏳ Connecting...' : '🟩 Connect Wallet'}
+                🟩 Connect Wallet
               </Button>
             ) : (
               <Button
@@ -392,7 +273,7 @@ export function WalletPage() {
                 <Wallet className="h-4 w-4 md:h-5 md:w-5 text-[#8C57FF]" />
                 <p className="text-xs md:text-sm text-muted-foreground">Total Wallet Balance</p>
               </div>
-              <h2 className="text-[#4A4A68] mb-1">{balance} USDT</h2>
+              <h2 className="text-[#4A4A68] mb-1">{totalBalance} USDT</h2>
               <p className="text-xs text-muted-foreground">Includes deposits and earned rent</p>
             </div>
             <div className="w-10 h-10 md:w-12 md:h-12 bg-[#8C57FF]/10 rounded-full flex items-center justify-center flex-shrink-0">
@@ -431,7 +312,7 @@ export function WalletPage() {
               <Button 
                 onClick={() => setShowDepositModal(true)}
                 className="bg-blue-600 hover:bg-blue-700 w-full text-sm"
-                disabled={!isConnected || isProcessing}
+                disabled={!isConnected}
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Deposit Now
@@ -451,7 +332,7 @@ export function WalletPage() {
               <Button 
                 onClick={() => setShowWithdrawModal(true)}
                 className="bg-green-600 hover:bg-green-700 w-full text-sm"
-                disabled={!isConnected || isProcessing}
+                disabled={!isConnected}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Withdraw Now
@@ -620,13 +501,10 @@ export function WalletPage() {
               Enter the amount of USDT you want to deposit from your connected wallet.
             </p>
             <div className="mb-6">
-              <Label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</Label>
-              <Input 
+              <label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</label>
+              <input 
                 type="number" 
                 placeholder="0.00" 
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                disabled={isProcessing}
                 className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8C57FF]"
               />
             </div>
@@ -635,23 +513,15 @@ export function WalletPage() {
                 variant="outline"
                 className="flex-1"
                 onClick={() => setShowDepositModal(false)}
-                disabled={isProcessing}
               >
                 Cancel
               </Button>
               <Button
                 className="flex-1 bg-blue-600 hover:bg-blue-700"
                 onClick={handleDeposit}
-                disabled={isProcessing}
               >
-                {isProcessing ? (
-                  '⏳ Processing...'
-                ) : (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    Confirm Deposit
-                  </>
-                )}
+                <Check className="h-4 w-4 mr-2" />
+                Confirm Deposit
               </Button>
             </div>
           </Card>
@@ -670,19 +540,16 @@ export function WalletPage() {
               Enter the amount of USDT you want to withdraw to your external wallet.
             </p>
             <div className="mb-4">
-              <Label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</Label>
-              <Input 
+              <label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</label>
+              <input 
                 type="number" 
                 placeholder="0.00" 
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                disabled={isProcessing}
                 className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8C57FF]"
               />
             </div>
             <div className="mb-6 p-3 bg-yellow-500/10 border border-yellow-200 rounded-lg">
               <p className="text-xs text-[#4A4A68]">
-                Available balance: <strong>{balance} USDT</strong>
+                Available balance: <strong>{totalBalance} USDT</strong>
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 A small gas fee will be applied to this transaction.
@@ -693,23 +560,15 @@ export function WalletPage() {
                 variant="outline"
                 className="flex-1"
                 onClick={() => setShowWithdrawModal(false)}
-                disabled={isProcessing}
               >
                 Cancel
               </Button>
               <Button
                 className="flex-1 bg-green-600 hover:bg-green-700"
                 onClick={handleWithdraw}
-                disabled={isProcessing}
               >
-                {isProcessing ? (
-                  '⏳ Processing...'
-                ) : (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    Confirm Withdrawal
-                  </>
-                )}
+                <Check className="h-4 w-4 mr-2" />
+                Confirm Withdrawal
               </Button>
             </div>
           </Card>
