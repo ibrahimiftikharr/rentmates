@@ -9,12 +9,12 @@ const landlordSchema = new mongoose.Schema({
   address: { type: String },
   profileImage: { type: String, default: '' }, // Cloudinary URL
   
-  // Optional Documents (for reputation boost)
-  governmentId: { type: String }, // ID number
+  // Required Documents
+  governmentId: { type: String }, // Government ID number (required for accepting join requests)
   govIdDocument: { type: String, default: '' }, // Cloudinary URL for gov ID document
   
   // Reputation System
-  reputationScore: { type: Number, default: 0, min: 0, max: 100 },
+  reputationScore: { type: Number, default: 20, min: 0, max: 100 }, // Start with 20 pts for email verification
   
   // Property References
   properties: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Property' }],
@@ -27,17 +27,77 @@ const landlordSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-// Method to check if profile is complete (only required fields)
+// Method to check if profile is complete (including govt ID for accepting join requests)
 landlordSchema.methods.checkProfileCompletion = function() {
   const requiredFields = [
     this.phone,
     this.nationality,
     this.address,
-    this.profileImage
+    this.profileImage,
+    this.governmentId,
+    this.govIdDocument
   ];
   
-  this.isProfileComplete = requiredFields.every(field => field && field.trim() !== '');
+  this.isProfileComplete = requiredFields.every(field => field && field.toString().trim() !== '');
   return this.isProfileComplete;
+};
+
+// Method to calculate reputation score
+landlordSchema.methods.calculateReputationScore = async function() {
+  let score = 0;
+  
+  console.log('--- Starting reputation calculation ---');
+  console.log('Landlord user ID:', this.user);
+  
+  // Email Verified: 20 pts (check user model)
+  const User = mongoose.model('User');
+  const user = await User.findById(this.user);
+  console.log('User found:', !!user);
+  console.log('User isVerified:', user?.isVerified);
+  
+  if (user && user.isVerified) {
+    score += 20;
+    console.log('✓ Email verified: +20 pts');
+  } else {
+    console.log('✗ Email NOT verified');
+  }
+  
+  // Profile Completed: 30 pts (phone, nationality, address, profileImage all filled)
+  const profileFields = [
+    this.phone,
+    this.nationality,
+    this.address,
+    this.profileImage
+  ];
+  const isProfileComplete = profileFields.every(field => field && field.toString().trim() !== '');
+  console.log('Profile complete:', isProfileComplete);
+  
+  if (isProfileComplete) {
+    score += 30;
+    console.log('✓ Profile completed: +30 pts');
+  }
+  
+  // Government ID Uploaded: 25 pts (governmentId number AND document both uploaded)
+  console.log('Gov ID:', !!this.governmentId, 'Gov Doc:', !!this.govIdDocument);
+  
+  if (this.governmentId && this.governmentId.trim() !== '' && 
+      this.govIdDocument && this.govIdDocument.trim() !== '') {
+    score += 25;
+    console.log('✓ Government ID uploaded: +25 pts');
+  }
+  
+  // Wallet Connected: 25 pts (check user model)
+  console.log('Wallet address:', user?.walletAddress);
+  
+  if (user && user.walletAddress && user.walletAddress.trim() !== '') {
+    score += 25;
+    console.log('✓ Wallet connected: +25 pts');
+  }
+  
+  console.log('--- Total score:', score, '---');
+  
+  this.reputationScore = Math.min(score, 100); // Cap at 100
+  return this.reputationScore;
 };
 
 const Landlord = mongoose.model('Landlord', landlordSchema);

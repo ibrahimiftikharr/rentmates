@@ -1,10 +1,13 @@
-import { Heart, CalendarCheck, UserPlus, Home, Search, Wallet, MessageSquare, FileSignature, Bell, DollarSign } from 'lucide-react';
+import { Heart, CalendarCheck, UserPlus, Home, Search, Wallet, MessageSquare, FileSignature, Bell, DollarSign, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { payRent } from '@/shared/services/walletService';
+import { studentDashboardService, DashboardMetrics, Activity, LatestNotification } from '@/domains/student/services/studentDashboardService';
+import { socketService } from '@/shared/services/socketService';
+import { authService } from '@/domains/auth/services/authService';
 
 interface DashboardPageProps {
   onNavigate: (page: string) => void;
@@ -15,12 +18,121 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [isPayingRent, setIsPayingRent] = useState(false);
   const [landlordId] = useState('673abc123def456789012345'); // Temporary hardcoded landlord ID for testing
   
+  // State for dynamic data
+  const [metrics, setMetrics] = useState<DashboardMetrics>({
+    wishlistedProperties: 0,
+    visitRequests: 0,
+    joinRequests: 0,
+    approvedRentalRequests: 0,
+    activeContracts: 0,
+    unreadNotifications: 0
+  });
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [latestNotifications, setLatestNotifications] = useState<LatestNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState('Student');
+
+  // Fetch dashboard data
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all data in parallel
+      const [metricsData, activitiesData, notificationsData] = await Promise.all([
+        studentDashboardService.getDashboardMetrics(),
+        studentDashboardService.getRecentActivity(6),
+        studentDashboardService.getLatestNotifications(3)
+      ]);
+
+      setMetrics(metricsData);
+      setActivities(activitiesData);
+      setLatestNotifications(notificationsData.notifications);
+
+      // Get user name from auth service
+      const user = authService.getUser();
+      if (user?.name) {
+        setUserName(user.name.split(' ')[0]); // First name only
+      }
+    } catch (error: any) {
+      console.error('Error fetching dashboard data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+
+    // Listen for real-time updates via Socket.IO
+    socketService.on('metrics_updated', (data: any) => {
+      console.log('Dashboard metrics updated:', data);
+      fetchDashboardData(); // Refresh all data when metrics change
+    });
+
+    socketService.on('new_activity', (data: any) => {
+      console.log('New activity:', data);
+      fetchDashboardData(); // Refresh all data when new activity occurs
+    });
+
+    socketService.on('new_notification', (data: any) => {
+      console.log('New notification received:', data);
+      fetchDashboardData(); // Refresh to get updated notification count
+    });
+
+    return () => {
+      socketService.off('metrics_updated');
+      socketService.off('new_activity');
+      socketService.off('new_notification');
+    };
+  }, []);
+  
   const stats = [
-    { title: 'Wishlisted Properties', value: '3', icon: Heart, color: 'text-red-600', bg: 'bg-red-100' },
-    { title: 'Visit Requests', value: '4', icon: CalendarCheck, color: 'text-green-600', bg: 'bg-green-100' },
-    { title: 'Join Requests', value: '2', icon: UserPlus, color: 'text-blue-600', bg: 'bg-blue-100' },
-    { title: 'Active Contracts', value: '1', icon: FileSignature, color: 'text-purple-600', bg: 'bg-purple-100' },
+    { 
+      title: 'Wishlisted Properties', 
+      value: metrics.wishlistedProperties.toString(), 
+      icon: Heart, 
+      color: 'text-red-600', 
+      bg: 'bg-red-100' 
+    },
+    { 
+      title: 'Visit Requests', 
+      value: metrics.visitRequests.toString(), 
+      icon: CalendarCheck, 
+      color: 'text-green-600', 
+      bg: 'bg-green-100' 
+    },
+    { 
+      title: 'Join Requests', 
+      value: metrics.joinRequests.toString(), 
+      icon: UserPlus, 
+      color: 'text-blue-600', 
+      bg: 'bg-blue-100' 
+    },
+    { 
+      title: 'Active Contracts', 
+      value: metrics.activeContracts.toString(), 
+      icon: FileSignature, 
+      color: 'text-purple-600', 
+      bg: 'bg-purple-100' 
+    },
   ];
+
+  // Format relative time (e.g., "2 hours ago")
+  const getRelativeTime = (timestamp: string) => {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffMs = now.getTime() - past.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return past.toLocaleDateString();
+  };
 
   const handlePayRent = async () => {
     setIsPayingRent(true);
@@ -39,7 +151,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     <div className="space-y-6">
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-primary/10 to-blue-500/10 rounded-2xl p-4 sm:p-6 md:p-8">
-        <h1 className="mb-2">Welcome back, Jessica! 👋</h1>
+        <h1 className="mb-2">Welcome back, {userName}! 👋</h1>
         <p className="text-muted-foreground text-sm sm:text-base">
           Here's what's happening with your account today
         </p>
@@ -53,7 +165,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">{stat.title}</p>
-                  <h2>{stat.value}</h2>
+                  <h2>{loading ? '...' : stat.value}</h2>
                 </div>
                 <div className={`w-12 h-12 rounded-lg ${stat.bg} flex items-center justify-center`}>
                   <stat.icon className={`w-6 h-6 ${stat.color}`} />
@@ -75,12 +187,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                 <Bell className="w-8 h-8 text-white animate-pulse" />
               </div>
-              <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
-                <span className="text-white text-xs font-bold">2</span>
-              </div>
+              {metrics.unreadNotifications > 0 && (
+                <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+                  <span className="text-white text-xs font-bold">{metrics.unreadNotifications}</span>
+                </div>
+              )}
             </div>
             <div className="flex-1">
-              <h3 className="mb-1 group-hover:text-primary transition-colors">You have 2 new notifications</h3>
+              <h3 className="mb-1 group-hover:text-primary transition-colors">
+                You have {metrics.unreadNotifications} new notification{metrics.unreadNotifications !== 1 ? 's' : ''}
+              </h3>
               <p className="text-sm text-muted-foreground">Click to view all your notifications and updates</p>
             </div>
             <div className="hidden sm:block">
@@ -92,6 +208,56 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </CardContent>
       </Card>
 
+      {/* Latest Notifications Preview Card */}
+      {latestNotifications.length > 0 && (
+        <Card className="shadow-lg border-primary/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Latest Notifications</CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => onNavigate('notifications')}
+                className="text-primary hover:text-primary/80"
+              >
+                See All
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {latestNotifications.map((notification) => (
+                <div 
+                  key={notification._id} 
+                  className={`p-3 rounded-lg border ${
+                    notification.read ? 'bg-muted/30 border-border' : 'bg-primary/5 border-primary/30'
+                  } hover:bg-muted/50 transition-colors cursor-pointer`}
+                  onClick={() => onNavigate('notifications')}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                      notification.read ? 'bg-gray-400' : 'bg-primary'
+                    }`}></div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-medium text-sm ${notification.read ? '' : 'text-primary'}`}>
+                        {notification.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground truncate">{notification.message}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Clock className="w-3 h-3 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
+                          {getRelativeTime(notification.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Recent Activity & Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activity */}
@@ -100,26 +266,36 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                { action: 'Added property to wishlist', time: '2 hours ago', status: 'success' },
-                { action: 'Visit request confirmed', time: '1 day ago', status: 'success' },
-                { action: 'Join request pending approval', time: '2 days ago', status: 'pending' },
-                { action: 'Wallet connected successfully', time: '3 days ago', status: 'success' },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${
-                      activity.status === 'success' ? 'bg-green-500' : 'bg-orange-500'
-                    }`}></div>
-                    <div>
-                      <p>{activity.action}</p>
-                      <p className="text-sm text-muted-foreground">{activity.time}</p>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : activities.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No recent activity</p>
+                <p className="text-sm mt-1">Start exploring properties to see your activity here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activities.slice(0, 4).map((activity, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        activity.status === 'success' || activity.status === 'completed' 
+                          ? 'bg-green-500' 
+                          : activity.status === 'pending' 
+                            ? 'bg-orange-500' 
+                            : 'bg-red-500'
+                      }`}></div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{activity.action}</p>
+                        <p className="text-xs text-muted-foreground">{getRelativeTime(activity.timestamp)}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

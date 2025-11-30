@@ -16,6 +16,7 @@ const studentSchema = new mongoose.Schema({
   nationality: { type: String },
   dateOfBirth: { type: Date },
   phone: { type: String },
+  governmentId: { type: String }, // Government ID number
   
   // Interests
   interests: [{ type: String }],

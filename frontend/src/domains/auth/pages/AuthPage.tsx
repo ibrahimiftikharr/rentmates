@@ -9,11 +9,6 @@ export function AuthPage() {
   
   return (
     <div className="min-h-screen flex flex-col bg-background" style={{ minHeight: '100vh', backgroundColor: '#FAFBFC' }}>
-      {/* Debug element */}
-      <div style={{ position: 'fixed', top: 0, left: 0, padding: '10px', backgroundColor: 'red', color: 'white', zIndex: 9999 }}>
-        Auth Page Loaded
-      </div>
-      
       <div className="lg:hidden">
         <Header />
       </div>

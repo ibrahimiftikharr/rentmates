@@ -1,647 +1,695 @@
-import { useState } from 'react';
-import { ChevronLeft, FileText, Download, Shield, Wallet, Loader2, Building, User, Calendar, DollarSign, Clock, FileSignature } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Home, DollarSign, FileSignature, Loader2, ArrowLeft, CheckCircle2, AlertCircle, Wallet } from 'lucide-react';
+import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
-import { Card } from '@/shared/ui/card';
-import { Badge } from '@/shared/ui/badge';
-import { Separator } from '@/shared/ui/separator';
 import { Checkbox } from '@/shared/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
+import { toast } from 'sonner';
+import { getLandlordJoinRequests, landlordSignContract } from '@/shared/services/joinRequestService';
 
 interface ViewContractPageProps {
   contractId: string;
   onNavigate: (page: string) => void;
 }
 
-// Mock contract data - maps contractId to contract details
-const MOCK_CONTRACTS: Record<string, any> = {
-  'CONTRACT-001': {
-    id: 'CONTRACT-001',
-    propertyName: 'Modern Student Apartment',
-    propertyAddress: '123 University Ave, Boston, MA',
-    landlordName: 'John Smith',
-    landlordId: '3410625622826',
-    tenantName: 'Sara Johns',
-    tenantId: '3410625622826',
-    requestDate: '2025-11-01',
-    signedDate: '2025-11-08',
-    monthlyRent: '1200',
-    dueDate: '1st',
-    securityDeposit: '1200',
-    leaseDuration: '12',
-    moveInDate: '2025-12-01',
-    contractPeriod: 'Dec 1, 2025 – Nov 30, 2026',
-    blockchainHash: '0x7f9fade1c0d57a7af66ab4ead79fade1c0d57a7af66ab4ead7c2c2eb7b11a91385',
-    status: 'pending',
-  },
-  'CONTRACT-002': {
-    id: 'CONTRACT-002',
-    propertyName: 'Modern Student Apartment',
-    propertyAddress: '123 University Ave, Boston, MA',
-    landlordName: 'John Smith',
-    landlordId: '3410625622826',
-    tenantName: 'Michael Chen',
-    tenantId: '3410625622826',
-    requestDate: '2025-11-01',
-    signedDate: '2025-11-08',
-    monthlyRent: '1200',
-    dueDate: '1st',
-    securityDeposit: '1200',
-    leaseDuration: '12',
-    moveInDate: '2025-12-01',
-    contractPeriod: 'Dec 1, 2025 – Nov 30, 2026',
-    blockchainHash: '0x8a0fade2d1e68b8bg77bc5bfbe80gade2d1e68b8bg77bc5bfbe8d3d3fc8c22b02496',
-    status: 'pending',
-  },
-  'CONTRACT-003': {
-    id: 'CONTRACT-003',
-    propertyName: 'Modern Student Apartment',
-    propertyAddress: '123 University Ave, Boston, MA',
-    landlordName: 'John Smith',
-    landlordId: '3410625622826',
-    tenantName: 'Sarah Johnson',
-    tenantId: '3410625622826',
-    requestDate: '2025-11-01',
-    signedDate: '2025-11-05',
-    monthlyRent: '1200',
-    dueDate: '1st',
-    securityDeposit: '1200',
-    leaseDuration: '12',
-    moveInDate: '2025-12-01',
-    contractPeriod: 'Dec 1, 2025 – Nov 30, 2026',
-    blockchainHash: '0x7f9fade1c0d57a7af66ab4ead79fade1c0d57a7af66ab4ead7c2c2eb7b11a91385',
-    status: 'active',
-  }
-};
+interface ContractData {
+  propertyTitle: string;
+  propertyAddress: string;
+  landlordName: string;
+  landlordGovId: string;
+  studentName: string;
+  studentGovId: string;
+  requestDate: string;
+  monthlyRent: string;
+  rentDueDay: number;
+  securityDeposit: string;
+  leaseDuration: string;
+  leaseStartDate: string;
+  leaseEndDate: string;
+  moveInDate: string;
+  content: string;
+  studentSignature?: {
+    signed: boolean;
+    signedAt?: Date;
+    signature?: string;
+  };
+  landlordSignature?: {
+    signed: boolean;
+    signedAt?: Date;
+    signature?: string;
+  };
+}
 
 export function ViewContractPage({ contractId, onNavigate }: ViewContractPageProps) {
-  // Get contract data or use default
-  const contract = MOCK_CONTRACTS[contractId] || MOCK_CONTRACTS['CONTRACT-001'];
-  
-  // CONTRACT-003 is the pre-existing fully signed contract
-  // Other contract IDs (CONTRACT-001, CONTRACT-002) are newly approved and pending signatures
-  const isFullySigned = contractId === 'CONTRACT-003';
-  
-  const [studentSigned, setStudentSigned] = useState(isFullySigned);
-  const [landlordSigned, setLandlordSigned] = useState(isFullySigned);
-  const [showGasFeeModal, setShowGasFeeModal] = useState(false);
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showGasFeeDialog, setShowGasFeeDialog] = useState(false);
+  const [contractData, setContractData] = useState<ContractData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleDownload = () => {
-    // In real implementation, this would generate and download a PDF
-    console.log('Downloading contract:', contractId);
+  useEffect(() => {
+    fetchContractData();
+  }, [contractId]);
+
+  const fetchContractData = async () => {
+    try {
+      setLoading(true);
+      const response = await getLandlordJoinRequests();
+      const joinRequest = response.joinRequests.find((r: any) => r._id === contractId);
+      
+      if (joinRequest && joinRequest.contract) {
+        setContractData({
+          propertyTitle: joinRequest.contract.propertyTitle,
+          propertyAddress: joinRequest.contract.propertyAddress,
+          landlordName: joinRequest.contract.landlordName,
+          landlordGovId: joinRequest.contract.landlordGovId,
+          studentName: joinRequest.contract.studentName,
+          studentGovId: joinRequest.contract.studentGovId,
+          requestDate: joinRequest.contract.requestDate,
+          monthlyRent: joinRequest.contract.monthlyRent,
+          rentDueDay: joinRequest.contract.rentDueDay,
+          securityDeposit: joinRequest.contract.securityDeposit,
+          leaseDuration: joinRequest.contract.leaseDuration,
+          leaseStartDate: joinRequest.contract.leaseStartDate,
+          leaseEndDate: joinRequest.contract.leaseEndDate,
+          moveInDate: joinRequest.contract.moveInDate,
+          content: joinRequest.contract.content,
+          studentSignature: joinRequest.contract.studentSignature,
+          landlordSignature: joinRequest.contract.landlordSignature
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch contract data:', error);
+      toast.error('Failed to load contract data');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Simulate student signing (for demo purposes)
-  const handleStudentSign = () => {
-    setStudentSigned(true);
-  };
-
-  const handleLandlordSignClick = () => {
-    if (!studentSigned || !termsAccepted) return; // Button is disabled
-    setShowGasFeeModal(true);
+  const handleSignClick = () => {
+    if (!agreeToTerms) return;
+    setShowGasFeeDialog(true);
   };
 
   const handleConfirmSign = async () => {
-    setShowGasFeeModal(false);
+    setShowGasFeeDialog(false);
     setIsSigning(true);
-    
-    // Simulate blockchain transaction
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    setLandlordSigned(true);
-    setIsSigning(false);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const signature = '0x' + Math.random().toString(16).substring(2, 42);
+      console.log('Signing contract with ID:', contractId);
+      console.log('Signature:', signature);
+      
+      const response = await landlordSignContract(contractId, signature);
+      console.log('Sign response:', response);
+
+      if (response && response.success) {
+        setIsSigning(false);
+        toast.success('Contract signed successfully! Rental agreement is now complete.');
+        
+        await fetchContractData();
+        
+        setTimeout(() => {
+          onNavigate('join-requests');
+        }, 1500);
+      } else {
+        throw new Error(response?.message || 'Failed to sign contract');
+      }
+    } catch (error: any) {
+      console.error('Failed to sign contract:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      const errorMessage = error?.error || error?.message || 'Failed to sign contract. Please try again.';
+      toast.error(errorMessage);
+      setIsSigning(false);
+    }
   };
 
-  const allSigned = studentSigned && landlordSigned;
+  const getDaySuffix = (day: number) => {
+    if (day >= 11 && day <= 13) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading contract data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!contractData) {
+    return (
+      <div className="p-8 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-600" />
+          <p className="text-muted-foreground">Contract data not available. Please contact support.</p>
+          <Button
+            variant="outline"
+            onClick={() => onNavigate('join-requests')}
+            className="mt-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Join Requests
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const studentSigned = contractData?.studentSignature?.signed || false;
+  const landlordSigned = contractData?.landlordSignature?.signed || false;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      {/* Back Button */}
-      <button
-        onClick={() => onNavigate('join-requests')}
-        className="flex items-center text-muted-foreground hover:text-[#8C57FF] mb-6 transition-colors"
-      >
-        <ChevronLeft className="h-4 w-4 mr-1" />
-        Back to Join Requests
-      </button>
-
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <FileText className="h-8 w-8 text-[#8C57FF]" />
-              <h1 className="text-[#4A4A68]">Smart Rental Contract</h1>
-            </div>
-            <p className="text-muted-foreground">Review and Sign the Smart Contract</p>
-            <p className="text-sm text-muted-foreground mt-1">Contract ID: {contract.id}</p>
-          </div>
-
-          <div className="flex gap-2">
-            <Badge className={allSigned 
-              ? "bg-green-500/10 text-green-700 border-green-200"
-              : "bg-yellow-500/10 text-yellow-700 border-yellow-200"
-            }>
-              {allSigned ? 'Fully Signed' : 'Awaiting Signatures'}
-            </Badge>
-            {allSigned && (
-              <Badge className="bg-[#8C57FF]/10 text-[#8C57FF] border-[#8C57FF]/20">
-                🟢 Blockchain Verified
-              </Badge>
-            )}
-          </div>
+      <div className="flex items-center gap-4">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => onNavigate('join-requests')}
+          className="rounded-full"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div>
+          <h1 className="mb-2">Rental Contract</h1>
+          <p className="text-muted-foreground">
+            {landlordSigned ? 'Contract Signed - Agreement Active' : 'Review and Sign the Smart Contract'}
+          </p>
         </div>
       </div>
 
-      {/* Blockchain Info */}
-      {allSigned && (
-        <Card className="p-6 mb-6 shadow-lg bg-[#8C57FF]/5 border-[#8C57FF]/20">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-[#8C57FF]/10 rounded-lg">
-              <Shield className="h-6 w-6 text-[#8C57FF]" />
+      {/* Signature Status Banner */}
+      {!landlordSigned && (
+        <Card className={`shadow-md border ${studentSigned ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              {studentSigned ? (
+                <>
+                  <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  <div>
+                    <p className="font-semibold text-green-800">Student has signed the contract</p>
+                    <p className="text-sm text-green-700">You can now proceed with your signature to finalize the agreement</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-6 h-6 text-yellow-600" />
+                  <div>
+                    <p className="font-semibold text-yellow-800">Waiting for student signature</p>
+                    <p className="text-sm text-yellow-700">The student must sign the contract first before you can proceed</p>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="flex-1">
-              <h3 className="text-[#8C57FF] mb-2">Blockchain Certification</h3>
-              <p className="text-sm text-muted-foreground mb-2">
-                This contract has been immutably recorded on the blockchain and cannot be altered.
-              </p>
-              <div className="bg-white/50 rounded p-3 break-all">
-                <p className="text-xs text-muted-foreground mb-1">Transaction Hash:</p>
-                <p className="text-xs text-[#4A4A68] font-mono">{contract.blockchainHash}</p>
-              </div>
-            </div>
-          </div>
+          </CardContent>
         </Card>
       )}
 
-      {/* Contract Details Section Title */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl text-[#8C57FF]">Contract Details</h2>
-        <Button onClick={handleDownload} variant="outline" size="sm">
-          <Download className="h-4 w-4 mr-2" />
-          Download PDF
-        </Button>
+      {/* Contract Fully Signed Banner - Only show when BOTH have signed */}
+      {studentSigned && landlordSigned && (
+        <Card className="shadow-md border bg-green-50 border-green-200">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-green-500 rounded-full">
+                <CheckCircle2 className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-green-800 text-lg">Contract Successfully Signed!</p>
+                <p className="text-sm text-green-700">This contract has been deployed to the blockchain and is now active. The rental agreement is fully executed.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Property Overview Card */}
+      <Card className="shadow-md border bg-slate-50">
+        <CardContent className="p-8">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-14 h-14 rounded-lg bg-primary flex items-center justify-center">
+                <Home className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h2 className="mb-1 text-primary">Property: {contractData.propertyTitle}</h2>
+                <p className="text-muted-foreground">Address: {contractData.propertyAddress}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-primary/20">
+              <div>
+                <span className="text-muted-foreground text-sm">Landlord:</span>
+                <p className="font-medium">{contractData.landlordName} — Government Issued ID: {contractData.landlordGovId}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm">Tenant:</span>
+                <p className="font-medium">{contractData.studentName} — Government Issued ID: {contractData.studentGovId}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm">Request Date:</span>
+                <p className="font-medium">{contractData.requestDate}</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Financial Terms Section */}
+      <div>
+        <h2 className="mb-4 pb-2 border-b-2 border-primary text-primary">Financial Terms</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="shadow-md border">
+            <CardContent className="p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Monthly Rent</p>
+              <p className="text-3xl font-semibold mb-1">${contractData.monthlyRent}</p>
+              <p className="text-xs text-muted-foreground">Due Date: {contractData.rentDueDay}{getDaySuffix(contractData.rentDueDay)} of each month</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md border">
+            <CardContent className="p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Security Deposit</p>
+              <p className="text-3xl font-semibold mb-1">${contractData.securityDeposit}</p>
+              <p className="text-xs text-muted-foreground">Held securely in blockchain escrow</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md border">
+            <CardContent className="p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Lease Duration</p>
+              <p className="text-2xl font-semibold mb-1">{contractData.leaseDuration}</p>
+              <p className="text-xs text-muted-foreground">{contractData.leaseStartDate.split(',')[0]} – {contractData.leaseEndDate.split(',')[0]}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-md border">
+            <CardContent className="p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Move-in Date</p>
+              <p className="text-xl font-semibold mb-1">{contractData.moveInDate.split(',')[0]}</p>
+              <p className="text-xs text-muted-foreground">Scheduled occupancy</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* Property Information Card */}
-      <Card className="p-6 mb-4 shadow-lg">
-        <div className="flex items-center gap-2 mb-4">
-          <Building className="h-5 w-5 text-[#8C57FF]" />
-          <h3 className="text-[#8C57FF]">Property Information</h3>
-        </div>
-        <div className="space-y-3 text-sm">
-          <div className="flex">
-            <span className="text-muted-foreground w-32">Property:</span>
-            <span className="text-[#4A4A68]">{contract.propertyName}</span>
-          </div>
-          <div className="flex">
-            <span className="text-muted-foreground w-32">Address:</span>
-            <span className="text-[#4A4A68]">{contract.propertyAddress}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Parties Information Card */}
-      <Card className="p-6 mb-4 shadow-lg">
-        <div className="flex items-center gap-2 mb-4">
-          <User className="h-5 w-5 text-[#8C57FF]" />
-          <h3 className="text-[#8C57FF]">Parties</h3>
-        </div>
-        <div className="space-y-3 text-sm">
-          <div className="flex">
-            <span className="text-muted-foreground w-32">Landlord:</span>
-            <span className="text-[#4A4A68]">{contract.landlordName} — Government Issued ID: {contract.landlordId}</span>
-          </div>
-          <div className="flex">
-            <span className="text-muted-foreground w-32">Tenant:</span>
-            <span className="text-[#4A4A68]">{contract.tenantName} — Government Issued ID: {contract.tenantId}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Financial Terms Card */}
-      <Card className="p-6 mb-4 shadow-lg">
-        <div className="flex items-center gap-2 mb-4">
-          <DollarSign className="h-5 w-5 text-[#8C57FF]" />
-          <h3 className="text-[#8C57FF]">Financial Terms</h3>
-        </div>
-        <div className="grid md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <div className="flex mb-2">
-              <span className="text-muted-foreground w-40">Monthly Rent:</span>
-              <span className="text-[#4A4A68]">${contract.monthlyRent}</span>
-            </div>
-            <div className="flex mb-2">
-              <span className="text-muted-foreground w-40">Due Date:</span>
-              <span className="text-[#4A4A68]">{contract.dueDate} of each month</span>
-            </div>
-          </div>
-          <div>
-            <div className="flex mb-2">
-              <span className="text-muted-foreground w-40">Security Deposit:</span>
-              <span className="text-[#4A4A68]">${contract.securityDeposit}</span>
-            </div>
-            <div className="flex mb-2">
-              <span className="text-muted-foreground w-40">Deposit Type:</span>
-              <span className="text-[#4A4A68]">Blockchain Escrow</span>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Lease Period Card */}
-      <Card className="p-6 mb-6 shadow-lg">
-        <div className="flex items-center gap-2 mb-4">
-          <Calendar className="h-5 w-5 text-[#8C57FF]" />
-          <h3 className="text-[#8C57FF]">Lease Period</h3>
-        </div>
-        <div className="space-y-3 text-sm">
-          <div className="flex">
-            <span className="text-muted-foreground w-40">Request Date:</span>
-            <span className="text-[#4A4A68]">
-              {new Date(contract.requestDate).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              })}
-            </span>
-          </div>
-          <div className="flex">
-            <span className="text-muted-foreground w-40">Lease Duration:</span>
-            <span className="text-[#4A4A68]">{contract.leaseDuration} months</span>
-          </div>
-          <div className="flex">
-            <span className="text-muted-foreground w-40">Contract Period:</span>
-            <span className="text-[#4A4A68]">{contract.contractPeriod}</span>
-          </div>
-          <div className="flex">
-            <span className="text-muted-foreground w-40">Move-in Date:</span>
-            <span className="text-[#4A4A68]">Dec 1, 2025</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Terms and Conditions */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-6">
-          <FileSignature className="h-6 w-6 text-[#8C57FF]" />
-          <h2 className="text-xl text-[#8C57FF]">Terms and Conditions</h2>
-        </div>
-
-        <div className="space-y-4">
-          {/* Term 1 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">1</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Rent Payments</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>The tenant agrees to pay the monthly rent of $1200 on the 8th day of each month via the platform's blockchain payment system.</p>
-                  <p>A maximum payment delay of 5 days is allowed (i.e., the 13th day is the final due date).</p>
-                  <p>All rents are paid in advance for every month.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 2 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">2</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Security Deposit Escrow</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>A security deposit of $1200 is required and will be held in an on-chain escrow smart contract for the entire lease period.</p>
-                  <p>Funds remain locked and non-withdrawable by either party until the lease ends or a verified termination event occurs.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 3 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">3</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Lease Commencement</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>The lease term begins on Dec 1, 2025.</p>
-                  <p>The tenant must pay the security deposit within 7 days after both parties have signed this contract.</p>
-                  <p>The tenant must then pay the first month's rent after 3 days of moving in (to protect the tenant from fraudulent property description).</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 4 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">4</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Tenant Responsibilities</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>The tenant shall maintain the property in good condition and promptly report any damages or maintenance issues via the platform.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 5 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">5</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Landlord Responsibilities</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>The landlord must ensure the property condition and listing details are accurate at move-in.</p>
-                  <p>If fraudulent or misrepresented conditions are found, the tenant may cancel before or within 3 days of move-in and claim a full refund of the security deposit.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 6 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">6</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Lease Termination and Deposit Refund</h4>
-                <div className="space-y-3 text-sm text-[#4A4A68]">
-                  <div className="pl-4 border-l-2 border-[#8C57FF]/20">
-                    <p className="mb-2"><strong>Normal Completion:</strong></p>
-                    <p className="mb-1">After the lease ends, the security deposit remains locked for up to 7 days for verification.</p>
-                    <p className="pl-4 mb-1">• If landlord marks "Okay" → Immediate refund.</p>
-                    <p className="pl-4">• If no response in 7 days → Auto-refund in full.</p>
+      {/* Contract Terms Section */}
+      <div>
+        <h2 className="mb-4 pb-2 border-b-2 border-primary text-primary">Terms and Conditions</h2>
+        <Card className="shadow-md border">
+          <CardContent className="p-8">
+            <div className="space-y-6">
+              {/* Term 1 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">1</span>
                   </div>
-                  <div className="pl-4 border-l-2 border-[#8C57FF]/20">
-                    <p className="mb-2"><strong>Early Termination:</strong></p>
-                    <p className="mb-1">Either party may terminate early with 60 days' notice.</p>
-                    <p>Deposit remains in 60-day hold for dispute resolution.</p>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Rent Payments</h3>
+                    <p className="text-muted-foreground">
+                      The tenant agrees to pay the monthly rent of <span className="font-semibold">${contractData.monthlyRent}</span> on the <span className="font-semibold">{contractData.rentDueDay}{getDaySuffix(contractData.rentDueDay)} day of each month</span> via the platform's blockchain payment system.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      A maximum payment delay of <span className="font-semibold">5 days</span> is allowed (i.e., the {contractData.rentDueDay + 5}{getDaySuffix(contractData.rentDueDay + 5)} day is the final due date).
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      All rents are paid in advance for every month.
+                    </p>
                   </div>
-                  <div className="pl-4 border-l-2 border-[#8C57FF]/20">
-                    <p className="mb-2"><strong>Student Withdrawal Before Move-in:</strong></p>
-                    <p className="mb-1">In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.</p>
-                    <p className="pl-4 mb-1">• If rent not paid → Full refund.</p>
-                    <p className="pl-4">• If rent paid → Funds held 60 days before resolution and refund.</p>
+                </div>
+              </div>
+
+              {/* Term 2 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">2</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Security Deposit Escrow</h3>
+                    <p className="text-muted-foreground">
+                      A security deposit of <span className="font-semibold">${contractData.securityDeposit}</span> is required and will be held in an on-chain escrow smart contract for the entire lease period.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      Funds remain locked and non-withdrawable by either party until the lease ends or a verified termination event occurs.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 3 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">3</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Lease Commencement</h3>
+                    <p className="text-muted-foreground">
+                      The lease term begins on <span className="font-semibold">{contractData.moveInDate.split(',')[0]}</span>.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      The tenant must pay the security deposit within <span className="font-semibold">7 days</span> after both parties have signed this contract.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      The tenant must then pay the first month's rent after <span className="font-semibold">3 days of moving in</span> (to protect the tenant from fraudulent property description).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 4 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">4</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Tenant Responsibilities</h3>
+                    <p className="text-muted-foreground">
+                      The tenant shall maintain the property in good condition and promptly report any damages or maintenance issues via the platform.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 5 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">5</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Landlord Responsibilities</h3>
+                    <p className="text-muted-foreground">
+                      The landlord must ensure the property condition and listing details are accurate at move-in.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      If fraudulent or misrepresented conditions are found, the tenant may cancel before or within <span className="font-semibold">3 days of move-in</span> and claim a full refund of the security deposit.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 6 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">6</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Lease Termination and Deposit Refund</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="font-semibold text-foreground">• Normal Completion:</p>
+                        <p className="text-muted-foreground ml-4">
+                          After the lease ends, the security deposit remains locked for up to <span className="font-semibold">7 days</span> for verification.
+                        </p>
+                        <p className="text-muted-foreground ml-4 mt-1">
+                          ◦ If landlord marks "Okay" → Immediate refund.
+                        </p>
+                        <p className="text-muted-foreground ml-4">
+                          ◦ If no response in 7 days → Auto-refund in full.
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">• Early Termination:</p>
+                        <p className="text-muted-foreground ml-4">
+                          Either party may terminate early with <span className="font-semibold">60 days' notice</span>.
+                        </p>
+                        <p className="text-muted-foreground ml-4">
+                          Deposit remains in 60-day hold for dispute resolution.
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">• Student Withdrawal Before Move-in:</p>
+                        <p className="text-muted-foreground ml-4">
+                          In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.
+                        </p>
+                        <p className="text-muted-foreground ml-4 mt-1">
+                          ◦ If rent not paid → Full refund.
+                        </p>
+                        <p className="text-muted-foreground ml-4">
+                          ◦ If rent paid → Funds held 60 days before resolution and refund.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 7 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">7</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Inspections & Utilities</h3>
+                    <p className="text-muted-foreground">
+                      The landlord may request an inspection with <span className="font-semibold">24-hour prior notice</span>.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      Utility and maintenance terms follow the original listing.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 8 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">8</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Dispute Resolution</h3>
+                    <p className="text-muted-foreground">
+                      All conflicts are resolved through the platform's blockchain arbitration mechanism with neutral mediation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 9 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">9</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Smart Contract Finality</h3>
+                    <p className="text-muted-foreground">
+                      Once both parties digitally sign, the smart contract becomes immutable and fully enforceable.
+                    </p>
+                    <p className="text-muted-foreground mt-2">
+                      All actions — deposits, payments, terminations, and refunds — are recorded transparently on-chain.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Term 10 */}
+              <div className="border-l-4 border-primary/40 pl-6 py-2">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                    <span className="font-semibold text-primary">10</span>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-2 text-primary">Legal Binding</h3>
+                    <p className="text-muted-foreground">
+                      Both parties acknowledge this is a legally binding blockchain-registered agreement under applicable rental and digital contract laws.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
-          </Card>
-
-          {/* Term 7 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">7</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Inspections & Utilities</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>The landlord may request an inspection with 24-hour prior notice.</p>
-                  <p>Utility and maintenance terms follow the original listing.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 8 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">8</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Dispute Resolution</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>All conflicts are resolved through the platform's blockchain arbitration mechanism with neutral mediation.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 9 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">9</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Smart Contract Finality</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>Once both parties digitally sign, the smart contract becomes immutable and fully enforceable.</p>
-                  <p>All actions — deposits, payments, terminations, and refunds — are recorded transparently on-chain.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Term 10 */}
-          <Card className="p-6 shadow-md">
-            <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#8C57FF]/10 flex items-center justify-center">
-                <span className="text-[#8C57FF]">10</span>
-              </div>
-              <div className="flex-1">
-                <h4 className="text-[#4A4A68] mb-3">Legal Binding</h4>
-                <div className="space-y-2 text-sm text-[#4A4A68]">
-                  <p>Both parties acknowledge this is a legally binding blockchain-registered agreement under applicable rental and digital contract laws.</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Blockchain Smart Contract Summary */}
-      <Card className="p-6 mb-6 shadow-lg bg-[#8C57FF]/5 border-[#8C57FF]/20">
-        <h3 className="text-[#8C57FF] mb-4">Blockchain Smart Contract Summary</h3>
-        <div className="space-y-2 text-sm text-[#4A4A68]">
-          <div className="flex items-start gap-2">
-            <span className="text-[#8C57FF] mt-1">•</span>
-            <p>All funds and events recorded immutably on the blockchain.</p>
+      <Card className="shadow-md border bg-slate-50">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+              <FileSignature className="w-7 h-7 text-white" />
+            </div>
+            <div className="flex-1">
+              <h3 className="mb-3 pb-2 border-b border-primary/20 text-primary">Blockchain Smart Contract Summary</h3>
+              <div className="space-y-2 text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                  <p>All funds and events recorded immutably on the blockchain.</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                  <p>Once signed, contract terms cannot be changed.</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
+                  <p>Every deposit, payment, and refund is publicly verifiable.</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-start gap-2">
-            <span className="text-[#8C57FF] mt-1">•</span>
-            <p>Once signed, contract terms cannot be changed.</p>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-[#8C57FF] mt-1">•</span>
-            <p>Every deposit, payment, and refund is publicly verifiable.</p>
-          </div>
-        </div>
+        </CardContent>
       </Card>
 
-      {/* Secure & Transparent */}
-      <Card className="p-6 mb-6 shadow-lg bg-gradient-to-br from-[#8C57FF]/10 to-[#8C57FF]/5 border-[#8C57FF]/30">
-        <h3 className="text-[#8C57FF] mb-4">Secure & Transparent</h3>
-        <div className="space-y-4 text-sm text-[#4A4A68]">
-          <p>By proceeding, I confirm that I have read and understood all terms and conditions.</p>
-          <p>I agree to be bound by this blockchain-registered smart contract.</p>
-          
-          {!allSigned && (
-            <div className="pt-2 border-t border-[#8C57FF]/20">
-              <div className="flex items-start space-x-3">
+      {/* Secure & Transparent Agreement - Only show if not signed */}
+      {!landlordSigned && (
+        <Card className="shadow-md border bg-slate-50">
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-primary/20">
+                <FileSignature className="w-5 h-5 text-primary" />
+                <h3 className="text-primary">Secure & Transparent</h3>
+              </div>
+              <div className="flex items-start space-x-4">
                 <Checkbox
-                  id="terms-accept"
-                  checked={termsAccepted}
-                  onCheckedChange={(checked) => setTermsAccepted(checked as boolean)}
-                  className="mt-1"
+                  id="agree-terms"
+                  checked={agreeToTerms}
+                  onCheckedChange={(checked) => setAgreeToTerms(checked as boolean)}
+                  className="mt-1 border-2"
+                  disabled={!studentSigned}
                 />
                 <label
-                  htmlFor="terms-accept"
-                  className="text-sm text-[#4A4A68] cursor-pointer leading-relaxed"
+                  htmlFor="agree-terms"
+                  className={`flex-1 cursor-pointer leading-relaxed ${!studentSigned ? 'text-muted-foreground' : ''}`}
                 >
-                  I have read and agree to all terms and conditions outlined in this rental agreement. 
-                  I understand that this contract will be recorded on the blockchain and cannot be modified after signing.
+                  <span className="font-semibold">By proceeding, I confirm that I have read and understood all terms and conditions.</span>
+                  <br />
+                  I agree to be bound by this blockchain-registered smart contract.
                 </label>
               </div>
             </div>
-          )}
-        </div>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Sign with Wallet Button */}
-      {!allSigned && (
-        <Card className="p-6 shadow-lg">
-          <div className="flex flex-col items-center gap-4">
-            {!studentSigned && (
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground mb-4">
-                  Demo: Simulate student signing the contract
-                </p>
-                <Button
-                  onClick={handleStudentSign}
-                  variant="outline"
-                  className="border-[#8C57FF] text-[#8C57FF] hover:bg-[#8C57FF]/10"
-                >
-                  Simulate Student Signature
-                </Button>
-              </div>
+      {/* Action Buttons - Only show if not signed */}
+      {!landlordSigned && (
+        <div className="flex items-center gap-4 pb-8">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => onNavigate('join-requests')}
+            disabled={isSigning}
+            className="min-w-32"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back
+          </Button>
+          <Button
+            size="lg"
+            onClick={handleSignClick}
+            disabled={!agreeToTerms || isSigning || !studentSigned}
+            className="flex-1 bg-primary hover:bg-primary/90 shadow-lg hover:shadow-xl transition-all"
+          >
+            {isSigning ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Signing Contract via Wallet...
+              </>
+            ) : (
+              <>
+                <Wallet className="w-5 h-5 mr-2" />
+                Sign Contract with Wallet
+              </>
             )}
-
-            <div className="w-full border-t pt-4">
-              <Button
-                onClick={handleLandlordSignClick}
-                disabled={!studentSigned || !termsAccepted || isSigning}
-                className={`w-full ${
-                  !studentSigned || !termsAccepted || isSigning
-                    ? 'bg-gray-300 cursor-not-allowed hover:bg-gray-300'
-                    : 'bg-[#8C57FF] hover:bg-[#7645E8]'
-                }`}
-              >
-                {isSigning ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Signing Contract...
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="h-5 w-5 mr-2" />
-                    Sign with Wallet
-                  </>
-                )}
-              </Button>
-              
-              {!studentSigned && (
-                <p className="text-xs text-muted-foreground text-center mt-3 italic">
-                  Awaiting student signature — you can sign once the student has signed the contract.
-                </p>
-              )}
-              
-              {studentSigned && !termsAccepted && (
-                <p className="text-xs text-yellow-600 text-center mt-3">
-                  ⚠️ Please accept the terms and conditions to proceed with signing.
-                </p>
-              )}
-              
-              {studentSigned && termsAccepted && !landlordSigned && (
-                <p className="text-xs text-green-600 text-center mt-3">
-                  ✓ Student has signed and terms accepted. You can now sign the contract.
-                </p>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Gas Fee Confirmation Modal */}
-      {showGasFeeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="p-6 max-w-md w-full">
-            <div className="flex items-center gap-2 mb-4">
-              <Wallet className="h-5 w-5 text-[#8C57FF]" />
-              <h3 className="text-[#4A4A68]">Blockchain Signing Fee Notice</h3>
-            </div>
-            <div className="mb-6">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                <p className="text-sm text-yellow-800">
-                  A $3 gas fee will be automatically deducted from your connected wallet to complete this on-chain signing process.
-                </p>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                This transaction will deploy the rental agreement as an immutable smart contract. Once signed, the contract cannot be modified.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowGasFeeModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 bg-[#8C57FF] hover:bg-[#7645E8]"
-                onClick={handleConfirmSign}
-              >
-                Confirm & Sign
-              </Button>
-            </div>
-          </Card>
+          </Button>
         </div>
       )}
 
-      {/* Success Message */}
-      {allSigned && (
-        <Card className="p-6 shadow-lg bg-green-50 border-green-200">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-500 rounded-full">
-              <Shield className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h3 className="text-green-800">Contract Successfully Signed!</h3>
-              <p className="text-sm text-green-700">
-                This contract has been deployed to the blockchain and is now active.
-              </p>
-            </div>
-          </div>
-        </Card>
+      {/* Back button for signed contracts */}
+      {landlordSigned && (
+        <div className="pb-8">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => onNavigate('join-requests')}
+            className="min-w-48"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back to Join Requests
+          </Button>
+        </div>
       )}
 
-      {/* Bottom Back Button */}
-      <div className="mt-8 pt-6 border-t">
-        <Button
-          onClick={() => onNavigate('join-requests')}
-          variant="outline"
-          className="w-full sm:w-auto"
-        >
-          <ChevronLeft className="h-4 w-4 mr-2" />
-          Go Back to Join Requests
-        </Button>
-      </div>
+      {/* Contract Confirmation Dialog */}
+      <Dialog open={showGasFeeDialog} onOpenChange={setShowGasFeeDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5 text-primary" />
+              Confirm Contract Signing
+            </DialogTitle>
+            <DialogDescription>
+              Please confirm that you want to proceed with signing this contract
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium mb-1">Legal Agreement</p>
+                    <p className="text-sm text-muted-foreground">
+                      By signing, you are entering into a legally binding rental agreement for {contractData.propertyTitle}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium mb-1">Blockchain Registration</p>
+                    <p className="text-sm text-muted-foreground">
+                      This contract will be recorded on the blockchain and cannot be modified after signing
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium mb-1">Gas Fee Notice</p>
+                    <p className="text-sm text-muted-foreground">
+                      A $3 gas fee will be automatically deducted from your connected wallet to complete this on-chain signing process
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowGasFeeDialog(false)}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmSign}
+              className="w-full sm:w-auto bg-primary hover:bg-primary/90"
+            >
+              <Wallet className="w-4 h-4 mr-2" />
+              Confirm & Sign Contract
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

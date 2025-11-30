@@ -12,6 +12,7 @@ import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { PropertyDetailsPage } from '../components/property-details/PropertyDetailsPage';
 import { toast } from 'sonner';
 import { studentService, Property as APIProperty } from '../services/studentService';
+import { getCurrencySymbol } from '@/shared/utils/currency';
 
 interface Property {
   id: string;
@@ -399,12 +400,12 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
                       <div className="flex items-center gap-3">
                         <div className="flex-1 p-3 rounded-lg bg-primary/10 border-2 border-primary/20 text-center">
                           <p className="text-xs text-muted-foreground mb-1">Min</p>
-                          <p className="font-semibold text-primary">£{priceRange[0]}</p>
+                          <p className="font-semibold text-primary">{getCurrencySymbol('GBP')}{priceRange[0]}</p>
                         </div>
                         <div className="w-8 h-0.5 bg-border" />
                         <div className="flex-1 p-3 rounded-lg bg-primary/10 border-2 border-primary/20 text-center">
                           <p className="text-xs text-muted-foreground mb-1">Max</p>
-                          <p className="font-semibold text-primary">£{priceRange[1]}</p>
+                          <p className="font-semibold text-primary">{getCurrencySymbol('GBP')}{priceRange[1]}</p>
                         </div>
                       </div>
                     </div>
@@ -607,7 +608,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
 
                   <div className="flex items-center justify-between pt-2">
                     <div>
-                      <p className="text-3xl text-primary">£{property.price}</p>
+                      <p className="text-3xl text-primary">{getCurrencySymbol(property.currency)}{property.price}</p>
                       <p className="text-xs text-muted-foreground">per month</p>
                     </div>
                     <Button

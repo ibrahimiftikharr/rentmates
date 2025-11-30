@@ -3,6 +3,7 @@ const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
 const Property = require('../models/propertyModel');
 const Notification = require('../models/notificationModel');
+const { emitDashboardUpdate } = require('../utils/socketHelpers');
 
 // Create visit request (Student)
 const createVisitRequest = async (req, res) => {
@@ -125,6 +126,10 @@ const createVisitRequest = async (req, res) => {
     }
 
     console.log('✓ Visit request created:', visitRequest._id);
+
+    // Emit dashboard update for student
+    const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+    emitDashboardUpdate(io, studentUserId, 'metrics_updated');
 
     res.status(201).json({
       success: true,

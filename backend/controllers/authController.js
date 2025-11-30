@@ -45,6 +45,26 @@ const signup = async (req, res) => {
     await user.save();
     console.log('✓ User saved to MongoDB:', email);
 
+    // Create Student or Landlord profile based on role
+    let profileId = null;
+    if (role === 'student') {
+      const student = new Student({
+        user: user._id,
+        reputationScore: 0
+      });
+      await student.save();
+      profileId = student._id.toString();
+      console.log('✓ Student profile created:', profileId);
+    } else if (role === 'landlord') {
+      const landlord = new Landlord({
+        user: user._id,
+        reputationScore: 0
+      });
+      await landlord.save();
+      profileId = landlord._id.toString();
+      console.log('✓ Landlord profile created:', profileId);
+    }
+
     // Generate JWT token for automatic login after signup
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },
@@ -53,7 +73,7 @@ const signup = async (req, res) => {
     );
 
     // Return success with token and user data
-    res.status(201).json({
+    const response = {
       message: 'User created successfully',
       token,
       user: {
@@ -62,7 +82,16 @@ const signup = async (req, res) => {
         name: user.name,
         role: user.role
       }
-    });
+    };
+
+    // Add studentId or landlordId to response
+    if (role === 'student' && profileId) {
+      response.user.studentId = profileId;
+    } else if (role === 'landlord' && profileId) {
+      response.user.landlordId = profileId;
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ message: 'Server error during signup' });

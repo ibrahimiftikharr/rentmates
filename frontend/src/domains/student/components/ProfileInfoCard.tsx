@@ -25,6 +25,7 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
     course: profile.course || '',
     yearOfStudy: profile.yearOfStudy || '',
     nationality: profile.nationality || '',
+    governmentId: profile.governmentId || '',
     dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
     phone: profile.phone || '',
     bio: profile.bio || '',
@@ -49,6 +50,7 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
       course: profile.course || '',
       yearOfStudy: profile.yearOfStudy || '',
       nationality: profile.nationality || '',
+      governmentId: profile.governmentId || '',
       dateOfBirth: profile.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
       phone: profile.phone || '',
       bio: profile.bio || '',
@@ -187,6 +189,21 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
               className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
               placeholder="Enter your nationality"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="governmentId" className="text-sm">Government ID *</Label>
+            <Input 
+              id="governmentId" 
+              value={formData.governmentId}
+              onChange={(e) => setFormData({...formData, governmentId: e.target.value})}
+              disabled={!isEditing}
+              className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
+              placeholder="Enter your government ID number"
+            />
+            {!formData.governmentId && (
+              <p className="text-xs text-amber-600">Required for rental applications</p>
+            )}
           </div>
 
           <div className="space-y-2">

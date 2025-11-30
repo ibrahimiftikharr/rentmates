@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Checkbox } from '@/shared/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
+import { CURRENCIES, getCurrencySymbol } from '@/shared/utils/currency';
 
 const amenities = [
   'Parking', 'WiFi', 'Furnished', 'Air Conditioning', 
@@ -19,6 +21,7 @@ export function AddPropertyWizard() {
     title: '',
     location: '',
     rent: '',
+    currency: 'GBP',
     amenities: [] as string[],
   });
 
@@ -28,7 +31,7 @@ export function AddPropertyWizard() {
   const handlePublish = () => {
     setOpen(false);
     setStep(1);
-    setFormData({ title: '', location: '', rent: '', amenities: [] });
+    setFormData({ title: '', location: '', rent: '', currency: 'GBP', amenities: [] });
   };
 
   const toggleAmenity = (amenity: string) => {
@@ -94,14 +97,34 @@ export function AddPropertyWizard() {
                       onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Monthly Rent ($)</Label>
-                    <Input
-                      type="number"
-                      placeholder="2500"
-                      value={formData.rent}
-                      onChange={(e) => setFormData({ ...formData, rent: e.target.value })}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Currency</Label>
+                      <Select
+                        value={formData.currency}
+                        onValueChange={(value) => setFormData({ ...formData, currency: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select currency" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CURRENCIES.map((currency) => (
+                            <SelectItem key={currency.code} value={currency.code}>
+                              {currency.symbol} {currency.code} - {currency.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Monthly Rent</Label>
+                      <Input
+                        type="number"
+                        placeholder="2500"
+                        value={formData.rent}
+                        onChange={(e) => setFormData({ ...formData, rent: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -170,7 +193,11 @@ export function AddPropertyWizard() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Monthly Rent</p>
-                      <p>${formData.rent || '0'}</p>
+                      <p>{getCurrencySymbol(formData.currency)}{formData.rent || '0'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Currency</p>
+                      <p>{formData.currency}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Amenities</p>

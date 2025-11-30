@@ -78,8 +78,28 @@ const sendPasswordResetEmail = async (email, resetToken) => {
   }
 };
 
+const sendEmail = async ({ to, subject, text, html }) => {
+  try {
+    const mailOptions = {
+      from: 'therentmates@gmail.com',
+      to,
+      subject,
+      text,
+      html: html || `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">${text}</div>`
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.info(`Email sent to ${to}: ${info.response}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendEmail
 };

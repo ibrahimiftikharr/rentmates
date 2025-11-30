@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { UserPlus, Home, DollarSign, CheckCircle2, Clock, XCircle, FileSignature, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
@@ -7,7 +7,6 @@ import { Separator } from '@/shared/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
 import { toast } from 'sonner';
 import { ContractSigningPage } from './ContractSigningPage';
-import { getStudentJoinRequests, deleteJoinRequest, studentSignContract } from '@/shared/services/joinRequestService';
 
 interface JoinRequest {
   id: string;
@@ -25,120 +24,82 @@ interface JoinRequest {
 }
 
 export function JoinRequestsPage() {
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([
+    {
+      id: '1',
+      propertyTitle: 'Modern Student Apartment',
+      propertyAddress: '123 University Ave, Boston, MA',
+      landlordName: 'John Smith',
+      bidAmount: 1200,
+      requestDate: '2025-11-01',
+      status: 'approved',
+      moveInDate: '2025-12-01',
+      leaseDuration: '12 months',
+      securityDeposit: 1200,
+    },
+    {
+      id: '2',
+      propertyTitle: 'Cozy Studio Near Campus',
+      propertyAddress: '456 College St, Boston, MA',
+      landlordName: 'Sarah Johnson',
+      bidAmount: 950,
+      requestDate: '2025-11-02',
+      status: 'pending',
+    },
+    {
+      id: '3',
+      propertyTitle: 'Spacious 3BR House',
+      propertyAddress: '789 Student Lane, Boston, MA',
+      landlordName: 'Michael Brown',
+      bidAmount: 2100,
+      requestDate: '2025-10-28',
+      status: 'rejected',
+    },
+  ]);
+
   const [signingContract, setSigningContract] = useState<JoinRequest | null>(null);
   const [terminatingContract, setTerminatingContract] = useState<JoinRequest | null>(null);
   const [isTerminating, setIsTerminating] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'approved' | 'awaiting' | 'completed' | 'pending' | 'rejected'>('approved');
-  const [loading, setLoading] = useState(true);
-
-  // Fetch join requests from API
-  useEffect(() => {
-    fetchJoinRequests();
-  }, []);
-
-  const fetchJoinRequests = async () => {
-    try {
-      setLoading(true);
-      const response = await getStudentJoinRequests();
-      
-      // Map backend response to frontend interface
-      const mappedRequests: JoinRequest[] = response.joinRequests.map((req: any) => ({
-        id: req._id,
-        propertyTitle: req.property?.title || 'Property',
-        propertyAddress: req.property?.address || 'Address not available',
-        landlordName: req.landlord?.name || 'Unknown',
-        bidAmount: req.bidAmount,
-        requestDate: req.createdAt,
-        status: mapBackendStatus(req.status),
-        moveInDate: req.movingDate,
-        leaseDuration: req.contract?.leaseDurationMonths ? `${req.contract.leaseDurationMonths} months` : undefined,
-        securityDeposit: req.contract?.securityDeposit,
-        contractHash: req.contract?.studentSignature?.signature || undefined,
-        isDisabled: req.isDisabled || false
-      }));
-
-      setJoinRequests(mappedRequests);
-    } catch (error: any) {
-      console.error('Failed to fetch join requests:', error);
-      toast.error(error.error || 'Failed to load join requests');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Map backend status to frontend status
-  const mapBackendStatus = (backendStatus: string): JoinRequest['status'] => {
-    switch (backendStatus) {
-      case 'pending':
-        return 'pending';
-      case 'approved':
-        return 'approved';
-      case 'rejected':
-        return 'rejected';
-      case 'waiting_completion':
-        return 'awaiting-landlord';
-      case 'completed':
-        return 'completed';
-      default:
-        return 'pending';
-    }
-  };
 
   const handleSignContract = (request: JoinRequest) => {
     setSigningContract(request);
   };
 
-  const handleContractSigned = async (contractHash: string) => {
+  const handleContractSigned = (contractHash: string) => {
     if (!signingContract) return;
 
-    try {
-      // Call API to sign contract
-      await studentSignContract(signingContract.id, contractHash);
-      
-      // Update request status locally
-      setJoinRequests(prev =>
-        prev.map(req =>
-          req.id === signingContract.id
-            ? { 
-                ...req, 
-                status: 'awaiting-landlord',
-                contractHash: contractHash
-              }
-            : req.id !== signingContract.id && req.status === 'pending'
-            ? { ...req, isDisabled: true }
-            : req
-        )
-      );
+    // Update request status
+    setJoinRequests(prev =>
+      prev.map(req =>
+        req.id === signingContract.id
+          ? { 
+              ...req, 
+              status: 'awaiting-landlord',
+              contractHash: contractHash
+            }
+          : req.id !== signingContract.id && req.status === 'pending'
+          ? { ...req, isDisabled: true }
+          : req
+      )
+    );
 
-      toast.success('Contract signed successfully! Waiting for landlord signature.');
-      setSigningContract(null);
-    } catch (error: any) {
-      console.error('Failed to sign contract:', error);
-      toast.error(error.error || 'Failed to sign contract');
-    }
+    setSigningContract(null);
   };
 
-  const handleTerminateContract = async () => {
+  const handleTerminateContract = () => {
     if (!terminatingContract) return;
 
     setIsTerminating(true);
 
-    try {
-      // Call API to delete/terminate request
-      await deleteJoinRequest(terminatingContract.id);
-      
+    setTimeout(() => {
       // Remove the terminated contract from the list
       setJoinRequests(prev => prev.filter(req => req.id !== terminatingContract.id));
       
+      setIsTerminating(false);
       setTerminatingContract(null);
       toast.success('Your security deposit will be returned shortly!');
-    } catch (error: any) {
-      console.error('Failed to terminate contract:', error);
-      toast.error(error.error || 'Failed to terminate contract');
-    } finally {
-      setIsTerminating(false);
-    }
+    }, 1500);
   };
 
   const getStatusColor = (status: string) => {
@@ -383,17 +344,6 @@ export function JoinRequestsPage() {
   const completedRequests = joinRequests.filter(r => r.status === 'completed');
   const pendingRequests = joinRequests.filter(r => r.status === 'pending' && !r.isDisabled);
   const rejectedRequests = joinRequests.filter(r => r.status === 'rejected');
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <h1>Join Requests</h1>
-        <Card className="p-12 text-center">
-          <p className="text-muted-foreground">Loading join requests...</p>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

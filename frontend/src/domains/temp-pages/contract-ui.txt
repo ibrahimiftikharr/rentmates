@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Home, DollarSign, FileSignature, Loader2, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
-import { Button } from '@/shared/ui/button';
-import { Checkbox } from '@/shared/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
-import { toast } from 'sonner';
-import { getStudentJoinRequests } from '@/shared/services/joinRequestService';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { toast } from 'sonner@2.0.3';
 
 interface JoinRequest {
   id: string;
@@ -21,24 +20,6 @@ interface JoinRequest {
   contractHash?: string;
 }
 
-interface ContractData {
-  propertyTitle: string;
-  propertyAddress: string;
-  landlordName: string;
-  landlordGovId: string;
-  studentName: string;
-  studentGovId: string;
-  requestDate: string;
-  monthlyRent: string;
-  rentDueDay: number;
-  securityDeposit: string;
-  leaseDuration: string;
-  leaseStartDate: string;
-  leaseEndDate: string;
-  moveInDate: string;
-  content: string;
-}
-
 interface ContractSigningPageProps {
   request: JoinRequest;
   onBack: () => void;
@@ -49,45 +30,6 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [showGasFeeDialog, setShowGasFeeDialog] = useState(false);
-  const [contractData, setContractData] = useState<ContractData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchContractData();
-  }, [request.id]);
-
-  const fetchContractData = async () => {
-    try {
-      setLoading(true);
-      const response = await getStudentJoinRequests();
-      const joinRequest = response.joinRequests.find((r: any) => r._id === request.id);
-      
-      if (joinRequest && joinRequest.contract) {
-        setContractData({
-          propertyTitle: joinRequest.contract.propertyTitle,
-          propertyAddress: joinRequest.contract.propertyAddress,
-          landlordName: joinRequest.contract.landlordName,
-          landlordGovId: joinRequest.contract.landlordGovId,
-          studentName: joinRequest.contract.studentName,
-          studentGovId: joinRequest.contract.studentGovId,
-          requestDate: joinRequest.contract.requestDate,
-          monthlyRent: joinRequest.contract.monthlyRent,
-          rentDueDay: joinRequest.contract.rentDueDay,
-          securityDeposit: joinRequest.contract.securityDeposit,
-          leaseDuration: joinRequest.contract.leaseDuration,
-          leaseStartDate: joinRequest.contract.leaseStartDate,
-          leaseEndDate: joinRequest.contract.leaseEndDate,
-          moveInDate: joinRequest.contract.moveInDate,
-          content: joinRequest.contract.content
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch contract data:', error);
-      toast.error('Failed to load contract data');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSignClick = () => {
     if (!agreeToTerms) return;
@@ -107,56 +49,6 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
     toast.success('Contract signed successfully! Waiting for landlord signature.');
     
     onContractSigned(contractHash);
-  };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-full">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="mb-2">Sign Rental Contract</h1>
-            <p className="text-muted-foreground">Loading contract...</p>
-          </div>
-        </div>
-        <Card className="p-12 text-center">
-          <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading contract data...</p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!contractData) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={onBack} className="rounded-full">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="mb-2">Sign Rental Contract</h1>
-            <p className="text-muted-foreground text-red-600">Contract not found</p>
-          </div>
-        </div>
-        <Card className="p-12 text-center">
-          <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-600" />
-          <p className="text-muted-foreground">Contract data not available. Please contact support.</p>
-        </Card>
-      </div>
-    );
-  }
-
-  const getDaySuffix = (day: number) => {
-    if (day >= 11 && day <= 13) return 'th';
-    switch (day % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
-    }
   };
 
   return (
@@ -188,23 +80,23 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                 <Home className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h2 className="mb-1 text-primary">Property: {contractData.propertyTitle}</h2>
-                <p className="text-muted-foreground">Address: {contractData.propertyAddress}</p>
+                <h2 className="mb-1 text-primary">Property: Modern Student Apartment</h2>
+                <p className="text-muted-foreground">Address: 123 University Ave, Boston, MA</p>
               </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-primary/20">
               <div>
                 <span className="text-muted-foreground text-sm">Landlord:</span>
-                <p className="font-medium">{contractData.landlordName} — Government Issued ID: {contractData.landlordGovId}</p>
+                <p className="font-medium">John Smith — Government Issued ID: 3410625622826</p>
               </div>
               <div>
                 <span className="text-muted-foreground text-sm">Tenant:</span>
-                <p className="font-medium">{contractData.studentName} — Government Issued ID: {contractData.studentGovId}</p>
+                <p className="font-medium">Sara Johns — Government Issued ID: 3410625622826</p>
               </div>
               <div>
                 <span className="text-muted-foreground text-sm">Request Date:</span>
-                <p className="font-medium">{contractData.requestDate}</p>
+                <p className="font-medium">November 1, 2025</p>
               </div>
             </div>
           </div>
@@ -218,15 +110,15 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
           <Card className="shadow-md border">
             <CardContent className="p-6 text-center">
               <p className="text-sm text-muted-foreground mb-2">Monthly Rent</p>
-              <p className="text-3xl font-semibold mb-1">${contractData.monthlyRent}</p>
-              <p className="text-xs text-muted-foreground">Due Date: {contractData.rentDueDay}{getDaySuffix(contractData.rentDueDay)} of each month</p>
+              <p className="text-3xl font-semibold mb-1">$1200</p>
+              <p className="text-xs text-muted-foreground">Due Date: 1st of each month</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-md border">
             <CardContent className="p-6 text-center">
               <p className="text-sm text-muted-foreground mb-2">Security Deposit</p>
-              <p className="text-3xl font-semibold mb-1">${contractData.securityDeposit}</p>
+              <p className="text-3xl font-semibold mb-1">$1200</p>
               <p className="text-xs text-muted-foreground">Held securely in blockchain escrow</p>
             </CardContent>
           </Card>
@@ -234,15 +126,15 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
           <Card className="shadow-md border">
             <CardContent className="p-6 text-center">
               <p className="text-sm text-muted-foreground mb-2">Lease Duration</p>
-              <p className="text-2xl font-semibold mb-1">{contractData.leaseDuration}</p>
-              <p className="text-xs text-muted-foreground">{contractData.leaseStartDate.split(',')[0]} – {contractData.leaseEndDate.split(',')[0]}</p>
+              <p className="text-2xl font-semibold mb-1">12 months</p>
+              <p className="text-xs text-muted-foreground">Dec 1, 2025 – Nov 30, 2026</p>
             </CardContent>
           </Card>
 
           <Card className="shadow-md border">
             <CardContent className="p-6 text-center">
               <p className="text-sm text-muted-foreground mb-2">Move-in Date</p>
-              <p className="text-xl font-semibold mb-1">{contractData.moveInDate.split(',')[0]}</p>
+              <p className="text-xl font-semibold mb-1">Dec 1, 2025</p>
               <p className="text-xs text-muted-foreground">Scheduled occupancy</p>
             </CardContent>
           </Card>
@@ -264,10 +156,10 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2 text-primary">Rent Payments</h3>
                     <p className="text-muted-foreground">
-                      The tenant agrees to pay the monthly rent of <span className="font-semibold">${contractData.monthlyRent}</span> on the <span className="font-semibold">{contractData.rentDueDay}{getDaySuffix(contractData.rentDueDay)} day of each month</span> via the platform's blockchain payment system.
+                      The tenant agrees to pay the monthly rent of <span className="font-semibold">$1200</span> on the <span className="font-semibold">8th day of each month</span> via the platform's blockchain payment system.
                     </p>
                     <p className="text-muted-foreground mt-2">
-                      A maximum payment delay of <span className="font-semibold">5 days</span> is allowed (i.e., the {contractData.rentDueDay + 5}{getDaySuffix(contractData.rentDueDay + 5)} day is the final due date).
+                      A maximum payment delay of <span className="font-semibold">5 days</span> is allowed (i.e., the 13th day is the final due date).
                     </p>
                     <p className="text-muted-foreground mt-2">
                       All rents are paid in advance for every month.
@@ -285,7 +177,7 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2 text-primary">Security Deposit Escrow</h3>
                     <p className="text-muted-foreground">
-                      A security deposit of <span className="font-semibold">${contractData.securityDeposit}</span> is required and will be held in an on-chain escrow smart contract for the entire lease period.
+                      A security deposit of <span className="font-semibold">$1200</span> is required and will be held in an on-chain escrow smart contract for the entire lease period.
                     </p>
                     <p className="text-muted-foreground mt-2">
                       Funds remain locked and non-withdrawable by either party until the lease ends or a verified termination event occurs.
@@ -303,7 +195,7 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2 text-primary">Lease Commencement</h3>
                     <p className="text-muted-foreground">
-                      The lease term begins on <span className="font-semibold">{contractData.moveInDate.split(',')[0]}</span>.
+                      The lease term begins on <span className="font-semibold">Dec 1, 2025</span>.
                     </p>
                     <p className="text-muted-foreground mt-2">
                       The tenant must pay the security deposit within <span className="font-semibold">7 days</span> after both parties have signed this contract.
@@ -573,7 +465,7 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                   <div>
                     <p className="font-medium mb-1">Legal Agreement</p>
                     <p className="text-sm text-muted-foreground">
-                      By signing, you are entering into a legally binding rental agreement for {contractData.propertyTitle}
+                      By signing, you are entering into a legally binding rental agreement for Modern Student Apartment
                     </p>
                   </div>
                 </div>
@@ -591,7 +483,7 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                   <div>
                     <p className="font-medium mb-1">Financial Commitment</p>
                     <p className="text-sm text-muted-foreground">
-                      You agree to pay ${contractData.monthlyRent} monthly rent and ${contractData.securityDeposit} security deposit as specified
+                      You agree to pay $1,200 monthly rent and $1,200 security deposit as specified
                     </p>
                   </div>
                 </div>

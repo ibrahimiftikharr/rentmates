@@ -76,6 +76,7 @@ export interface StudentProfile {
   course?: string;
   yearOfStudy?: string;
   nationality?: string;
+  governmentId?: string;
   dateOfBirth?: string;
   phone?: string;
   interests?: string[];

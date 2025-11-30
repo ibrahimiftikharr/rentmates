@@ -13,6 +13,8 @@ const visitRequestRouter = require('./routes/visitRequestRoutes.js');
 const notificationRouter = require('./routes/notificationRoutes.js');
 const messageRouter = require('./routes/messageRoutes.js');
 const walletRouter = require('./routes/walletRoutes.js');
+const joinRequestRouter = require('./routes/joinRequestRoutes.js');
+const studentDashboardRouter = require('./routes/studentDashboardRoutes.js');
 
 // Load environment variables
 dotenv.config();
@@ -90,7 +92,7 @@ app.use(express.json()); // Parse JSON request bodies
 // DATABASE CONNECTION
 // ========================================
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✓ MongoDB connected successfully'))
+  .then(() => console.log('✓ MongoDB is connected successfully'))
   .catch((err) => console.error('✗ MongoDB connection error:', err));
 
 // ========================================
@@ -128,6 +130,12 @@ app.use('/api/messages', messageRouter);
 
 // Wallet routes (deposits, withdrawals, rent payments)
 app.use('/api/wallet', walletRouter);
+
+// Join request routes (rental request workflow)
+app.use('/api/join-requests', joinRequestRouter);
+
+// Student dashboard routes (metrics, activity, notifications)
+app.use('/api/student-dashboard', studentDashboardRouter);
 
 // Log all registered routes for debugging
 console.log('\n📋 Registered routes:');

@@ -14,6 +14,7 @@ import { landlordService, LandlordProfile } from '../services/landlordService';
 import { toast } from 'sonner';
 import PlacesAutocomplete from 'react-places-autocomplete';
 import { GoogleMapsLoader } from '@/shared/components/GoogleMapsLoader';
+import { socketService } from '@/shared/services/socketService';
 
 export function SettingsPage() {
   const [profile, setProfile] = useState<LandlordProfile | null>(null);
@@ -36,12 +37,28 @@ export function SettingsPage() {
 
   useEffect(() => {
     fetchProfile();
+
+    // Listen for real-time reputation updates
+    socketService.on('reputation_updated', (data: any) => {
+      console.log('Reputation updated in settings:', data);
+      if (data.reputationScore !== undefined && profile) {
+        setProfile(prev => prev ? { ...prev, reputationScore: data.reputationScore } : null);
+      }
+      // Refetch profile to get all updated data
+      fetchProfile();
+    });
+
+    return () => {
+      socketService.off('reputation_updated');
+    };
   }, []);
 
   const fetchProfile = async () => {
     try {
+      console.log('🔵 Fetching landlord profile...');
       setLoading(true);
       const data = await landlordService.getProfile();
+      console.log('✅ Profile fetched:', data);
       setProfile(data);
       setFormData({
         phone: data.phone || '',
@@ -50,6 +67,7 @@ export function SettingsPage() {
         governmentId: data.governmentId || '',
       });
     } catch (error: any) {
+      console.error('❌ Error fetching profile:', error);
       toast.error(error.message);
     } finally {
       setLoading(false);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search,
   ChevronDown,
@@ -17,6 +17,8 @@ import { Input } from '@/shared/ui/input';
 import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
+import { getLandlordJoinRequests, acceptJoinRequest, rejectJoinRequest } from '@/shared/services/joinRequestService';
+import { toast } from 'sonner';
 
 interface JoinRequest {
   id: string;
@@ -43,79 +45,78 @@ interface JoinRequest {
   landlordSigned?: boolean;
 }
 
-const MOCK_REQUESTS: JoinRequest[] = [
-  {
-    id: '1',
-    propertyName: 'Modern 2-Bed Flat in City Centre',
-    propertyId: '1',
-    studentName: 'Jane Doe',
-    studentId: 's1',
-    studentPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80',
-    bidAmount: '1200',
-    leaseDuration: '12',
-    moveInDate: '2025-12-01',
-    status: 'pending',
-    contractSigned: false,
-    blockchainVerified: false,
-    studentBio: 'Final year Computer Science student looking for a comfortable place close to university. Non-smoker, responsible tenant with excellent references.',
-    interests: ['Reading', 'Coding', 'Yoga', 'Cooking', 'Hiking'],
-    kycVerified: true,
-    rentalScore: 4.8
-  },
-  {
-    id: '2',
-    propertyName: 'Cosy Studio Near University',
-    propertyId: '2',
-    studentName: 'Michael Chen',
-    studentId: 's2',
-    studentPhoto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',
-    bidAmount: '850',
-    leaseDuration: '6',
-    moveInDate: '2025-11-15',
-    status: 'pending',
-    contractSigned: false,
-    blockchainVerified: false,
-    studentBio: 'Business student seeking a quiet studio for focused studying. Always pay rent on time and maintain properties well.',
-    interests: ['Finance', 'Chess', 'Photography', 'Music'],
-    kycVerified: true,
-    rentalScore: 4.5
-  },
-  {
-    id: '3',
-    propertyName: 'Spacious 3-Bed House with Garden',
-    propertyId: '3',
-    studentName: 'Sarah Johnson',
-    studentId: 's3',
-    studentPhoto: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&q=80',
-    bidAmount: '1800',
-    leaseDuration: '12',
-    moveInDate: '2025-12-15',
-    status: 'approved',
-    contractSigned: true,
-    blockchainVerified: true,
-    contractId: 'CONTRACT-003',
-    studentBio: 'Medical student with excellent references. Looking for a long-term rental with outdoor space.',
-    interests: ['Medicine', 'Gardening', 'Running', 'Art', 'Volunteering'],
-    kycVerified: true,
-    rentalScore: 5.0,
-    landlordApproved: true,
-    studentSigned: true,
-    landlordSigned: true
-  }
-];
-
 interface JoinRequestsPageProps {
   onNavigate: (page: string, requestId?: string) => void;
 }
 
 export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
-  const [requests, setRequests] = useState<JoinRequest[]>(MOCK_REQUESTS);
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
   const [showApproveModal, setShowApproveModal] = useState<string | null>(null);
   const [showToast, setShowToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch join requests from API
+  useEffect(() => {
+    fetchJoinRequests();
+  }, []);
+
+  const fetchJoinRequests = async () => {
+    try {
+      setLoading(true);
+      const response = await getLandlordJoinRequests();
+      
+      // Map backend response to frontend interface
+      const mappedRequests: JoinRequest[] = response.joinRequests.map((req: any) => ({
+        id: req._id,
+        propertyName: req.property?.title || 'Property',
+        propertyId: req.property?._id || '',
+        studentName: req.student?.name || 'Student',
+        studentId: req.student?._id || '',
+        studentPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80', // Default photo
+        bidAmount: req.bidAmount.toString(),
+        leaseDuration: req.contract?.leaseDurationMonths?.toString() || '12',
+        moveInDate: req.movingDate,
+        status: mapBackendStatus(req.status),
+        contractSigned: req.status === 'completed',
+        blockchainVerified: req.status === 'completed',
+        contractId: req.status === 'completed' ? `CONTRACT-${req._id.slice(-6)}` : undefined,
+        studentBio: req.message || 'No message provided',
+        interests: [], // Not available in backend
+        kycVerified: true, // Assume verified if request exists
+        rentalScore: 4.5, // Default score
+        landlordApproved: req.status === 'approved' || req.status === 'waiting_completion' || req.status === 'completed',
+        studentSigned: req.contract?.studentSignature?.signed || false,
+        landlordSigned: req.contract?.landlordSignature?.signed || false
+      }));
+
+      setRequests(mappedRequests);
+    } catch (error: any) {
+      console.error('Failed to fetch join requests:', error);
+      toast.error(error.error || 'Failed to load join requests');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Map backend status to frontend status
+  const mapBackendStatus = (backendStatus: string): 'pending' | 'approved' | 'rejected' => {
+    switch (backendStatus) {
+      case 'pending':
+        return 'pending';
+      case 'approved':
+      case 'waiting_completion':
+      case 'completed':
+        return 'approved';
+      case 'rejected':
+        return 'rejected';
+      default:
+        return 'pending';
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -138,32 +139,56 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
     return matchesSearch && matchesStatus;
   });
 
-  const handleApprove = (id: string) => {
-    // Mark request as approved by landlord
-    setRequests(requests.map(req => 
-      req.id === id ? { 
-        ...req, 
-        landlordApproved: true,
-        contractId: `CONTRACT-${id.padStart(3, '0')}` 
-      } : req
-    ));
-    setShowApproveModal(null);
-    showSuccessToast('✅ Student has been notified of your approval.');
+  const handleApprove = async (id: string) => {
+    try {
+      await acceptJoinRequest(id);
+      
+      // Update local state
+      setRequests(requests.map(req => 
+        req.id === id ? { 
+          ...req, 
+          status: 'approved' as const,
+          landlordApproved: true,
+          contractId: `CONTRACT-${id.slice(-6)}`
+        } : req
+      ));
+      
+      setShowApproveModal(null);
+      showSuccessToast('✅ Student has been notified of your approval.');
+      
+      // Refresh requests to get updated data
+      await fetchJoinRequests();
+    } catch (error: any) {
+      console.error('Failed to approve request:', error);
+      toast.error(error.error || 'Failed to approve request');
+    }
   };
 
   const handleViewContract = (id: string) => {
     const request = requests.find(req => req.id === id);
-    if (request?.contractId) {
-      onNavigate('view-contract', request.contractId);
+    if (request) {
+      onNavigate('view-contract', request.id);
     }
   };
 
-  const handleReject = (id: string) => {
-    setRequests(requests.map(req => 
-      req.id === id ? { ...req, status: 'rejected' as const } : req
-    ));
-    setShowRejectModal(null);
-    showSuccessToast('Request rejected successfully');
+  const handleReject = async (id: string) => {
+    try {
+      await rejectJoinRequest(id, 'Request rejected by landlord');
+      
+      // Update local state
+      setRequests(requests.map(req => 
+        req.id === id ? { ...req, status: 'rejected' as const } : req
+      ));
+      
+      setShowRejectModal(null);
+      showSuccessToast('Request rejected successfully');
+      
+      // Refresh requests to get updated data
+      await fetchJoinRequests();
+    } catch (error: any) {
+      console.error('Failed to reject request:', error);
+      toast.error(error.error || 'Failed to reject request');
+    }
   };
 
   const showSuccessToast = (message: string) => {
@@ -174,6 +199,20 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
   const toggleExpanded = (id: string) => {
     setExpandedRow(expandedRow === id ? null : id);
   };
+
+  if (loading) {
+    return (
+      <div className="p-4 sm:p-6 md:p-8">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-[#4A4A68] mb-2 text-xl sm:text-2xl">Join Requests</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Loading join requests...</p>
+        </div>
+        <Card className="p-12 text-center">
+          <p className="text-muted-foreground">Loading...</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -301,7 +340,15 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                           <FileText className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-1" />
                           View Contract
                         </Button>
-                        <p className="text-xs text-muted-foreground italic">Awaiting Student Signature</p>
+                        {!request.studentSigned && (
+                          <p className="text-xs text-muted-foreground italic">Awaiting Student Signature</p>
+                        )}
+                        {request.studentSigned && !request.landlordSigned && (
+                          <p className="text-xs text-green-600 italic">✓ Student Signed - Your Signature Needed</p>
+                        )}
+                        {request.studentSigned && request.landlordSigned && (
+                          <p className="text-xs text-green-600 italic">✓ Fully Signed</p>
+                        )}
                       </div>
                     )}
                     {request.status === 'approved' && request.contractSigned && (
@@ -472,7 +519,15 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                           <FileText className="h-4 w-4 mr-2" />
                           View Contract
                         </Button>
-                        <p className="text-sm text-muted-foreground italic">Awaiting Student Signature</p>
+                        {!request.studentSigned && (
+                          <p className="text-sm text-muted-foreground italic">Awaiting Student Signature</p>
+                        )}
+                        {request.studentSigned && !request.landlordSigned && (
+                          <p className="text-sm text-green-600 font-medium italic">✓ Student Signed - Your Signature Needed</p>
+                        )}
+                        {request.studentSigned && request.landlordSigned && (
+                          <p className="text-sm text-green-600 font-medium italic">✓ Contract Fully Signed</p>
+                        )}
                       </div>
                     </div>
                   )}

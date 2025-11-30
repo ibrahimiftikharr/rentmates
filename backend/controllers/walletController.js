@@ -1,4 +1,5 @@
 const User = require('../models/userModel');
+const Landlord = require('../models/landlordModel');
 const { getUSDTBalance, withdrawFromVault, getVaultBalance } = require('../services/contractService');
 
 /**
@@ -29,11 +30,32 @@ exports.connectWallet = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    console.log('✓ Wallet connected for user:', userId);
+
+    // If user is a landlord, recalculate reputation score
+    const landlord = await Landlord.findOne({ user: userId });
+    if (landlord) {
+      await landlord.calculateReputationScore();
+      await landlord.save();
+      
+      console.log('✓ Landlord reputation updated:', landlord.reputationScore);
+      
+      // Emit Socket.IO event for real-time reputation update
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`landlord_${userId}`).emit('reputation_updated', {
+          reputationScore: landlord.reputationScore,
+          walletConnected: true
+        });
+      }
+    }
+
     res.json({
       success: true,
       message: 'Wallet connected successfully',
       walletAddress: user.walletAddress,
-      offChainBalance: user.offChainBalance
+      offChainBalance: user.offChainBalance,
+      reputationScore: landlord?.reputationScore
     });
   } catch (error) {
     console.error('Connect wallet error:', error);

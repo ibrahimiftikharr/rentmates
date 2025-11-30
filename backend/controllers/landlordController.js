@@ -1,12 +1,18 @@
 const Landlord = require('../models/landlordModel');
 const User = require('../models/userModel');
 const { cloudinary } = require('../config/cloudinary');
+const { emitDashboardUpdate } = require('../utils/socketHelpers');
 
 // ========================================
 // GET LANDLORD PROFILE
 // ========================================
 const getProfile = async (req, res) => {
   try {
+    console.log('========================================');
+    console.log('GET LANDLORD PROFILE CALLED');
+    console.log('User ID from token:', req.user?.id);
+    console.log('========================================');
+    
     const userId = req.user.id; // From authenticateToken middleware
 
     // Find landlord by user ID and populate user data
@@ -16,10 +22,19 @@ const getProfile = async (req, res) => {
     if (!landlord) {
       landlord = new Landlord({
         user: userId,
-        isProfileComplete: false
+        isProfileComplete: false,
+        reputationScore: 20 // Start with 20 pts for email verification
       });
       await landlord.save();
       await landlord.populate('user', 'name email');
+      console.log('✓ New landlord profile created with reputation score:', landlord.reputationScore);
+    } else {
+      // Fix existing landlords with 0 score - they should have at least 20 for email verification
+      if (landlord.reputationScore === 0) {
+        landlord.reputationScore = 20;
+        await landlord.save();
+        console.log('✓ Fixed reputation score for existing landlord:', landlord.reputationScore);
+      }
     }
 
     res.status(200).json({
@@ -78,12 +93,27 @@ const updateProfile = async (req, res) => {
 
     // Check profile completion
     landlord.checkProfileCompletion();
+    
+    // Recalculate reputation score
+    await landlord.calculateReputationScore();
+    
     landlord.updatedAt = Date.now();
 
     await landlord.save();
     await landlord.populate('user', 'name email');
 
     console.log('✓ Landlord profile updated:', landlord.user.email);
+    console.log('✓ New reputation score:', landlord.reputationScore);
+
+    // Emit Socket.IO event for real-time reputation update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`landlord_${userId}`).emit('reputation_updated', {
+        reputationScore: landlord.reputationScore,
+        isProfileComplete: landlord.isProfileComplete
+      });
+      console.log(`✓ Emitted reputation_updated to landlord_${userId}`);
+    }
 
     res.status(200).json({
       success: true,
@@ -140,15 +170,30 @@ const uploadProfileImage = async (req, res) => {
 
     // Save new image URL
     landlord.profileImage = req.file.path;
+    
+    // Recalculate reputation score
+    await landlord.calculateReputationScore();
+    
     landlord.updatedAt = Date.now();
     await landlord.save();
 
     console.log('✓ Profile image uploaded:', req.file.path);
+    console.log('✓ New reputation score:', landlord.reputationScore);
+
+    // Emit Socket.IO event for real-time reputation update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`landlord_${userId}`).emit('reputation_updated', {
+        reputationScore: landlord.reputationScore,
+        profileImage: landlord.profileImage
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: 'Profile image uploaded successfully',
-      imageUrl: req.file.path
+      imageUrl: req.file.path,
+      reputationScore: landlord.reputationScore
     });
   } catch (error) {
     console.error('Upload profile image error:', error);
@@ -184,15 +229,30 @@ const uploadGovIdDocument = async (req, res) => {
 
     // Save new document URL
     landlord.govIdDocument = req.file.path;
+    
+    // Recalculate reputation score
+    await landlord.calculateReputationScore();
+    
     landlord.updatedAt = Date.now();
     await landlord.save();
 
     console.log('✓ Government ID document uploaded:', req.file.path);
+    console.log('✓ New reputation score:', landlord.reputationScore);
+
+    // Emit Socket.IO event for real-time reputation update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`landlord_${userId}`).emit('reputation_updated', {
+        reputationScore: landlord.reputationScore,
+        govIdDocument: landlord.govIdDocument
+      });
+    }
 
     res.status(200).json({
       success: true,
       message: 'Government ID document uploaded successfully',
-      documentUrl: req.file.path
+      documentUrl: req.file.path,
+      reputationScore: landlord.reputationScore
     });
   } catch (error) {
     console.error('Upload gov ID document error:', error);

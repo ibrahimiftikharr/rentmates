@@ -34,6 +34,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/alert';
 import { landlordService } from '../services/landlordService';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { CURRENCIES, getCurrencySymbol } from '@/shared/utils/currency';
 
 const STEPS = [
   { id: 1, title: 'Property Details', description: 'Basic information' },
@@ -58,6 +59,7 @@ interface PropertyData {
   bathrooms: string;
   size: string;
   rent: string;
+  currency: string;
   deposit: string;
   minStay: string;
   maxStay: string;
@@ -99,6 +101,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     bathrooms: '',
     size: '',
     rent: '',
+    currency: 'GBP',
     deposit: '',
     minStay: '',
     maxStay: '',
@@ -252,6 +255,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
         area: propertyData.size ? parseInt(propertyData.size) : undefined,
         furnished: propertyData.furnished,
         price: parseFloat(propertyData.rent),
+        currency: propertyData.currency,
         deposit: propertyData.deposit ? parseFloat(propertyData.deposit) : undefined,
         amenities: allAmenities,
         billsIncluded,
@@ -458,9 +462,28 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
               </div>
 
               <div>
+                <Label htmlFor="currency">Currency *</Label>
+                <Select
+                  value={propertyData.currency}
+                  onValueChange={(value) => setPropertyData({ ...propertyData, currency: value })}
+                >
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCIES.map((currency) => (
+                      <SelectItem key={currency.code} value={currency.code}>
+                        {currency.symbol} {currency.code} - {currency.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
                 <Label htmlFor="rent">Rent Price (per month) *</Label>
                 <div className="relative mt-1.5">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">£</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{getCurrencySymbol(propertyData.currency)}</span>
                   <Input
                     id="rent"
                     type="number"
@@ -476,7 +499,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
               <div>
                 <Label htmlFor="deposit">Security Deposit Amount</Label>
                 <div className="relative mt-1.5">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">£</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{getCurrencySymbol(propertyData.currency)}</span>
                   <Input
                     id="deposit"
                     type="number"
@@ -819,7 +842,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4 border-y">
                   <div>
                     <p className="text-sm text-muted-foreground">Rent</p>
-                    <p className="text-[#4A4A68]">£{propertyData.rent || '0'}/mo</p>
+                    <p className="text-[#4A4A68]">{getCurrencySymbol(propertyData.currency)}{propertyData.rent || '0'}/mo</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Bedrooms</p>

@@ -6,6 +6,7 @@ import { Badge } from '@/shared/ui/badge';
 import { toast } from 'sonner';
 import { studentService, Property } from '../services/studentService';
 import { PropertyDetailsPage } from '../components/property-details/PropertyDetailsPage';
+import { getCurrencySymbol } from '@/shared/utils/currency';
 
 interface WishlistPageProps {
   onNavigate?: (page: string, propertyId?: string) => void;
@@ -137,7 +138,7 @@ export function WishlistPage({ onNavigate }: WishlistPageProps) {
                   </div>
                   <div className="flex items-center gap-2 mb-3">
                     <DollarSign className="w-5 h-5 text-primary flex-shrink-0" />
-                    <span className="text-primary">${property.price}/month</span>
+                    <span className="text-primary">{getCurrencySymbol(property.currency)}{property.price}/month</span>
                   </div>
                 </div>
 

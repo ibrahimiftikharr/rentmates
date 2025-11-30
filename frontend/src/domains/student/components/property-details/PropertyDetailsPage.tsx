@@ -12,6 +12,13 @@ import { Textarea } from '@/shared/ui/textarea';
 import { toast } from 'sonner';
 import { studentService } from '../../services/studentService';
 import { visitRequestService } from '@/shared/services/visitRequestService';
+import { 
+  checkStudentProfile, 
+  checkPropertyVisit, 
+  checkHigherBids, 
+  createJoinRequest 
+} from '@/shared/services/joinRequestService';
+import { getCurrencySymbol, formatCurrency } from '@/shared/utils/currency';
 
 interface PropertyDetailsPageProps {
   property: any;
@@ -35,6 +42,9 @@ interface Flatmate {
 }
 
 export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyDetailsPageProps) {
+  // Get currency symbol for this property
+  const currencySymbol = getCurrencySymbol(property.currency);
+  
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showImageModal, setShowImageModal] = useState(false);
   const [openJoinDialog, setOpenJoinDialog] = useState(false);
@@ -196,21 +206,77 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
     setCurrentImageIndex((prev) => (prev - 1 + property.images.length) % property.images.length);
   };
 
-  const handleJoinRequest = () => {
+  const handleJoinRequest = async () => {
     if (!bidAmount) {
       toast.error('Please enter a rent amount');
-      return;
-    }
-    if (!stayTenure) {
-      toast.error('Please enter stay tenure in months');
       return;
     }
     if (!moveInDate) {
       toast.error('Please select a move-in date');
       return;
     }
-    setOpenJoinDialog(false);
-    toast.success('Join request sent successfully!');
+
+    try {
+      // Step 1: Check profile completion
+      const profileCheck = await checkStudentProfile();
+      if (!profileCheck.isComplete) {
+        const missing = [];
+        if (profileCheck.missingFields.name) missing.push('Full Name');
+        if (profileCheck.missingFields.governmentId) missing.push('Government ID');
+        if (profileCheck.missingFields.idDocument) missing.push('ID Document (National ID or Passport)');
+        
+        toast.error(`Profile incomplete! Please add: ${missing.join(', ')}`, {
+          duration: 5000
+        });
+        setOpenJoinDialog(false);
+        return;
+      }
+
+      // Step 2: Check property visit (warning only)
+      const visitCheck = await checkPropertyVisit(property.id);
+      if (!visitCheck.hasVisited) {
+        const proceed = confirm(
+          'You haven\'t scheduled or completed a visit for this property yet. ' +
+          'We recommend visiting before submitting a join request.\n\n' +
+          'Do you want to continue anyway?'
+        );
+        if (!proceed) {
+          return;
+        }
+      }
+
+      // Step 3: Check higher bids (warning only)
+      const bidCheck = await checkHigherBids(property.id, parseFloat(bidAmount));
+      if (bidCheck.hasHigherBids) {
+        const proceed = confirm(
+          `The landlord has received ${bidCheck.higherBidsCount} higher bid(s). ` +
+          `Highest bid: $${bidCheck.highestBid}/month.\n\n` +
+          'Do you still want to submit your request?'
+        );
+        if (!proceed) {
+          return;
+        }
+      }
+
+      // Step 4: Submit join request
+      await createJoinRequest({
+        propertyId: property.id,
+        movingDate: moveInDate,
+        bidAmount: parseFloat(bidAmount),
+        message: `Interested in renting for ${stayTenure} months`
+      });
+
+      setOpenJoinDialog(false);
+      toast.success('Join request sent successfully!');
+      
+      // Navigate to join requests page if possible
+      if (onNavigate) {
+        setTimeout(() => onNavigate('join-requests'), 1500);
+      }
+    } catch (error: any) {
+      console.error('Failed to submit join request:', error);
+      toast.error(error.error || error.message || 'Failed to submit join request');
+    }
   };
 
   const handleBookVisit = async () => {
@@ -642,7 +708,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                       <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
                         <span className="font-medium">{bill.name}</span>
                         <div className="flex items-center gap-4">
-                          <span className="text-gray-600">£{bill.amount}/mo</span>
+                          <span className="text-gray-600">{currencySymbol}{bill.amount}/mo</span>
                           {bill.included ? (
                             <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100">Included</Badge>
                           ) : (
@@ -671,7 +737,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                             </p>
                           </div>
                           <p className="text-2xl font-semibold text-gray-900">
-                            £{property.price}
+                            {currencySymbol}{property.price}
                           </p>
                         </div>
 
@@ -680,11 +746,11 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                           <div>
                             <p className="font-medium text-amber-700">Excluded Bills (Pay Separately)</p>
                             <p className="text-sm text-gray-500 mt-1">
-                              {bills.filter(b => !b.included).map(b => `${b.name} (£${b.amount})`).join(', ')}
+                              {bills.filter(b => !b.included).map(b => `${b.name} (${currencySymbol}${b.amount})`).join(', ')}
                             </p>
                           </div>
                           <p className="text-2xl font-semibold text-amber-700">
-                            £{bills.filter(b => !b.included).reduce((sum, b) => sum + b.amount, 0)}
+                            {currencySymbol}{bills.filter(b => !b.included).reduce((sum, b) => sum + b.amount, 0)}
                           </p>
                         </div>
 
@@ -696,7 +762,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                           </div>
                           <div className="text-right">
                             <p className="text-3xl font-bold text-primary">
-                              £{property.price + bills.filter(b => !b.included).reduce((sum, b) => sum + b.amount, 0)}
+                              {currencySymbol}{property.price + bills.filter(b => !b.included).reduce((sum, b) => sum + b.amount, 0)}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">per month</p>
                           </div>
@@ -708,7 +774,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                         <div className="flex items-start gap-2 text-sm text-gray-600">
                           <Shield className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                           <p>
-                            <span className="font-medium">Note:</span> Included bills (£{bills.filter(b => b.included).reduce((sum, b) => sum + b.amount, 0)}) are already covered in your base rent. 
+                            <span className="font-medium">Note:</span> Included bills ({currencySymbol}{bills.filter(b => b.included).reduce((sum, b) => sum + b.amount, 0)}) are already covered in your base rent. 
                             You'll need to pay excluded bills separately to utility providers.
                           </p>
                         </div>
@@ -723,15 +789,15 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-4 bg-blue-50 rounded-lg">
                       <p className="text-sm text-gray-600 mb-1">Listed Price</p>
-                      <p className="text-2xl font-semibold text-blue-900">£{property.price}</p>
+                      <p className="text-2xl font-semibold text-blue-900">{currencySymbol}{property.price}</p>
                     </div>
                     <div className="text-center p-4 bg-slate-50 rounded-lg">
                       <p className="text-sm text-gray-600 mb-1">Area Average</p>
-                      <p className="text-2xl font-semibold text-slate-900">£{property.price + 50}</p>
+                      <p className="text-2xl font-semibold text-slate-900">{currencySymbol}{property.price + 50}</p>
                     </div>
                     <div className="text-center p-4 bg-emerald-50 rounded-lg">
                       <p className="text-sm text-gray-600 mb-1">You Save</p>
-                      <p className="text-2xl font-semibold text-emerald-700">£50</p>
+                      <p className="text-2xl font-semibold text-emerald-700">{currencySymbol}50</p>
                     </div>
                   </div>
                 </div>
@@ -922,8 +988,8 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
               <Card className="border-2">
                 <CardContent className="p-6">
                   <div className="mb-6">
-                    <p className="text-3xl font-semibold mb-1">£{property.price}<span className="text-lg text-gray-500 font-normal">/month</span></p>
-                    <p className="text-sm text-gray-600">+ £{property.deposit || (property.price * 1)} security deposit</p>
+                    <p className="text-3xl font-semibold mb-1">{currencySymbol}{property.price}<span className="text-lg text-gray-500 font-normal">/month</span></p>
+                    <p className="text-sm text-gray-600">+ {currencySymbol}{property.deposit || (property.price * 1)} security deposit</p>
                   </div>
 
                   {/* Move in By */}
@@ -1100,11 +1166,11 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="bid">Your Monthly Rent Offer (£)</Label>
-              <Input 
-                id="bid" 
-                type="number" 
-                placeholder={`Listed price: £${property.price}`}
+              <Label htmlFor="bid">Your Monthly Rent Offer ({currencySymbol})</Label>
+              <Input
+                id="bid"
+                type="number"
+                placeholder={`Listed price: ${currencySymbol}${property.price}`}
                 value={bidAmount}
                 onChange={(e) => setBidAmount(e.target.value)}
               />
@@ -1348,11 +1414,11 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
           <div className="space-y-4 py-4">
             <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
               <p className="text-sm text-blue-900">
-                Get instant pre-approval for loans up to £10,000 to cover rent and deposits.
+                Get instant pre-approval for loans up to {currencySymbol}10,000 to cover rent and deposits.
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="amount">Loan Amount (£)</Label>
+              <Label htmlFor="amount">Loan Amount ({currencySymbol})</Label>
               <Input id="amount" type="number" placeholder="Enter amount needed" />
             </div>
             <div className="space-y-2">

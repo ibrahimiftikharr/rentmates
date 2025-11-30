@@ -207,6 +207,14 @@ export function WalletPage() {
       // Connect to backend
       await connectWalletToBackend(address);
       
+      // Update localStorage user object with wallet address
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        user.walletAddress = address;
+        localStorage.setItem('user', JSON.stringify(user));
+      }
+      
       // Get balances
       const balanceData = await getWalletBalance();
       const usdtBalance = await getUSDTBalance(address);

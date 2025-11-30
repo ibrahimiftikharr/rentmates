@@ -1,6 +1,7 @@
 const Student = require('../models/studentModel');
 const User = require('../models/userModel');
 const Property = require('../models/propertyModel');
+const { emitDashboardUpdate } = require('../utils/socketHelpers');
 
 // ========================================
 // GET STUDENT PROFILE
@@ -37,6 +38,7 @@ const getStudentProfile = async (req, res) => {
           course: populatedStudent.course,
           yearOfStudy: populatedStudent.yearOfStudy,
           nationality: populatedStudent.nationality,
+          governmentId: populatedStudent.governmentId,
           dateOfBirth: populatedStudent.dateOfBirth,
           phone: populatedStudent.phone,
           interests: populatedStudent.interests || [],
@@ -63,6 +65,7 @@ const getStudentProfile = async (req, res) => {
         course: student.course,
         yearOfStudy: student.yearOfStudy,
         nationality: student.nationality,
+        governmentId: student.governmentId,
         dateOfBirth: student.dateOfBirth,
         phone: student.phone,
         interests: student.interests || [],
@@ -103,6 +106,7 @@ const updateStudentProfile = async (req, res) => {
     if (updates.course !== undefined) student.course = updates.course;
     if (updates.yearOfStudy !== undefined) student.yearOfStudy = updates.yearOfStudy;
     if (updates.nationality !== undefined) student.nationality = updates.nationality;
+    if (updates.governmentId !== undefined) student.governmentId = updates.governmentId;
     if (updates.dateOfBirth !== undefined) student.dateOfBirth = updates.dateOfBirth;
     if (updates.phone !== undefined) student.phone = updates.phone;
     if (updates.bio !== undefined) student.bio = updates.bio;
@@ -164,6 +168,7 @@ const updateStudentProfile = async (req, res) => {
         course: populatedStudent.course,
         yearOfStudy: populatedStudent.yearOfStudy,
         nationality: populatedStudent.nationality,
+        governmentId: populatedStudent.governmentId,
         dateOfBirth: populatedStudent.dateOfBirth,
         phone: populatedStudent.phone,
         interests: populatedStudent.interests || [],
@@ -338,6 +343,10 @@ const addToWishlist = async (req, res) => {
     student.wishlist.push(propertyId);
     await student.save();
 
+    // Emit dashboard update via Socket.IO
+    const io = req.app.get('io');
+    emitDashboardUpdate(io, userId, 'metrics_updated');
+
     res.status(200).json({
       success: true,
       message: 'Property added to wishlist',
@@ -384,6 +393,10 @@ const removeFromWishlist = async (req, res) => {
     await student.save();
 
     console.log('Wishlist updated successfully');
+
+    // Emit dashboard update via Socket.IO
+    const io = req.app.get('io');
+    emitDashboardUpdate(io, userId, 'metrics_updated');
 
     res.status(200).json({
       success: true,

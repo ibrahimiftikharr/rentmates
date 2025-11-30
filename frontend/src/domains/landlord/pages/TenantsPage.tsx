@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search,
   MapPin,
@@ -10,13 +10,16 @@ import {
   ChevronUp,
   X,
   Check,
-  History
+  History,
+  Loader2
 } from 'lucide-react';
 import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
+import { getLandlordTenants } from '@/shared/services/joinRequestService';
+import { toast } from 'sonner';
 
 interface ActionHistory {
   action: string;
@@ -163,13 +166,31 @@ const MOCK_TENANTS: Tenant[] = [
 ];
 
 export function TenantsPage() {
-  const [tenants, setTenants] = useState<Tenant[]>(MOCK_TENANTS);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedTenant, setExpandedTenant] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<'history' | null>(null);
   const [showTerminateModal, setShowTerminateModal] = useState<string | null>(null);
   const [showToast, setShowToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTenants();
+  }, []);
+
+  const fetchTenants = async () => {
+    try {
+      setLoading(true);
+      const response = await getLandlordTenants();
+      setTenants(response.tenants);
+    } catch (error: any) {
+      console.error('Failed to fetch tenants:', error);
+      toast.error(error.error || 'Failed to load tenants');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -227,8 +248,17 @@ export function TenantsPage() {
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-[#8C57FF]" />
+            <p className="text-muted-foreground">Loading tenants...</p>
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Header */}
-      <div className="mb-6 sm:mb-8">
+      <div className="mb-6 md:mb-8">
         <h1 className="text-[#4A4A68] mb-2 text-xl sm:text-2xl">Tenant Management</h1>
         <p className="text-muted-foreground text-sm sm:text-base">Manage all active tenants and contract details</p>
       </div>
@@ -493,6 +523,8 @@ export function TenantsPage() {
           )}
           {showToast.message}
         </div>
+      )}
+      </>
       )}
     </div>
   );

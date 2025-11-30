@@ -1,0 +1,327 @@
+import { useState } from 'react';
+import { ChevronLeft, FileSignature, Wallet, Check } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Card } from '../ui/card';
+import { Checkbox } from '../ui/checkbox';
+
+interface SignContractPageProps {
+  requestId: string;
+  onNavigate: (page: string) => void;
+  onContractSigned: (requestId: string, contractId: string) => void;
+}
+
+// Mock contract data - would be fetched based on requestId
+const MOCK_CONTRACT = {
+  propertyName: 'Modern Student Apartment',
+  propertyAddress: '123 University Ave, Boston, MA',
+  landlordName: 'John Smith',
+  landlordId: '3410625622826',
+  tenantName: 'Sara Johns',
+  tenantId: '3410625622826',
+  requestDate: '2025-11-01',
+  monthlyRent: '1200',
+  dueDate: '8th',
+  paymentDelayDays: '5',
+  finalDueDate: '13th',
+  securityDeposit: '1200',
+  depositPaymentDeadline: '7',
+  firstRentPaymentDelay: '3',
+  leaseDuration: '12',
+  contractStartDate: '2025-12-01',
+  contractEndDate: '2026-11-30',
+  moveInDate: '2025-12-01',
+  earlyTerminationNoticeDays: '60',
+  depositVerificationDays: '7',
+  inspectionNoticeDays: '24'
+};
+
+export function SignContractPage({ requestId, onNavigate, onContractSigned }: SignContractPageProps) {
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+
+  const handleSignContract = () => {
+    if (!termsAccepted) {
+      return;
+    }
+    setShowWalletModal(true);
+  };
+
+  const handleWalletConfirm = () => {
+    setIsSigning(true);
+    
+    // Simulate blockchain transaction
+    setTimeout(() => {
+      const contractId = 'CONTRACT-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+      setIsSigning(false);
+      setShowWalletModal(false);
+      
+      // Call the callback to update the request status
+      onContractSigned(requestId, contractId);
+      
+      // Show success and redirect
+      setTimeout(() => {
+        onNavigate('join-requests');
+      }, 1500);
+    }, 2000);
+  };
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+      {/* Back Button */}
+      <button
+        onClick={() => onNavigate('join-requests')}
+        className="flex items-center text-muted-foreground hover:text-[#8C57FF] mb-6 transition-colors"
+      >
+        <ChevronLeft className="h-4 w-4 mr-1" />
+        Back to Join Requests
+      </button>
+
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <FileSignature className="h-8 w-8 text-[#8C57FF]" />
+          <h1 className="text-[#4A4A68]">Sign Rental Contract</h1>
+        </div>
+        <p className="text-muted-foreground">
+          Review and Sign the Smart Contract
+        </p>
+      </div>
+
+      {/* Contract Details Section */}
+      <Card className="p-6 mb-6 shadow-lg">
+        <h2 className="text-[#8C57FF] mb-4">Contract Details</h2>
+        <div className="space-y-2 text-sm text-[#4A4A68]">
+          <p><span className="text-[#8C57FF]">Property:</span> {MOCK_CONTRACT.propertyName}</p>
+          <p><span className="text-[#8C57FF]">Address:</span> {MOCK_CONTRACT.propertyAddress}</p>
+          <p className="pt-2"><span className="text-[#8C57FF]">Landlord:</span> {MOCK_CONTRACT.landlordName} — Government Issued ID: {MOCK_CONTRACT.landlordId}</p>
+          <p><span className="text-[#8C57FF]">Tenant:</span> {MOCK_CONTRACT.tenantName} — Government Issued ID: {MOCK_CONTRACT.tenantId}</p>
+          <p className="pt-2">
+            <span className="text-[#8C57FF]">Request Date:</span> {new Date(MOCK_CONTRACT.requestDate).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric'
+            })}
+          </p>
+          <p><span className="text-[#8C57FF]">Monthly Rent:</span> ${MOCK_CONTRACT.monthlyRent}</p>
+          <p><span className="text-[#8C57FF]">Due Date:</span> 1st of each month</p>
+          <p className="pt-2"><span className="text-[#8C57FF]">Security Deposit:</span> ${MOCK_CONTRACT.securityDeposit}</p>
+          <p><span className="text-[#8C57FF]">Deposit Type:</span> Held securely in blockchain escrow</p>
+          <p className="pt-2"><span className="text-[#8C57FF]">Lease Duration:</span> {MOCK_CONTRACT.leaseDuration} months</p>
+          <p><span className="text-[#8C57FF]">Contract Period:</span> Dec 1, 2025 – Nov 30, 2026</p>
+          <p><span className="text-[#8C57FF]">Move-in Date:</span> Dec 1, 2025</p>
+        </div>
+      </Card>
+
+      {/* Terms and Conditions - Scrollable Container */}
+      <Card className="p-6 mb-6 shadow-lg">
+        <div className="max-h-[500px] overflow-y-auto border rounded-lg p-6 bg-[#F4F5FA]/30">
+          <div className="space-y-6 text-sm text-[#4A4A68]">
+
+            {/* Terms and Conditions Section */}
+            <div>
+              <h3 className="text-[#8C57FF] mb-4">Terms and Conditions</h3>
+              <div className="space-y-4">
+                
+                <div>
+                  <p className="mb-2"><strong>1️⃣ Rent Payments</strong></p>
+                  <p className="mb-1">The tenant agrees to pay the monthly rent of $1200 on the 8th day of each month via the platform's blockchain payment system.</p>
+                  <p className="mb-1">A maximum payment delay of 5 days is allowed (i.e., the 13th day is the final due date).</p>
+                  <p>All rents are paid in advance for every month.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>2️⃣ Security Deposit Escrow</strong></p>
+                  <p className="mb-1">A security deposit of $1200 is required and will be held in an on-chain escrow smart contract for the entire lease period.</p>
+                  <p>Funds remain locked and non-withdrawable by either party until the lease ends or a verified termination event occurs.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>3️⃣ Lease Commencement</strong></p>
+                  <p className="mb-1">The lease term begins on Dec 1, 2025.</p>
+                  <p className="mb-1">The tenant must pay the security deposit within 7 days after both parties have signed this contract.</p>
+                  <p>The tenant must then pay the first month's rent after 3 days of moving in (to protect the tenant from fraudulent property description).</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>4️⃣ Tenant Responsibilities</strong></p>
+                  <p>The tenant shall maintain the property in good condition and promptly report any damages or maintenance issues via the platform.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>5️⃣ Landlord Responsibilities</strong></p>
+                  <p className="mb-1">The landlord must ensure the property condition and listing details are accurate at move-in.</p>
+                  <p>If fraudulent or misrepresented conditions are found, the tenant may cancel before or within 3 days of move-in and claim a full refund of the security deposit.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>6️⃣ Lease Termination and Deposit Refund</strong></p>
+                  <div className="space-y-2 pl-4">
+                    <div>
+                      <p className="mb-1">• <strong>Normal Completion:</strong></p>
+                      <p className="pl-4 mb-1">After the lease ends, the security deposit remains locked for up to 7 days for verification.</p>
+                      <p className="pl-8 mb-1">o If landlord marks "Okay" → Immediate refund.</p>
+                      <p className="pl-8">o If no response in 7 days → Auto-refund in full.</p>
+                    </div>
+                    <div>
+                      <p className="mb-1">• <strong>Early Termination:</strong></p>
+                      <p className="pl-4 mb-1">Either party may terminate early with 60 days' notice.</p>
+                      <p className="pl-4">Deposit remains in 60-day hold for dispute resolution.</p>
+                    </div>
+                    <div>
+                      <p className="mb-1">• <strong>Student Withdrawal Before Move-in:</strong></p>
+                      <p className="pl-4 mb-1">In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.</p>
+                      <p className="pl-8 mb-1">o If rent not paid → Full refund.</p>
+                      <p className="pl-8">o If rent paid → Funds held 60 days before resolution and refund.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>7️⃣ Inspections & Utilities</strong></p>
+                  <p className="mb-1">The landlord may request an inspection with 24-hour prior notice.</p>
+                  <p>Utility and maintenance terms follow the original listing.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>8️⃣ Dispute Resolution</strong></p>
+                  <p>All conflicts are resolved through the platform's blockchain arbitration mechanism with neutral mediation.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>9️⃣ Smart Contract Finality</strong></p>
+                  <p className="mb-1">Once both parties digitally sign, the smart contract becomes immutable and fully enforceable.</p>
+                  <p>All actions — deposits, payments, terminations, and refunds — are recorded transparently on-chain.</p>
+                </div>
+
+                <div>
+                  <p className="mb-2"><strong>🔟 Legal Binding</strong></p>
+                  <p>Both parties acknowledge this is a legally binding blockchain-registered agreement under applicable rental and digital contract laws.</p>
+                </div>
+
+              </div>
+            </div>
+
+            <div className="border-t pt-4"></div>
+
+            {/* Blockchain Smart Contract Summary */}
+            <div>
+              <h3 className="text-[#8C57FF] mb-3">Blockchain Smart Contract</h3>
+              <p className="mb-1">• All funds and events recorded immutably on the blockchain.</p>
+              <p className="mb-1">• Once signed, contract terms cannot be changed.</p>
+              <p>• Every deposit, payment, and refund is publicly verifiable.</p>
+            </div>
+
+            <div className="border-t pt-4"></div>
+
+            {/* Secure & Transparent */}
+            <div className="p-4 bg-[#8C57FF]/10 border border-[#8C57FF]/20 rounded-lg">
+              <h3 className="text-[#8C57FF] mb-3">Secure & Transparent</h3>
+              <p className="mb-2">By proceeding, I confirm that I have read and understood all terms and conditions.</p>
+              <p>I agree to be bound by this blockchain-registered smart contract.</p>
+            </div>
+
+          </div>
+        </div>
+      </Card>
+
+      {/* Signature Section */}
+      <Card className="p-6 shadow-lg">
+        <h2 className="text-[#8C57FF] mb-6">Digital Signature</h2>
+        
+        <div className="space-y-6">
+          <div className="flex items-start space-x-3">
+            <Checkbox
+              id="terms"
+              checked={termsAccepted}
+              onCheckedChange={(checked) => setTermsAccepted(checked as boolean)}
+              className="mt-1"
+            />
+            <label
+              htmlFor="terms"
+              className="text-sm text-[#4A4A68] cursor-pointer leading-relaxed"
+            >
+              I have read and agree to all terms and conditions outlined in this rental agreement. 
+              I understand that this contract will be recorded on the blockchain and cannot be modified after signing.
+            </label>
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => onNavigate('join-requests')}
+              className="flex-1"
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <Button
+              onClick={handleSignContract}
+              disabled={!termsAccepted}
+              className="flex-1 bg-[#8C57FF] hover:bg-[#7645E8] disabled:opacity-50"
+            >
+              <Wallet className="h-4 w-4 mr-2" />
+              Sign Contract with Wallet
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Wallet Connection Modal */}
+      {showWalletModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="p-6 max-w-md w-full">
+            <div className="text-center">
+              <div className="flex justify-center mb-4">
+                <div className="p-4 bg-[#8C57FF]/10 rounded-full">
+                  <Wallet className="h-12 w-12 text-[#8C57FF]" />
+                </div>
+              </div>
+              
+              <h3 className="text-[#4A4A68] mb-2">
+                {isSigning ? 'Processing Transaction...' : 'Blockchain Signing Fee Notice'}
+              </h3>
+              
+              <p className="text-muted-foreground mb-6">
+                {isSigning 
+                  ? 'Please wait while your contract is being deployed to the blockchain...'
+                  : 'A $3 gas fee will be automatically deducted from your connected wallet to complete this on-chain signing process.'
+                }
+              </p>
+
+              {isSigning ? (
+                <div className="flex justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#8C57FF]"></div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowWalletModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 bg-[#8C57FF] hover:bg-[#7645E8]"
+                    onClick={handleWalletConfirm}
+                  >
+                    Confirm & Sign
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Success Toast */}
+      {isSigning && (
+        <div className="fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 bg-[#8C57FF] text-white">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          Deploying contract to blockchain...
+        </div>
+      )}
+    </div>
+  );
+}
