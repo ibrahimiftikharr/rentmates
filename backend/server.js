@@ -15,6 +15,7 @@ const messageRouter = require('./routes/messageRoutes.js');
 const walletRouter = require('./routes/walletRoutes.js');
 const joinRequestRouter = require('./routes/joinRequestRoutes.js');
 const studentDashboardRouter = require('./routes/studentDashboardRoutes.js');
+const { initRentNotificationScheduler } = require('./services/rentNotificationScheduler.js');
 
 // Load environment variables
 dotenv.config();
@@ -92,7 +93,12 @@ app.use(express.json()); // Parse JSON request bodies
 // DATABASE CONNECTION
 // ========================================
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('✓ MongoDB is connected successfully'))
+  .then(() => {
+    console.log('✓ MongoDB is connected successfully');
+    
+    // Initialize rent notification scheduler after DB connection
+    initRentNotificationScheduler(io);
+  })
   .catch((err) => console.error('✗ MongoDB connection error:', err));
 
 // ========================================

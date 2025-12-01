@@ -1,7 +1,10 @@
 const User = require('../models/userModel');
 const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
+const Rental = require('../models/rentalModel');
+const Transaction = require('../models/transactionModel');
 const { getUSDTBalance, withdrawFromVault, getVaultBalance } = require('../services/contractService');
+const { sendEmail } = require('../services/emailService');
 
 /**
  * Connect wallet - Store user's MetaMask wallet address
@@ -147,6 +150,17 @@ exports.recordDeposit = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Create transaction record
+    await Transaction.create({
+      user: userId,
+      type: 'deposit',
+      amount: parseFloat(amount),
+      status: 'completed',
+      txHash: txHash,
+      balanceAfter: user.offChainBalance,
+      description: `Deposited ${amount} USDT to wallet`
+    });
+
     console.log(`Deposit recorded: ${amount} USDT for user ${user.email} (tx: ${txHash})`);
 
     res.json({
@@ -198,6 +212,17 @@ exports.withdraw = async (req, res) => {
     user.offChainBalance -= parseFloat(amount);
     await user.save();
 
+    // Create transaction record
+    await Transaction.create({
+      user: userId,
+      type: 'withdraw',
+      amount: parseFloat(amount),
+      status: 'completed',
+      txHash: txHash,
+      balanceAfter: user.offChainBalance,
+      description: `Withdrew ${amount} USDT to wallet`
+    });
+
     console.log(`Withdrawal successful: ${amount} USDT to ${user.walletAddress} (tx: ${txHash})`);
 
     res.json({
@@ -220,36 +245,24 @@ exports.withdraw = async (req, res) => {
  */
 exports.payRent = async (req, res) => {
   try {
-    const { landlordId, amount } = req.body;
     const studentId = req.user.id;
 
-    // Validate inputs
-    if (!landlordId) {
-      return res.status(400).json({ error: 'Landlord ID is required' });
+    // Find the student's active rental
+    const rental = await Rental.findOne({
+      student: studentId,
+      status: { $in: ['registered', 'active'] }
+    })
+    .populate('student', 'name email offChainBalance')
+    .populate('landlord', 'name email offChainBalance')
+    .populate('property', 'title address');
+
+    if (!rental) {
+      return res.status(404).json({ error: 'No active rental found' });
     }
 
-    // For now, use hardcoded amount of 2 USDT if not provided
-    const rentAmount = amount || 2;
-
-    if (rentAmount <= 0) {
-      return res.status(400).json({ error: 'Invalid rent amount' });
-    }
-
-    // Get student and landlord
-    const student = await User.findById(studentId);
-    const landlord = await User.findById(landlordId);
-
-    if (!student || !landlord) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    if (student.role !== 'student') {
-      return res.status(403).json({ error: 'Only students can pay rent' });
-    }
-
-    if (landlord.role !== 'landlord') {
-      return res.status(400).json({ error: 'Invalid landlord' });
-    }
+    const rentAmount = rental.monthlyRentAmount;
+    const student = rental.student;
+    const landlord = rental.landlord;
 
     // Check if student has sufficient balance
     if (student.offChainBalance < rentAmount) {
@@ -267,6 +280,93 @@ exports.payRent = async (req, res) => {
     await student.save();
     await landlord.save();
 
+    // Create transaction records for both parties
+    const studentTransaction = await Transaction.create({
+      user: student._id,
+      type: 'rent_payment',
+      amount: rentAmount,
+      status: 'completed',
+      rental: rental._id,
+      relatedUser: landlord._id,
+      balanceAfter: student.offChainBalance,
+      description: `Rent payment for ${rental.propertyInfo.title}`
+    });
+
+    await Transaction.create({
+      user: landlord._id,
+      type: 'rent_received',
+      amount: rentAmount,
+      status: 'completed',
+      rental: rental._id,
+      relatedUser: student._id,
+      balanceAfter: landlord.offChainBalance,
+      description: `Rent received from ${student.name} for ${rental.propertyInfo.title}`
+    });
+
+    // Add to rental payment history
+    rental.payments.push({
+      amount: rentAmount,
+      type: 'rent',
+      paidAt: new Date(),
+      status: 'paid'
+    });
+
+    // Add to rental action history
+    rental.actionHistory.push({
+      action: 'Rent Paid',
+      amount: `$${rentAmount}`,
+      date: new Date(),
+      notes: `Monthly rent payment for ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+    });
+
+    await rental.save();
+
+    // Send email notification to landlord
+    try {
+      await sendEmail(
+        landlord.email,
+        'Rent Payment Received',
+        `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #8C57FF;">Rent Payment Received</h2>
+            <p>Dear ${landlord.name},</p>
+            <p>You have received a rent payment from your tenant.</p>
+            
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #333;">Payment Details:</h3>
+              <p style="margin: 10px 0;"><strong>Tenant:</strong> ${student.name}</p>
+              <p style="margin: 10px 0;"><strong>Property:</strong> ${rental.propertyInfo.title}</p>
+              <p style="margin: 10px 0;"><strong>Address:</strong> ${rental.propertyInfo.address}</p>
+              <p style="margin: 10px 0;"><strong>Amount:</strong> $${rentAmount} USDT</p>
+              <p style="margin: 10px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              <p style="margin: 10px 0;"><strong>New Balance:</strong> $${landlord.offChainBalance} USDT</p>
+            </div>
+
+            <p>The payment has been credited to your wallet balance.</p>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+              <p style="color: #666; font-size: 12px;">This is an automated notification from RentMates. Please do not reply to this email.</p>
+            </div>
+          </div>
+        `
+      );
+    } catch (emailError) {
+      console.error('Error sending rent payment email:', emailError);
+    }
+
+    // Send in-app notification to landlord via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`landlord_${landlord._id}`).emit('new_notification', {
+        type: 'rent_received',
+        title: 'Rent Payment Received',
+        message: `${student.name} paid rent of $${rentAmount} USDT for ${rental.propertyInfo.title}`,
+        rentalId: rental._id,
+        amount: rentAmount,
+        transactionId: studentTransaction._id
+      });
+    }
+
     console.log(`Rent paid: ${rentAmount} USDT from ${student.email} to ${landlord.email}`);
 
     res.json({
@@ -274,11 +374,13 @@ exports.payRent = async (req, res) => {
       message: 'Rent paid successfully',
       amount: rentAmount,
       newBalance: student.offChainBalance,
-      landlordEmail: landlord.email
+      landlordName: landlord.name,
+      propertyTitle: rental.propertyInfo.title,
+      transactionId: studentTransaction._id
     });
   } catch (error) {
     console.error('Pay rent error:', error);
-    res.status(500).json({ error: 'Failed to pay rent' });
+    res.status(500).json({ error: 'Failed to pay rent', details: error.message });
   }
 };
 
@@ -298,5 +400,118 @@ exports.getVaultInfo = async (req, res) => {
   } catch (error) {
     console.error('Get vault info error:', error);
     res.status(500).json({ error: 'Failed to fetch vault info' });
+  }
+};
+
+/**
+ * Get transaction history with filtering
+ */
+exports.getTransactionHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { type, fromDate, toDate, page = 1, limit = 20 } = req.query;
+
+    // Build query
+    const query = { user: userId };
+
+    if (type && type !== 'all') {
+      query.type = type;
+    }
+
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) {
+        query.createdAt.$gte = new Date(fromDate);
+      }
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999); // Include the entire end date
+        query.createdAt.$lte = endDate;
+      }
+    }
+
+    // Pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Fetch transactions
+    const transactions = await Transaction.find(query)
+      .populate('relatedUser', 'name email')
+      .populate('rental', 'propertyInfo')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+
+    // Get total count for pagination
+    const total = await Transaction.countDocuments(query);
+
+    res.json({
+      success: true,
+      transactions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get transaction history error:', error);
+    res.status(500).json({ error: 'Failed to fetch transaction history' });
+  }
+};
+
+/**
+ * Get student's active rental info for wallet page
+ */
+exports.getStudentRentalInfo = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    // Find the student's active rental
+    const rental = await Rental.findOne({
+      student: studentId,
+      status: { $in: ['registered', 'active'] }
+    })
+    .populate('landlord', 'name email phone')
+    .populate('property', 'title address city images');
+
+    if (!rental) {
+      return res.json({
+        success: true,
+        hasActiveRental: false,
+        rental: null
+      });
+    }
+
+    // Calculate next rent due date
+    const nextDueDate = rental.getNextRentDueDate();
+    const now = new Date();
+    const daysUntilDue = Math.ceil((nextDueDate - now) / (1000 * 60 * 60 * 24));
+
+    res.json({
+      success: true,
+      hasActiveRental: true,
+      rental: {
+        rentalId: rental._id,
+        propertyTitle: rental.propertyInfo.title,
+        propertyAddress: rental.propertyInfo.address,
+        monthlyRent: rental.monthlyRentAmount,
+        rentDueDay: rental.monthlyRentDueDate,
+        nextDueDate: nextDueDate,
+        daysUntilDue: daysUntilDue,
+        landlord: {
+          id: rental.landlord._id,
+          name: rental.landlord.name,
+          email: rental.landlord.email,
+          phone: rental.landlord.phone
+        },
+        leaseStartDate: rental.leaseStartDate,
+        leaseEndDate: rental.leaseEndDate,
+        status: rental.status
+      }
+    });
+  } catch (error) {
+    console.error('Get student rental info error:', error);
+    res.status(500).json({ error: 'Failed to fetch rental information' });
   }
 };

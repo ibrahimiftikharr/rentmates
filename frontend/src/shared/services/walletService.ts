@@ -331,19 +331,69 @@ export const withdrawFromVault = async (amount: string) => {
 /**
  * Pay rent (off-chain transfer)
  */
-export const payRent = async (landlordId: string, amount?: number) => {
+export const payRent = async () => {
   const response = await fetch(`${API_URL}/wallet/pay-rent`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${getAuthToken()}`
-    },
-    body: JSON.stringify({ landlordId, amount })
+    }
   });
 
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Failed to pay rent');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Get transaction history with filtering
+ */
+export const getTransactionHistory = async (filters?: {
+  type?: string;
+  fromDate?: string;
+  toDate?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const params = new URLSearchParams();
+  if (filters?.type) params.append('type', filters.type);
+  if (filters?.fromDate) params.append('fromDate', filters.fromDate);
+  if (filters?.toDate) params.append('toDate', filters.toDate);
+  if (filters?.page) params.append('page', filters.page.toString());
+  if (filters?.limit) params.append('limit', filters.limit.toString());
+
+  const response = await fetch(`${API_URL}/wallet/transactions?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${getAuthToken()}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch transaction history');
+  }
+
+  return await response.json();
+};
+
+/**
+ * Get student's active rental info
+ */
+export const getStudentRentalInfo = async () => {
+  const response = await fetch(`${API_URL}/wallet/rental-info`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${getAuthToken()}`
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch rental info');
   }
 
   return await response.json();

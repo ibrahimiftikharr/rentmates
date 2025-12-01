@@ -21,6 +21,12 @@ router.post('/withdraw', walletController.withdraw);
 // POST /api/wallet/pay-rent - Pay rent (off-chain transfer from student to landlord)
 router.post('/pay-rent', walletController.payRent);
 
+// GET /api/wallet/transactions - Get transaction history with filtering
+router.get('/transactions', walletController.getTransactionHistory);
+
+// GET /api/wallet/rental-info - Get student's active rental information
+router.get('/rental-info', walletController.getStudentRentalInfo);
+
 // GET /api/wallet/vault-info - Get vault contract information
 router.get('/vault-info', walletController.getVaultInfo);
 

@@ -28,16 +28,28 @@ import {
   recordDeposit,
   getWalletBalance,
   connectWalletToBackend,
-  withdrawFromVault
+  withdrawFromVault,
+  getTransactionHistory
 } from '../../../shared/services/walletService';
 
 interface Transaction {
-  id: string;
-  date: string;
-  type: 'deposit' | 'rent' | 'refund' | 'withdrawal' | 'termination_fee';
-  amount: string;
+  _id: string;
+  type: 'deposit' | 'withdraw' | 'rent_payment' | 'rent_received';
+  amount: number;
   status: 'completed' | 'pending' | 'failed';
-  description: string;
+  createdAt: string;
+  description?: string;
+  txHash?: string;
+  relatedUser?: {
+    name: string;
+    email: string;
+  };
+  rental?: {
+    propertyInfo: {
+      title: string;
+      address: string;
+    };
+  };
 }
 
 // Mock transaction data (kept as-is)
@@ -103,7 +115,8 @@ const MOCK_TRANSACTIONS: Transaction[] = [
 export function WalletPage() {
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
-  const [transactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [typeFilter, setTypeFilter] = useState('all');
   const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
@@ -121,6 +134,41 @@ export function WalletPage() {
   const network = 'Polygon Amoy Testnet';
   const totalEarnings = '4800.00'; // Mock data
 
+  // Load transactions
+  const loadTransactions = async () => {
+    setIsLoadingTransactions(true);
+    try {
+      const filters: any = {};
+      
+      if (typeFilter && typeFilter !== 'all') {
+        filters.type = typeFilter;
+      }
+      
+      if (fromDate) {
+        filters.fromDate = fromDate.toISOString();
+      }
+      
+      if (toDate) {
+        filters.toDate = toDate.toISOString();
+      }
+
+      const response = await getTransactionHistory(filters);
+      setTransactions(response.transactions || []);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+      setShowToast({ message: 'Failed to load transaction history', type: 'error' });
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
+
+  // Reload transactions when filters change
+  useEffect(() => {
+    if (isConnected) {
+      loadTransactions();
+    }
+  }, [typeFilter, fromDate, toDate, isConnected]);
+
   // Load wallet state on mount
   useEffect(() => {
     const loadWalletState = async () => {
@@ -134,6 +182,9 @@ export function WalletPage() {
           setWalletAddress(balanceData.walletAddress);
           setBalance(balanceData.offChainBalance.toString());
           setOnChainBalance(balanceData.onChainBalance);
+          
+          // Load transactions after wallet is connected
+          loadTransactions();
         }
       } catch (error) {
         console.error('Error loading wallet state:', error);
@@ -160,38 +211,19 @@ export function WalletPage() {
     switch (type) {
       case 'deposit':
         return 'Deposit';
-      case 'rent':
-        return 'Rent Received';
-      case 'refund':
-        return 'Refund';
-      case 'withdrawal':
+      case 'withdraw':
         return 'Withdrawal';
-      case 'termination_fee':
-        return 'Termination Fee';
+      case 'rent_payment':
+        return 'Rent Payment';
+      case 'rent_received':
+        return 'Rent Received';
       default:
         return type;
     }
   };
 
-  const filteredTransactions = transactions.filter(tx => {
-    // Filter by type
-    const matchesType = typeFilter === 'all' || tx.type === typeFilter;
-    
-    // Filter by date range
-    let matchesDate = true;
-    if (fromDate || toDate) {
-      const txDate = new Date(tx.date);
-      if (fromDate && toDate) {
-        matchesDate = txDate >= fromDate && txDate <= toDate;
-      } else if (fromDate) {
-        matchesDate = txDate >= fromDate;
-      } else if (toDate) {
-        matchesDate = txDate <= toDate;
-      }
-    }
-    
-    return matchesType && matchesDate;
-  });
+  // Filter transactions - now done by backend
+  const filteredTransactions = transactions;
 
   const clearDateRange = () => {
     setFromDate(undefined);
@@ -261,6 +293,9 @@ export function WalletPage() {
       setShowDepositModal(false);
       setDepositAmount('');
       showSuccessToast('✅ Deposit initiated successfully!');
+      
+      // Reload transactions
+      loadTransactions();
     } catch (error: any) {
       console.error('Deposit error:', error);
       showErrorToast(error.message || 'Deposit failed');
@@ -292,6 +327,9 @@ export function WalletPage() {
       setShowWithdrawModal(false);
       setWithdrawAmount('');
       showSuccessToast('✅ Withdrawal request submitted!');
+      
+      // Reload transactions
+      loadTransactions();
     } catch (error: any) {
       console.error('Withdraw error:', error);
       showErrorToast(error.message || 'Withdrawal failed');
@@ -488,10 +526,9 @@ export function WalletPage() {
             <SelectContent>
               <SelectItem value="all">All Transactions</SelectItem>
               <SelectItem value="deposit">Deposit</SelectItem>
-              <SelectItem value="rent">Rent Received</SelectItem>
-              <SelectItem value="refund">Refund</SelectItem>
-              <SelectItem value="withdrawal">Withdrawal</SelectItem>
-              <SelectItem value="termination_fee">Termination Fee</SelectItem>
+              <SelectItem value="withdraw">Withdrawal</SelectItem>
+              <SelectItem value="rent_received">Rent Received</SelectItem>
+              <SelectItem value="rent_payment">Rent Payment</SelectItem>
             </SelectContent>
           </Select>
 
@@ -574,7 +611,13 @@ export function WalletPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.length === 0 ? (
+                {isLoadingTransactions ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
+                      Loading transactions...
+                    </td>
+                  </tr>
+                ) : filteredTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
                       No transactions found
@@ -582,9 +625,9 @@ export function WalletPage() {
                   </tr>
                 ) : (
                   filteredTransactions.map((transaction) => (
-                    <tr key={transaction.id} className="border-b hover:bg-[#F4F5FA]/30 transition-colors">
+                    <tr key={transaction._id} className="border-b hover:bg-[#F4F5FA]/30 transition-colors">
                       <td className="py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#4A4A68] whitespace-nowrap">
-                        {new Date(transaction.date).toLocaleDateString('en-US', {
+                        {new Date(transaction.createdAt).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                           year: 'numeric'
@@ -594,15 +637,15 @@ export function WalletPage() {
                         {getTypeLabel(transaction.type)}
                       </td>
                       <td className="py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-muted-foreground">
-                        {transaction.description}
+                        {transaction.description || (transaction.rental?.propertyInfo?.title ? `Transaction for ${transaction.rental.propertyInfo.title}` : 'No description')}
                       </td>
                       <td className={`py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-right whitespace-nowrap ${
-                        transaction.type === 'deposit' || transaction.type === 'rent' 
+                        transaction.type === 'deposit' || transaction.type === 'rent_received' 
                           ? 'text-green-600' 
                           : 'text-red-600'
                       }`}>
-                        {transaction.type === 'deposit' || transaction.type === 'rent' ? '+' : '-'}
-                        ${transaction.amount}
+                        {transaction.type === 'deposit' || transaction.type === 'rent_received' ? '+' : '-'}
+                        ${transaction.amount.toFixed(2)}
                       </td>
                       <td className="py-3 md:py-4 px-3 md:px-6 text-center">
                         {getStatusBadge(transaction.status)}

@@ -128,5 +128,31 @@ rentalSchema.index({ landlord: 1, status: 1 });
 rentalSchema.index({ property: 1 });
 rentalSchema.index({ monthlyRentDueDate: 1 });
 
+// Calculate next rent due date
+rentalSchema.methods.getNextRentDueDate = function() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const dueDay = this.monthlyRentDueDate;
+
+  // Create date for this month's due date
+  let nextDueDate = new Date(currentYear, currentMonth, dueDay);
+
+  // If this month's due date has passed, move to next month
+  if (nextDueDate <= now) {
+    nextDueDate = new Date(currentYear, currentMonth + 1, dueDay);
+  }
+
+  return nextDueDate;
+};
+
+// Check if rent is due within specified days
+rentalSchema.methods.isRentDueWithinDays = function(days) {
+  const nextDue = this.getNextRentDueDate();
+  const now = new Date();
+  const daysUntilDue = Math.ceil((nextDue - now) / (1000 * 60 * 60 * 24));
+  return daysUntilDue <= days && daysUntilDue >= 0;
+};
+
 const Rental = mongoose.model('Rental', rentalSchema);
 module.exports = Rental;
