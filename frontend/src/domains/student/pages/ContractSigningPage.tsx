@@ -264,7 +264,7 @@ export function ContractSigningPage({ request, onBack, onContractSigned }: Contr
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2 text-primary">Rent Payments</h3>
                     <p className="text-muted-foreground">
-                      The tenant agrees to pay the monthly rent of <span className="font-semibold">{formatCurrency(contractData.rentAmount, contractData.currency)}</span> on the <span className="font-semibold">{contractData.rentDueDay}{getDaySuffix(contractData.rentDueDay)} day of each month</span> via the platform's blockchain payment system.
+                      The tenant agrees to pay the monthly rent of <span className="font-semibold">${contractData.monthlyRent}</span> on the <span className="font-semibold">{contractData.rentDueDay}{getDaySuffix(contractData.rentDueDay)} day of each month</span> via the platform's blockchain payment system.
                     </p>
                     <p className="text-muted-foreground mt-2">
                       All rents are paid in advance for every month.
