@@ -1,4 +1,5 @@
 const User = require('../models/userModel');
+const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
 const { getUSDTBalance, withdrawFromVault, getVaultBalance } = require('../services/contractService');
 
@@ -32,13 +33,36 @@ exports.connectWallet = async (req, res) => {
 
     console.log('✓ Wallet connected for user:', userId);
 
+    // Update reputation score based on user role
+    let reputationScore = null;
+    
+    // Check if user is a student
+    const student = await Student.findOne({ user: userId });
+    if (student) {
+      student.walletLinked = true;
+      await student.save(); // This will trigger pre-save hook to recalculate reputation
+      
+      reputationScore = student.reputationScore;
+      console.log('✓ Student reputation updated:', reputationScore);
+      
+      // Emit Socket.IO event for real-time reputation update
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`student_${userId}`).emit('reputation_updated', {
+          reputationScore: student.reputationScore,
+          walletConnected: true
+        });
+      }
+    }
+
     // If user is a landlord, recalculate reputation score
     const landlord = await Landlord.findOne({ user: userId });
     if (landlord) {
       await landlord.calculateReputationScore();
       await landlord.save();
       
-      console.log('✓ Landlord reputation updated:', landlord.reputationScore);
+      reputationScore = landlord.reputationScore;
+      console.log('✓ Landlord reputation updated:', reputationScore);
       
       // Emit Socket.IO event for real-time reputation update
       const io = req.app.get('io');
@@ -55,7 +79,7 @@ exports.connectWallet = async (req, res) => {
       message: 'Wallet connected successfully',
       walletAddress: user.walletAddress,
       offChainBalance: user.offChainBalance,
-      reputationScore: landlord?.reputationScore
+      reputationScore
     });
   } catch (error) {
     console.error('Connect wallet error:', error);

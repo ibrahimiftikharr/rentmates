@@ -11,14 +11,22 @@ exports.getDashboardMetrics = async (req, res) => {
   try {
     const userId = req.user.id;
     console.log('Fetching dashboard metrics for user:', userId);
+    console.log('User object from JWT:', req.user);
 
     // Find student document
-    const student = await Student.findOne({ user: userId });
+    let student = await Student.findOne({ user: userId });
+    console.log('Student found:', student ? student._id : 'null');
+    
+    // If student profile doesn't exist, create it
     if (!student) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Student profile not found' 
+      console.log('Student profile not found, creating one for user:', userId);
+      student = new Student({
+        user: userId,
+        reputationScore: 0,
+        wishlist: []
       });
+      await student.save();
+      console.log('Student profile created successfully:', student._id);
     }
 
     // Run all queries in parallel for better performance

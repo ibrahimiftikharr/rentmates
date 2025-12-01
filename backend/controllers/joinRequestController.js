@@ -288,9 +288,26 @@ exports.getLandlordJoinRequests = async (req, res) => {
       .populate('student', 'name email') // student refs User, so this populates User directly
       .sort({ createdAt: -1 });
 
+    // Populate additional student details
+    const enrichedRequests = await Promise.all(
+      joinRequests.map(async (request) => {
+        const studentProfile = await Student.findOne({ user: request.student._id });
+        
+        return {
+          ...request.toObject(),
+          studentProfile: studentProfile ? {
+            bio: studentProfile.bio,
+            interests: studentProfile.interests || [],
+            reputationScore: studentProfile.reputationScore,
+            profileImage: studentProfile.documents?.profileImage || null
+          } : null
+        };
+      })
+    );
+
     res.json({
       success: true,
-      joinRequests
+      joinRequests: enrichedRequests
     });
   } catch (error) {
     console.error('Error fetching landlord join requests:', error);

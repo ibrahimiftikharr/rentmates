@@ -80,6 +80,47 @@ const studentSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// Method to verify and update profile steps based on current data
+studentSchema.methods.verifyProfileSteps = function() {
+  // Check basic info completion
+  const basicInfoComplete = !!(
+    this.university && this.university.trim() !== '' &&
+    this.course && this.course.trim() !== '' &&
+    this.yearOfStudy && this.yearOfStudy.trim() !== '' &&
+    this.nationality && this.nationality.trim() !== '' &&
+    this.phone && this.phone.trim() !== '' &&
+    this.dateOfBirth
+  );
+  
+  // Check housing preferences completion
+  const prefs = this.housingPreferences;
+  const prefsComplete = !!(
+    prefs &&
+    prefs.budgetMin !== undefined && prefs.budgetMin > 0 &&
+    prefs.budgetMax !== undefined && prefs.budgetMax > 0 &&
+    prefs.moveInDate
+  );
+  
+  // Check documents uploaded
+  const docsComplete = !!(this.documents.nationalId || this.documents.passport);
+  
+  // Check bio completed
+  const bioComplete = !!(this.bio && this.bio.trim().length > 0);
+  
+  // Update profile steps
+  this.profileSteps.basicInfo = basicInfoComplete;
+  this.profileSteps.housingPreferences = prefsComplete;
+  this.profileSteps.documentsUploaded = docsComplete;
+  this.profileSteps.bioCompleted = bioComplete;
+  
+  return {
+    basicInfo: basicInfoComplete,
+    housingPreferences: prefsComplete,
+    documentsUploaded: docsComplete,
+    bioCompleted: bioComplete
+  };
+};
+
 // Method to calculate reputation score dynamically
 studentSchema.methods.calculateReputationScore = function() {
   let score = 0;
@@ -87,20 +128,19 @@ studentSchema.methods.calculateReputationScore = function() {
   // Email verified (already given at signup)
   if (this.isEmailVerified) score += 25;
   
-  // Profile completion - give points for each step (30 points total, 6 points per step)
-  if (this.profileSteps.basicInfo) score += 6;
-  if (this.profileSteps.housingPreferences) score += 6;
-  if (this.profileSteps.documentsUploaded) score += 6;
-  if (this.profileSteps.bioCompleted) score += 6;
-  if (this.profileSteps.verificationCompleted) score += 6;
+  // Profile completion - give points for each step (7.5 points per step = 30 total)
+  if (this.profileSteps.basicInfo) score += 7.5;
+  if (this.profileSteps.housingPreferences) score += 7.5;
+  if (this.profileSteps.documentsUploaded) score += 7.5;
+  if (this.profileSteps.bioCompleted) score += 7.5;
   
-  // Documents uploaded (National ID or Passport)
+  // Documents uploaded (National ID or Passport) - 25 points
   if (this.documents.nationalId || this.documents.passport) score += 25;
   
-  // Wallet linked
+  // Wallet linked - 20 points
   if (this.walletLinked) score += 20;
   
-  return score;
+  return Math.round(score);
 };
 
 // Method to get trust level based on reputation score
@@ -139,11 +179,27 @@ studentSchema.methods.getDocumentsCount = function() {
 // Pre-save hook to update reputation score and profile completion
 studentSchema.pre('save', function(next) {
   // Recalculate reputation score
+  const oldScore = this.reputationScore;
   this.reputationScore = this.calculateReputationScore();
   
-  // Check if profile is complete
-  const allStepsComplete = Object.values(this.profileSteps).every(step => step === true);
+  // Log score changes
+  if (oldScore !== this.reputationScore) {
+    console.log(`📊 Reputation score updated: ${oldScore} → ${this.reputationScore}`);
+    console.log('Profile steps:', this.profileSteps);
+  }
+  
+  // Check if profile is complete (all 4 steps must be true)
+  const allStepsComplete = 
+    this.profileSteps.basicInfo === true &&
+    this.profileSteps.housingPreferences === true &&
+    this.profileSteps.documentsUploaded === true &&
+    this.profileSteps.bioCompleted === true;
+  
   this.isProfileComplete = allStepsComplete;
+  
+  if (allStepsComplete) {
+    console.log('✅ Profile is now complete!');
+  }
   
   next();
 });

@@ -631,9 +631,17 @@ export function WalletPage() {
               <Label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</Label>
               <Input 
                 type="number" 
+                min="0"
+                step="0.01"
                 placeholder="0.00" 
                 value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || parseFloat(val) >= 0) {
+                    setDepositAmount(val);
+                  }
+                }}
+                onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                 disabled={isProcessing}
                 className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8C57FF]"
               />
@@ -681,9 +689,17 @@ export function WalletPage() {
               <Label className="text-sm text-[#4A4A68] mb-2 block">Amount (USDT)</Label>
               <Input 
                 type="number" 
+                min="0"
+                step="0.01"
                 placeholder="0.00" 
                 value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || parseFloat(val) >= 0) {
+                    setWithdrawAmount(val);
+                  }
+                }}
+                onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                 disabled={isProcessing}
                 className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8C57FF]"
               />

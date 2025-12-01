@@ -55,6 +55,10 @@ const getStudentProfile = async (req, res) => {
       });
     }
 
+    // Verify and update profile steps based on current data
+    student.verifyProfileSteps();
+    await student.save();
+
     res.status(200).json({
       success: true,
       profile: {
@@ -133,21 +137,38 @@ const updateStudentProfile = async (req, res) => {
       };
     }
 
-    // Check and update profile step completion
-    if (updates.university || updates.course || updates.yearOfStudy || updates.nationality) {
-      const basicInfoComplete = !!(student.university && student.course && student.yearOfStudy && student.nationality);
-      student.profileSteps.basicInfo = basicInfoComplete;
+    // Check and update profile step completion based on actual data
+    // Basic Info: university, course, yearOfStudy, nationality, phone, dateOfBirth
+    const basicInfoComplete = !!(
+      student.university && student.university.trim() !== '' &&
+      student.course && student.course.trim() !== '' &&
+      student.yearOfStudy && student.yearOfStudy.trim() !== '' &&
+      student.nationality && student.nationality.trim() !== '' &&
+      student.phone && student.phone.trim() !== '' &&
+      student.dateOfBirth
+    );
+    student.profileSteps.basicInfo = basicInfoComplete;
+
+    // Housing Preferences: budgetMin, budgetMax, moveInDate
+    const prefs = student.housingPreferences;
+    const prefsComplete = !!(
+      prefs && 
+      prefs.budgetMin !== undefined && prefs.budgetMin > 0 &&
+      prefs.budgetMax !== undefined && prefs.budgetMax > 0 &&
+      prefs.moveInDate
+    );
+    student.profileSteps.housingPreferences = prefsComplete;
+
+    // Bio Completed
+    if (updates.bio !== undefined) {
+      student.profileSteps.bioCompleted = student.bio && student.bio.trim().length > 0;
     }
 
-    if (updates.housingPreferences) {
-      const prefs = student.housingPreferences;
-      const prefsComplete = !!(prefs.budgetMin && prefs.budgetMax && prefs.moveInDate);
-      student.profileSteps.housingPreferences = prefsComplete;
-    }
+    // Documents Uploaded: check if national ID or passport exists
+    const docsComplete = !!(student.documents.nationalId || student.documents.passport);
+    student.profileSteps.documentsUploaded = docsComplete;
 
-    if (updates.bio) {
-      student.profileSteps.bioCompleted = updates.bio.length > 0;
-    }
+    console.log('Profile steps after update:', student.profileSteps);
 
     await student.save();
 

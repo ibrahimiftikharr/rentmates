@@ -87,7 +87,8 @@ export function DashboardHeader({ currentPage, onNavigate }: DashboardHeaderProp
     try {
       await authService.logout();
       toast.success('Logged out successfully');
-      navigate('/auth');
+      // Use window.location instead of navigate to force a full page reload
+      window.location.href = '/auth';
     } catch (error) {
       toast.error('Failed to logout');
     }
@@ -124,7 +125,6 @@ export function DashboardHeader({ currentPage, onNavigate }: DashboardHeaderProp
             >
               <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
-            <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></div>
           </div>
 
           {/* Profile Avatar with Dropdown */}

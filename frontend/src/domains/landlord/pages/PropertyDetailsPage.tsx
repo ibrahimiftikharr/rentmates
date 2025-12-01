@@ -474,7 +474,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                         min="0"
                         max="20"
                         value={property.bedrooms}
-                        onChange={(e) => setProperty({ ...property, bedrooms: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 20)) {
+                            setProperty({ ...property, bedrooms: val });
+                          }
+                        }}
+                        onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                         className="h-8"
                       />
                     ) : (
@@ -498,7 +504,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                         min="0"
                         max="20"
                         value={property.bathrooms}
-                        onChange={(e) => setProperty({ ...property, bathrooms: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 20)) {
+                            setProperty({ ...property, bathrooms: val });
+                          }
+                        }}
+                        onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                         className="h-8"
                       />
                     ) : (
@@ -522,7 +534,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                         min="0"
                         step="10"
                         value={property.size}
-                        onChange={(e) => setProperty({ ...property, size: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || parseFloat(val) >= 0) {
+                            setProperty({ ...property, size: val });
+                          }
+                        }}
+                        onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                         className="h-8"
                       />
                     ) : (
@@ -552,7 +570,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                         min="0"
                         step="10"
                         value={property.rent}
-                        onChange={(e) => setProperty({ ...property, rent: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || parseFloat(val) >= 0) {
+                            setProperty({ ...property, rent: val });
+                          }
+                        }}
+                        onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                         className="pl-8"
                       />
                     </div>
@@ -572,7 +596,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                         min="0"
                         step="10"
                         value={property.deposit}
-                        onChange={(e) => setProperty({ ...property, deposit: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || parseFloat(val) >= 0) {
+                            setProperty({ ...property, deposit: val });
+                          }
+                        }}
+                        onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                         className="pl-8"
                       />
                     </div>
@@ -590,7 +620,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                       min="0"
                       max="20"
                       value={property.flatmates}
-                      onChange={(e) => setProperty({ ...property, flatmates: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 20)) {
+                          setProperty({ ...property, flatmates: val });
+                        }
+                      }}
+                      onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                     />
                   ) : (
                     <p className="text-[#4A4A68]">{property.flatmates}</p>
@@ -606,7 +642,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                       min="1"
                       max="60"
                       value={property.minStay}
-                      onChange={(e) => setProperty({ ...property, minStay: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || (parseFloat(val) >= 1 && parseFloat(val) <= 60)) {
+                          setProperty({ ...property, minStay: val });
+                        }
+                      }}
+                      onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                     />
                   ) : (
                     <p className="text-[#4A4A68]">{property.minStay} months</p>
@@ -622,7 +664,13 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                       min="1"
                       max="60"
                       value={property.maxStay}
-                      onChange={(e) => setProperty({ ...property, maxStay: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || (parseFloat(val) >= 1 && parseFloat(val) <= 60)) {
+                          setProperty({ ...property, maxStay: val });
+                        }
+                      }}
+                      onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                     />
                   ) : (
                     <p className="text-[#4A4A68]">{property.maxStay} months</p>
@@ -960,15 +1008,19 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                             min="0"
                             step="5"
                             value={value.amount}
-                            onChange={(e) =>
-                              setProperty({
-                                ...property,
-                                bills: {
-                                  ...property.bills,
-                                  [key]: { ...value, amount: e.target.value }
-                                }
-                              })
-                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || parseFloat(val) >= 0) {
+                                setProperty({
+                                  ...property,
+                                  bills: {
+                                    ...property.bills,
+                                    [key]: { ...value, amount: val }
+                                  }
+                                });
+                              }
+                            }}
+                            onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                             className="text-right"
                           />
                         ) : (

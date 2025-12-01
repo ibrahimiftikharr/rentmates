@@ -213,9 +213,11 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
               type="date" 
               value={formData.dateOfBirth}
               onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
+              max={new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0]}
               disabled={!isEditing}
               className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
             />
+            <p className="text-xs text-muted-foreground">Must be a past date</p>
           </div>
 
           <div className="space-y-2">

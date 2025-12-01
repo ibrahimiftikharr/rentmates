@@ -429,7 +429,13 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   min="1"
                   placeholder="e.g., 2"
                   value={propertyData.bedrooms}
-                  onChange={(e) => setPropertyData({ ...propertyData, bedrooms: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || parseFloat(val) >= 1) {
+                      setPropertyData({ ...propertyData, bedrooms: val });
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                   className="mt-1.5"
                   required
                 />
@@ -443,7 +449,13 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   min="1"
                   placeholder="e.g., 1"
                   value={propertyData.bathrooms}
-                  onChange={(e) => setPropertyData({ ...propertyData, bathrooms: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || parseFloat(val) >= 1) {
+                      setPropertyData({ ...propertyData, bathrooms: val });
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                   className="mt-1.5"
                   required
                 />
@@ -454,9 +466,16 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                 <Input
                   id="size"
                   type="number"
+                  min="0"
                   placeholder="e.g., 850"
                   value={propertyData.size}
-                  onChange={(e) => setPropertyData({ ...propertyData, size: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || parseFloat(val) >= 0) {
+                      setPropertyData({ ...propertyData, size: val });
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                   className="mt-1.5"
                 />
               </div>
@@ -487,9 +506,16 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   <Input
                     id="rent"
                     type="number"
+                    min="0"
                     placeholder="e.g., 1200"
                     value={propertyData.rent}
-                    onChange={(e) => setPropertyData({ ...propertyData, rent: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseFloat(val) >= 0) {
+                        setPropertyData({ ...propertyData, rent: val });
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                     className="pl-8"
                     required
                   />
@@ -503,9 +529,16 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   <Input
                     id="deposit"
                     type="number"
+                    min="0"
                     placeholder="e.g., 1200"
                     value={propertyData.deposit}
-                    onChange={(e) => setPropertyData({ ...propertyData, deposit: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || parseFloat(val) >= 0) {
+                        setPropertyData({ ...propertyData, deposit: val });
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                     className="pl-8"
                   />
                 </div>
@@ -516,9 +549,16 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                 <Input
                   id="minStay"
                   type="number"
+                  min="1"
                   placeholder="e.g., 6"
                   value={propertyData.minStay}
-                  onChange={(e) => setPropertyData({ ...propertyData, minStay: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || parseFloat(val) >= 1) {
+                      setPropertyData({ ...propertyData, minStay: val });
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                   className="mt-1.5"
                 />
               </div>
@@ -528,9 +568,16 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                 <Input
                   id="maxStay"
                   type="number"
+                  min="1"
                   placeholder="e.g., 12"
                   value={propertyData.maxStay}
-                  onChange={(e) => setPropertyData({ ...propertyData, maxStay: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || parseFloat(val) >= 1) {
+                      setPropertyData({ ...propertyData, maxStay: val });
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                   className="mt-1.5"
                 />
               </div>
@@ -729,7 +776,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   <tr className="border-b">
                     <th className="text-left py-3 px-4">Bill Type</th>
                     <th className="text-center py-3 px-4">Included</th>
-                    <th className="text-right py-3 px-4">Monthly Amount (£)</th>
+                    <th className="text-right py-3 px-4">Monthly Amount ({getCurrencySymbol(propertyData.currency)})</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -753,16 +800,21 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                       <td className="py-3 px-4">
                         <Input
                           type="number"
+                          min="0"
                           value={value.amount}
-                          onChange={(e) =>
-                            setPropertyData({
-                              ...propertyData,
-                              bills: {
-                                ...propertyData.bills,
-                                [key]: { ...value, amount: e.target.value }
-                              }
-                            })
-                          }
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || parseFloat(val) >= 0) {
+                              setPropertyData({
+                                ...propertyData,
+                                bills: {
+                                  ...propertyData.bills,
+                                  [key]: { ...value, amount: val }
+                                }
+                              });
+                            }
+                          }}
+                          onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                           className="text-right"
                         />
                       </td>
@@ -775,7 +827,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
             <div className="p-6 bg-[#8C57FF]/5 rounded-lg border border-[#8C57FF]/20">
               <div className="flex justify-between items-center">
                 <span className="text-[#4A4A68]">Total Estimated Monthly Cost</span>
-                <span className="text-[#8C57FF]">£{calculateTotalBills().toFixed(2)}</span>
+                <span className="text-[#8C57FF]">{getCurrencySymbol(propertyData.currency)}{calculateTotalBills().toFixed(2)}</span>
               </div>
             </div>
           </div>

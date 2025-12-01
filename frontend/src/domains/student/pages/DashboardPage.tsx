@@ -49,7 +49,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setLatestNotifications(notificationsData.notifications);
 
       // Get user name from auth service
-      const user = authService.getUser();
+      const user = authService.getCurrentUser();
       if (user?.name) {
         setUserName(user.name.split(' ')[0]); // First name only
       }

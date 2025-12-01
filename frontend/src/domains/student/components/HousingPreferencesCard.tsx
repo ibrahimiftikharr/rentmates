@@ -143,8 +143,11 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             onChange={(e) => setFormData({...formData, moveInDate: e.target.value})}
             disabled={!isEditing}
             className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
-            min={new Date().toISOString().split('T')[0]}
+            min={new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
           />
+          {isEditing && (
+            <p className="text-xs text-muted-foreground">Must be a future date</p>
+          )}
         </div>
 
         {/* Action Buttons */}

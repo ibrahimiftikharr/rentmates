@@ -19,6 +19,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { getLandlordJoinRequests, acceptJoinRequest, rejectJoinRequest } from '@/shared/services/joinRequestService';
 import { toast } from 'sonner';
+import { socketService } from '@/shared/services/socketService';
 
 interface JoinRequest {
   id: string;
@@ -62,6 +63,17 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
   // Fetch join requests from API
   useEffect(() => {
     fetchJoinRequests();
+
+    // Listen for new join requests via Socket.IO
+    socketService.on('new_join_request', (data: any) => {
+      console.log('New join request received:', data);
+      toast.info(`New join request from ${data.student?.name || 'a student'}`);
+      fetchJoinRequests(); // Refresh the list
+    });
+
+    return () => {
+      socketService.off('new_join_request');
+    };
   }, []);
 
   const fetchJoinRequests = async () => {
@@ -70,28 +82,30 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
       const response = await getLandlordJoinRequests();
       
       // Map backend response to frontend interface
-      const mappedRequests: JoinRequest[] = response.joinRequests.map((req: any) => ({
-        id: req._id,
-        propertyName: req.property?.title || 'Property',
-        propertyId: req.property?._id || '',
-        studentName: req.student?.name || 'Student',
-        studentId: req.student?._id || '',
-        studentPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80', // Default photo
-        bidAmount: req.bidAmount.toString(),
-        leaseDuration: req.contract?.leaseDurationMonths?.toString() || '12',
-        moveInDate: req.movingDate,
-        status: mapBackendStatus(req.status),
-        contractSigned: req.status === 'completed',
-        blockchainVerified: req.status === 'completed',
-        contractId: req.status === 'completed' ? `CONTRACT-${req._id.slice(-6)}` : undefined,
-        studentBio: req.message || 'No message provided',
-        interests: [], // Not available in backend
-        kycVerified: true, // Assume verified if request exists
-        rentalScore: 4.5, // Default score
-        landlordApproved: req.status === 'approved' || req.status === 'waiting_completion' || req.status === 'completed',
-        studentSigned: req.contract?.studentSignature?.signed || false,
-        landlordSigned: req.contract?.landlordSignature?.signed || false
-      }));
+      const mappedRequests: JoinRequest[] = response.joinRequests.map((req: any) => {
+        return {
+          id: req._id,
+          propertyName: req.property?.title || 'Property',
+          propertyId: req.property?._id || '',
+          studentName: req.student?.name || 'Student',
+          studentId: req.student?._id || '',
+          studentPhoto: req.studentProfile?.profileImage || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80',
+          bidAmount: req.bidAmount.toString(),
+          leaseDuration: req.contract?.leaseDurationMonths?.toString() || '12',
+          moveInDate: req.movingDate,
+          status: mapBackendStatus(req.status),
+          contractSigned: req.status === 'completed',
+          blockchainVerified: req.status === 'completed',
+          contractId: req.status === 'completed' ? `CONTRACT-${req._id.slice(-6)}` : undefined,
+          studentBio: req.studentProfile?.bio || req.message || 'No bio available',
+          interests: req.studentProfile?.interests || [],
+          kycVerified: true,
+          rentalScore: req.studentProfile?.reputationScore || 0,
+          landlordApproved: req.status === 'approved' || req.status === 'waiting_completion' || req.status === 'completed',
+          studentSigned: req.contract?.studentSignature?.signed || false,
+          landlordSigned: req.contract?.landlordSignature?.signed || false
+        };
+      });
 
       setRequests(mappedRequests);
     } catch (error: any) {
@@ -279,7 +293,7 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                           <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                         </button>
                       </div>
-                      <p className="text-xs sm:text-sm text-muted-foreground mb-2">Rental Score: {request.rentalScore}/5.0</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground mb-2">Reputation Score: {request.rentalScore}/100</p>
                       <Badge className={`text-xs ${request.kycVerified 
                         ? 'bg-green-500/10 text-green-700 border-green-200'
                         : 'bg-red-500/10 text-red-700 border-red-200'
@@ -442,11 +456,15 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                           <span className="text-sm text-[#8C57FF]">Interests</span>
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {request.interests.map((interest, idx) => (
-                            <Badge key={idx} variant="outline" className="bg-white">
-                              {interest}
-                            </Badge>
-                          ))}
+                          {request.interests && request.interests.length > 0 ? (
+                            request.interests.map((interest, idx) => (
+                              <Badge key={idx} variant="outline" className="bg-white">
+                                {interest}
+                              </Badge>
+                            ))
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">No interests listed</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -469,12 +487,12 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                             </Badge>
                           </div>
                           <div className="flex items-center justify-between p-2 bg-[#F4F5FA] rounded">
-                            <span className="text-sm text-[#4A4A68]">Rental Score</span>
+                            <span className="text-sm text-[#4A4A68]">Reputation Score</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm text-[#4A4A68]">{request.rentalScore}/5.0</span>
+                              <span className="text-sm text-[#4A4A68]">{request.rentalScore}/100</span>
                               <div className="flex gap-0.5">
                                 {[...Array(5)].map((_, i) => (
-                                  <span key={i} className={i < Math.round(request.rentalScore!) ? 'text-yellow-500' : 'text-gray-300'}>
+                                  <span key={i} className={i < Math.round((request.rentalScore! / 100) * 5) ? 'text-yellow-500' : 'text-gray-300'}>
                                     ★
                                   </span>
                                 ))}

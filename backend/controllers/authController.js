@@ -43,19 +43,25 @@ const signup = async (req, res) => {
 
     // Save user to MongoDB
     await user.save();
-    console.log('✓ User saved to MongoDB:', email);
+    console.log('✓ User saved to MongoDB:', email, 'with ID:', user._id.toString());
 
     // Create Student or Landlord profile based on role
     let profileId = null;
     if (role === 'student') {
+      console.log('Creating student profile for user:', user._id.toString());
       const student = new Student({
         user: user._id,
         reputationScore: 0
       });
       await student.save();
       profileId = student._id.toString();
-      console.log('✓ Student profile created:', profileId);
+      console.log('✓ Student profile created successfully:', profileId, 'for user:', user._id.toString());
+      
+      // Verify the student was saved
+      const verifyStudent = await Student.findOne({ user: user._id });
+      console.log('✓ Verification: Student profile exists in DB:', verifyStudent ? 'YES' : 'NO');
     } else if (role === 'landlord') {
+      console.log('Creating landlord profile for user:', user._id.toString());
       const landlord = new Landlord({
         user: user._id,
         reputationScore: 0

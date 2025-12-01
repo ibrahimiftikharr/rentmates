@@ -544,7 +544,7 @@ export function VisitRequestsPage() {
             
             <div className="space-y-4">
               <div>
-                <Label>Reason (Optional)</Label>
+                <Label>Reason</Label>
                 <Textarea
                   value={disapproveReason}
                   onChange={(e) => setDisapproveReason(e.target.value)}

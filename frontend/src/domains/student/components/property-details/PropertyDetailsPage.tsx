@@ -216,6 +216,28 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
       return;
     }
 
+    // Validate move-in date is not in the past
+    const selectedMoveInDate = new Date(moveInDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (selectedMoveInDate < today) {
+      toast.error('Move-in date cannot be in the past. Please select a future date.');
+      return;
+    }
+
+    // Check if bid is higher than listed price
+    const bidValue = parseFloat(bidAmount);
+    if (bidValue > property.price) {
+      const proceed = confirm(
+        `Your offer (${currencySymbol}${bidValue}) is higher than the listed price (${currencySymbol}${property.price}).\n\n` +
+        'Are you sure you want to continue with this amount?'
+      );
+      if (!proceed) {
+        return;
+      }
+    }
+
     try {
       // Step 1: Check profile completion
       const profileCheck = await checkStudentProfile();
@@ -1170,9 +1192,16 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
               <Input
                 id="bid"
                 type="number"
+                min="0"
                 placeholder={`Listed price: ${currencySymbol}${property.price}`}
                 value={bidAmount}
-                onChange={(e) => setBidAmount(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || parseFloat(val) >= 0) {
+                    setBidAmount(val);
+                  }
+                }}
+                onKeyDown={(e) => e.key === '-' && e.preventDefault()}
               />
             </div>
             
@@ -1183,7 +1212,13 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 type="number" 
                 placeholder="e.g., 12"
                 value={stayTenure}
-                onChange={(e) => setStayTenure(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || (parseFloat(val) >= 1 && parseFloat(val) <= 24)) {
+                    setStayTenure(val);
+                  }
+                }}
+                onKeyDown={(e) => e.key === '-' && e.preventDefault()}
                 min="1"
                 max="24"
               />
@@ -1197,8 +1232,9 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 type="date" 
                 value={moveInDate}
                 onChange={(e) => setMoveInDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
               />
+              <p className="text-xs text-muted-foreground">Must be a future date</p>
             </div>
 
             <div className="p-4 bg-slate-50 rounded-lg border">
@@ -1419,7 +1455,13 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
             </div>
             <div className="space-y-2">
               <Label htmlFor="amount">Loan Amount ({currencySymbol})</Label>
-              <Input id="amount" type="number" placeholder="Enter amount needed" />
+              <Input 
+                id="amount" 
+                type="number" 
+                min="0"
+                placeholder="Enter amount needed" 
+                onKeyDown={(e) => e.key === '-' && e.preventDefault()}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="university">University</Label>

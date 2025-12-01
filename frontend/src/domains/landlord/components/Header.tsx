@@ -61,7 +61,8 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
     try {
       await authService.logout();
       toast.success('Logged out successfully');
-      navigate('/auth');
+      // Use window.location instead of navigate to force a full page reload
+      window.location.href = '/auth';
     } catch (error) {
       toast.error('Failed to logout');
     }
@@ -93,7 +94,6 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
             className="relative p-1.5 sm:p-2 hover:bg-accent rounded-lg transition-colors"
           >
             <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-[#4A4A68]" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#EA5455] rounded-full"></span>
           </button>
           
           <DropdownMenu>
