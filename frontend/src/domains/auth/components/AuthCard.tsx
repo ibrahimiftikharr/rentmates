@@ -7,7 +7,7 @@ import { OTPVerification } from './OTPVerification';
 import { SuccessMessage } from './SuccessMessage';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
 import { authService } from '../services/authService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 export function AuthCard() {
   const [activeTab, setActiveTab] = useState('login');

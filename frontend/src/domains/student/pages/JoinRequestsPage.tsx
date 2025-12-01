@@ -5,7 +5,7 @@ import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { Separator } from '@/shared/ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { ContractSigningPage } from './ContractSigningPage';
 import { getStudentJoinRequests, deleteJoinRequest, studentSignContract } from '@/shared/services/joinRequestService';
 

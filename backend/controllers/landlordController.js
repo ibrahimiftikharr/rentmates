@@ -59,7 +59,17 @@ const getProfile = async (req, res) => {
         govIdDocument: landlord.govIdDocument || '',
         reputationScore: landlord.reputationScore || 0,
         isProfileComplete: landlord.isProfileComplete || false,
-        properties: landlord.properties || []
+        properties: landlord.properties || [],
+        notificationPreferences: landlord.notificationPreferences || {
+          emailNotifications: true,
+          rentalBidsAlerts: true,
+          messageAlerts: true
+        },
+        privacySettings: landlord.privacySettings || {
+          showNationality: true,
+          showEmail: true,
+          showPhone: true
+        }
       }
     });
   } catch (error) {
@@ -305,10 +315,164 @@ const updateReputationScore = async (req, res) => {
   }
 };
 
+// ========================================
+// UPDATE PASSWORD
+// ========================================
+const updatePassword = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate inputs
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Current password and new password are required' 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password must be at least 6 characters' 
+      });
+    }
+
+    // Find user and verify current password
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isPasswordValid = await user.comparePassword(currentPassword);
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Current password is incorrect' 
+      });
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    console.log('✓ Password updated successfully for user:', userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    console.error('Update password error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update password' });
+  }
+};
+
+// ========================================
+// UPDATE NOTIFICATION PREFERENCES
+// ========================================
+const updateNotificationPreferences = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { emailNotifications, rentalBidsAlerts, messageAlerts } = req.body;
+
+    const landlord = await Landlord.findOne({ user: userId });
+    if (!landlord) {
+      return res.status(404).json({ success: false, message: 'Landlord profile not found' });
+    }
+
+    // Initialize notificationPreferences if it doesn't exist
+    if (!landlord.notificationPreferences) {
+      landlord.notificationPreferences = {
+        emailNotifications: true,
+        rentalBidsAlerts: true,
+        messageAlerts: true
+      };
+    }
+
+    // Update preferences
+    if (emailNotifications !== undefined) {
+      landlord.notificationPreferences.emailNotifications = emailNotifications;
+    }
+    if (rentalBidsAlerts !== undefined) {
+      landlord.notificationPreferences.rentalBidsAlerts = rentalBidsAlerts;
+    }
+    if (messageAlerts !== undefined) {
+      landlord.notificationPreferences.messageAlerts = messageAlerts;
+    }
+
+    landlord.updatedAt = Date.now();
+    await landlord.save();
+
+    console.log('✓ Notification preferences updated:', landlord.notificationPreferences);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification preferences updated',
+      notificationPreferences: landlord.notificationPreferences
+    });
+  } catch (error) {
+    console.error('Update notification preferences error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update notification preferences' });
+  }
+};
+
+// ========================================
+// UPDATE PRIVACY SETTINGS
+// ========================================
+const updatePrivacySettings = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { showNationality, showEmail, showPhone } = req.body;
+
+    const landlord = await Landlord.findOne({ user: userId });
+    if (!landlord) {
+      return res.status(404).json({ success: false, message: 'Landlord profile not found' });
+    }
+
+    // Initialize privacySettings if it doesn't exist
+    if (!landlord.privacySettings) {
+      landlord.privacySettings = {
+        showNationality: true,
+        showEmail: true,
+        showPhone: true
+      };
+    }
+
+    // Update settings
+    if (showNationality !== undefined) {
+      landlord.privacySettings.showNationality = showNationality;
+    }
+    if (showEmail !== undefined) {
+      landlord.privacySettings.showEmail = showEmail;
+    }
+    if (showPhone !== undefined) {
+      landlord.privacySettings.showPhone = showPhone;
+    }
+
+    landlord.updatedAt = Date.now();
+    await landlord.save();
+
+    console.log('✓ Privacy settings updated:', landlord.privacySettings);
+
+    res.status(200).json({
+      success: true,
+      message: 'Privacy settings updated',
+      privacySettings: landlord.privacySettings
+    });
+  } catch (error) {
+    console.error('Update privacy settings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update privacy settings' });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   uploadProfileImage,
   uploadGovIdDocument,
-  updateReputationScore
+  updateReputationScore,
+  updatePassword,
+  updateNotificationPreferences,
+  updatePrivacySettings
 };

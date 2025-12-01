@@ -35,6 +35,16 @@ export interface LandlordProfile {
   reputationScore: number;
   isProfileComplete: boolean;
   properties: string[];
+  notificationPreferences?: {
+    emailNotifications: boolean;
+    rentalBidsAlerts: boolean;
+    messageAlerts: boolean;
+  };
+  privacySettings?: {
+    showNationality: boolean;
+    showEmail: boolean;
+    showPhone: boolean;
+  };
 }
 
 export interface UpdateProfileData {
@@ -291,6 +301,53 @@ export const landlordService = {
       return data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to fetch notifications');
+    }
+  },
+
+  /**
+   * Update password
+   */
+  async updatePassword(currentPassword: string, newPassword: string) {
+    try {
+      const { data } = await api.put('/landlord/settings/password', {
+        currentPassword,
+        newPassword
+      });
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to update password');
+    }
+  },
+
+  /**
+   * Update notification preferences
+   */
+  async updateNotificationPreferences(preferences: {
+    emailNotifications?: boolean;
+    rentalBidsAlerts?: boolean;
+    messageAlerts?: boolean;
+  }) {
+    try {
+      const { data } = await api.put('/landlord/settings/notifications', preferences);
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to update notification preferences');
+    }
+  },
+
+  /**
+   * Update privacy settings
+   */
+  async updatePrivacySettings(settings: {
+    showNationality?: boolean;
+    showEmail?: boolean;
+    showPhone?: boolean;
+  }) {
+    try {
+      const { data } = await api.put('/landlord/settings/privacy', settings);
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to update privacy settings');
     }
   },
 };

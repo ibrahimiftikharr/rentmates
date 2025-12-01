@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/shar
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { User, Bell, Lock, Shield, Eye, Upload, Info, FileText, Loader2, CheckCircle2, MapPin } from 'lucide-react';
 import { landlordService, LandlordProfile } from '../services/landlordService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import PlacesAutocomplete from 'react-places-autocomplete';
 import { GoogleMapsLoader } from '@/shared/components/GoogleMapsLoader';
 import { socketService } from '@/shared/services/socketService';
@@ -34,6 +34,28 @@ export function SettingsPage() {
   // Profile image and document state
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [govIdDocumentFile, setGovIdDocumentFile] = useState<File | null>(null);
+
+  // Security state
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
+  // Notification preferences state
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    emailNotifications: true,
+    rentalBidsAlerts: true,
+    messageAlerts: true,
+  });
+
+  // Privacy settings state
+  const [privacySettings, setPrivacySettings] = useState({
+    showNationality: true,
+    showEmail: true,
+    showPhone: true,
+  });
 
   useEffect(() => {
     fetchProfile();
@@ -66,6 +88,16 @@ export function SettingsPage() {
         address: data.address || '',
         governmentId: data.governmentId || '',
       });
+      
+      // Initialize notification preferences
+      if (data.notificationPreferences) {
+        setNotificationPreferences(data.notificationPreferences);
+      }
+      
+      // Initialize privacy settings
+      if (data.privacySettings) {
+        setPrivacySettings(data.privacySettings);
+      }
     } catch (error: any) {
       console.error('❌ Error fetching profile:', error);
       toast.error(error.message);
@@ -163,6 +195,85 @@ export function SettingsPage() {
       toast.error(error.message);
     } finally {
       setUploadingDocument(false);
+    }
+  };
+
+  // ========================================
+  // PASSWORD UPDATE HANDLERS
+  // ========================================
+  const handlePasswordChange = (field: string, value: string) => {
+    setPasswordData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleUpdatePassword = async () => {
+    // Validation
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast.error('All password fields are required');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    try {
+      setUpdatingPassword(true);
+      await landlordService.updatePassword(passwordData.currentPassword, passwordData.newPassword);
+      toast.success('Password updated successfully!');
+      // Clear form
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  // ========================================
+  // NOTIFICATION PREFERENCES HANDLERS
+  // ========================================
+  const handleNotificationToggle = async (field: keyof typeof notificationPreferences) => {
+    const newValue = !notificationPreferences[field];
+    
+    // Optimistic update
+    setNotificationPreferences((prev) => ({ ...prev, [field]: newValue }));
+
+    try {
+      await landlordService.updateNotificationPreferences({ [field]: newValue });
+      toast.success('Notification preferences updated');
+    } catch (error: any) {
+      // Revert on error
+      setNotificationPreferences((prev) => ({ ...prev, [field]: !newValue }));
+      toast.error(error.message);
+    }
+  };
+
+  // ========================================
+  // PRIVACY SETTINGS HANDLERS
+  // ========================================
+  const handlePrivacyToggle = async (field: keyof typeof privacySettings) => {
+    const newValue = !privacySettings[field];
+    
+    // Optimistic update
+    setPrivacySettings((prev) => ({ ...prev, [field]: newValue }));
+
+    try {
+      await landlordService.updatePrivacySettings({ [field]: newValue });
+      toast.success('Privacy settings updated');
+    } catch (error: any) {
+      // Revert on error
+      setPrivacySettings((prev) => ({ ...prev, [field]: !newValue }));
+      toast.error(error.message);
     }
   };
 
@@ -557,21 +668,47 @@ export function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Current Password</Label>
-                <Input type="password" placeholder="••••••••" />
+                <Input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={passwordData.currentPassword}
+                  onChange={(e) => handlePasswordChange('currentPassword', e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>New Password</Label>
-                <Input type="password" placeholder="••••••••" />
+                <Input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={passwordData.newPassword}
+                  onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label>Confirm New Password</Label>
-                <Input type="password" placeholder="••••••••" />
+                <Input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
+                />
               </div>
 
-              <Button className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto">
-                Update Password
+              <Button 
+                className="bg-[#8C57FF] hover:bg-[#7C47EF] w-full sm:w-auto"
+                onClick={handleUpdatePassword}
+                disabled={updatingPassword}
+              >
+                {updatingPassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Password'
+                )}
               </Button>
             </CardContent>
           </Card>
@@ -597,15 +734,21 @@ export function SettingsPage() {
                   <p className="text-sm text-[#4A4A68]">Email Notifications</p>
                   <p className="text-xs text-muted-foreground">Receive important updates via email</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notificationPreferences.emailNotifications}
+                  onCheckedChange={() => handleNotificationToggle('emailNotifications')}
+                />
               </div>
 
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
-                  <p className="text-sm text-[#4A4A68]">Rental Bids & Offers</p>
-                  <p className="text-xs text-muted-foreground">Alerts for new rental bids and offers</p>
+                  <p className="text-sm text-[#4A4A68]">Rental Bids & Requests</p>
+                  <p className="text-xs text-muted-foreground">Alerts for new join requests</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notificationPreferences.rentalBidsAlerts}
+                  onCheckedChange={() => handleNotificationToggle('rentalBidsAlerts')}
+                />
               </div>
 
               <div className="flex items-start justify-between gap-3">
@@ -613,7 +756,10 @@ export function SettingsPage() {
                   <p className="text-sm text-[#4A4A68]">Message Alerts</p>
                   <p className="text-xs text-muted-foreground">Alerts when you receive new messages</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notificationPreferences.messageAlerts}
+                  onCheckedChange={() => handleNotificationToggle('messageAlerts')}
+                />
               </div>
             </CardContent>
           </Card>
@@ -626,7 +772,7 @@ export function SettingsPage() {
                 <div>
                   <CardTitle className="text-[#4A4A68]">Privacy Settings</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Control who can see your information
+                    Control what information students see
                   </p>
                 </div>
               </div>
@@ -635,25 +781,34 @@ export function SettingsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <p className="text-sm text-[#4A4A68]">Display Nationality</p>
-                  <p className="text-xs text-muted-foreground">Show your nationality on public profile</p>
+                  <p className="text-xs text-muted-foreground">Show your nationality on property listings</p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={privacySettings.showNationality}
+                  onCheckedChange={() => handlePrivacyToggle('showNationality')}
+                />
               </div>
 
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <p className="text-sm text-[#4A4A68]">Display Email</p>
-                  <p className="text-xs text-muted-foreground">Display your email on your public profile</p>
+                  <p className="text-xs text-muted-foreground">Display your email on property listings</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={privacySettings.showEmail}
+                  onCheckedChange={() => handlePrivacyToggle('showEmail')}
+                />
               </div>
 
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
                   <p className="text-sm text-[#4A4A68]">Display Phone Number</p>
-                  <p className="text-xs text-muted-foreground">Display your phone number on your public profile</p>
+                  <p className="text-xs text-muted-foreground">Display your phone on property listings</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={privacySettings.showPhone}
+                  onCheckedChange={() => handlePrivacyToggle('showPhone')}
+                />
               </div>
             </CardContent>
           </Card>

@@ -183,6 +183,32 @@ const getProperty = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Property not found' });
     }
 
+    // Apply privacy settings if landlord has them configured
+    if (property.landlord && property.landlord.privacySettings) {
+      const privacySettings = property.landlord.privacySettings;
+      
+      // Create a sanitized landlord object respecting privacy settings
+      const sanitizedLandlord = {
+        ...property.landlord.toObject(),
+        email: privacySettings.showEmail ? property.landlord.user?.email : null,
+        phone: privacySettings.showPhone ? property.landlord.phone : null,
+        nationality: privacySettings.showNationality ? property.landlord.nationality : null,
+        user: {
+          ...property.landlord.user?.toObject(),
+          email: privacySettings.showEmail ? property.landlord.user?.email : null
+        }
+      };
+      
+      // Return property with sanitized landlord data
+      const propertyObj = property.toObject();
+      propertyObj.landlord = sanitizedLandlord;
+      
+      return res.status(200).json({
+        success: true,
+        property: propertyObj
+      });
+    }
+
     res.status(200).json({
       success: true,
       property

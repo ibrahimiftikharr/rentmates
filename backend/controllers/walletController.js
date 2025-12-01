@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/userModel');
 const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
@@ -113,12 +114,43 @@ exports.getBalance = async (req, res) => {
       }
     }
 
+    // Calculate total rental earnings for landlords
+    let totalRentalEarnings = 0;
+    if (user.role === 'landlord') {
+      const landlord = await Landlord.findOne({ user: userId });
+      if (landlord) {
+        console.log('🔍 Fetching rental earnings for landlord:', userId);
+        
+        // Sum all completed rent_received transactions
+        const earningsResult = await Transaction.aggregate([
+          {
+            $match: {
+              user: new mongoose.Types.ObjectId(userId),
+              type: 'rent_received',
+              status: 'completed'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$amount' }
+            }
+          }
+        ]);
+        
+        console.log('💰 Earnings result:', earningsResult);
+        totalRentalEarnings = earningsResult.length > 0 ? earningsResult[0].total : 0;
+        console.log('✅ Total rental earnings:', totalRentalEarnings);
+      }
+    }
+
     res.json({
       success: true,
       walletAddress: user.walletAddress,
       onChainBalance, // USDT in user's MetaMask wallet
       offChainBalance: user.offChainBalance, // User's balance in MongoDB (available in vault)
-      totalBalance: user.offChainBalance // What user can actually use in the app
+      totalBalance: user.offChainBalance, // What user can actually use in the app
+      totalRentalEarnings: totalRentalEarnings // Total earnings from rent payments
     });
   } catch (error) {
     console.error('Get balance error:', error);

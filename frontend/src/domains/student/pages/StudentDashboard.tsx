@@ -18,7 +18,7 @@ import { JoinRequestsPage } from './JoinRequestsPage';
 import { SecurityDepositPage } from './SecurityDepositPage';
 import { Toaster } from '@/shared/ui/sonner';
 import { socketService } from '@/shared/services/socketService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import '../styles/index.css';
 import '../styles/globals.css';
 

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/shared/ui/button';
 import { ArrowLeft, Mail } from 'lucide-react';
 import { authService } from '../services/authService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface OTPVerificationProps {
   email: string;

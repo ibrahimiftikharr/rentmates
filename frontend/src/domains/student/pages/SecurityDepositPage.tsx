@@ -5,7 +5,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Label } from '@/shared/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
 import { Shield, CheckCircle, AlertCircle, Calendar, FileText } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 export function SecurityDepositPage() {
   const [depositPaid, setDepositPaid] = useState(false);

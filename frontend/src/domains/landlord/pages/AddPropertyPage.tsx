@@ -32,7 +32,7 @@ import { Card } from '@/shared/ui/card';
 import { Calendar } from '@/shared/ui/calendar';
 import { Alert, AlertDescription, AlertTitle } from '@/shared/ui/alert';
 import { landlordService } from '../services/landlordService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { useNavigate } from 'react-router-dom';
 import { CURRENCIES, getCurrencySymbol } from '@/shared/utils/currency';
 

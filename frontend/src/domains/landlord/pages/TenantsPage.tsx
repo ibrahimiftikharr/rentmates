@@ -19,7 +19,7 @@ import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { getLandlordTenants } from '@/shared/services/joinRequestService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface ActionHistory {
   action: string;

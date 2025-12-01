@@ -18,7 +18,7 @@ import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { getLandlordJoinRequests, acceptJoinRequest, rejectJoinRequest } from '@/shared/services/joinRequestService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { socketService } from '@/shared/services/socketService';
 
 interface JoinRequest {

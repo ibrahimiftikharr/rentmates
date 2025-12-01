@@ -3,7 +3,7 @@ import { Heart, MapPin, DollarSign, BedDouble, Bath, Maximize, Eye, Trash2, Load
 import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { studentService, Property } from '../services/studentService';
 import { PropertyDetailsPage } from '../components/property-details/PropertyDetailsPage';
 import { getCurrencySymbol } from '@/shared/utils/currency';

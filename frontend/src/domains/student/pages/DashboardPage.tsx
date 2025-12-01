@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { payRent } from '@/shared/services/walletService';
 import { studentDashboardService, DashboardMetrics, Activity, LatestNotification } from '@/domains/student/services/studentDashboardService';
 import { socketService } from '@/shared/services/socketService';

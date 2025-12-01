@@ -4,7 +4,7 @@ import { Progress } from '@/shared/ui/progress';
 import { useEffect, useState } from 'react';
 import { landlordService } from '../services/landlordService';
 import { socketService } from '@/shared/services/socketService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface ReputationItem {
   id: string;

@@ -6,7 +6,7 @@ import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { publicStudentService, PublicStudentProfile } from '@/shared/services/publicStudentService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface SearchStudentsPageProps {
   onNavigate: (page: string, studentId?: string) => void;

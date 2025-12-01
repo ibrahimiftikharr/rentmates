@@ -5,7 +5,7 @@ import { Button } from '@/shared/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { AlertCircle, CheckCircle2, Eye, EyeOff} from 'lucide-react';
 import { authService } from '../services/authService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 
 // Form data state 

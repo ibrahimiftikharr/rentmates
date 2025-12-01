@@ -10,7 +10,14 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <App />
-      <Toaster position="top-right" richColors />
+      <Toaster 
+        position="top-right" 
+        richColors 
+        duration={3000}
+        toastOptions={{
+          className: 'sonner-toast',
+        }}
+      />
     </BrowserRouter>
   </StrictMode>
 );

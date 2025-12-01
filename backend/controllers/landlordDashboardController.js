@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Property = require('../models/propertyModel');
 const Rental = require('../models/rentalModel');
 const JoinRequest = require('../models/joinRequestModel');
@@ -40,7 +41,7 @@ exports.getDashboardMetrics = async (req, res) => {
     const earningsData = await Transaction.aggregate([
       {
         $match: {
-          user: userId,
+          user: new mongoose.Types.ObjectId(userId),
           type: 'rent_received',
           status: 'completed'
         }
@@ -82,7 +83,7 @@ exports.getDashboardMetrics = async (req, res) => {
     const thisMonthEarnings = await Transaction.aggregate([
       {
         $match: {
-          user: userId,
+          user: new mongoose.Types.ObjectId(userId),
           type: 'rent_received',
           status: 'completed',
           createdAt: { $gte: startOfMonth }
@@ -100,7 +101,7 @@ exports.getDashboardMetrics = async (req, res) => {
     const lastMonthEarnings = await Transaction.aggregate([
       {
         $match: {
-          user: userId,
+          user: new mongoose.Types.ObjectId(userId),
           type: 'rent_received',
           status: 'completed',
           createdAt: { 

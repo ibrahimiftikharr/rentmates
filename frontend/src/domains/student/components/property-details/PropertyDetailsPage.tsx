@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Textarea } from '@/shared/ui/textarea';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { studentService } from '../../services/studentService';
 import { visitRequestService } from '@/shared/services/visitRequestService';
 import { 
@@ -953,38 +953,80 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                         </div>
                       </div>
 
-                      {property.landlord.user?.email && (
+                      {property.landlord.user?.email !== null ? (
                         <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
                           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                             <Mail className="w-5 h-5 text-blue-600" />
                           </div>
                           <div className="overflow-hidden flex-1">
                             <p className="text-xs text-gray-600">Email</p>
-                            <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user.email}</p>
+                            {property.landlord.user.email ? (
+                              <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user.email}</p>
+                            ) : (
+                              <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <Mail className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div className="overflow-hidden flex-1">
+                            <p className="text-xs text-gray-600">Email</p>
+                            <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
                           </div>
                         </div>
                       )}
 
-                      {property.landlord.phone && (
+                      {property.landlord.phone !== null ? (
                         <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
                           <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                             <Phone className="w-5 h-5 text-green-600" />
                           </div>
                           <div>
                             <p className="text-xs text-gray-600">Phone</p>
-                            <p className="font-medium text-gray-900">{property.landlord.phone}</p>
+                            {property.landlord.phone ? (
+                              <p className="font-medium text-gray-900">{property.landlord.phone}</p>
+                            ) : (
+                              <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <Phone className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-600">Phone</p>
+                            <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
                           </div>
                         </div>
                       )}
 
-                      {property.landlord.nationality && (
+                      {property.landlord.nationality !== null ? (
                         <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
                           <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
                             <Flag className="w-5 h-5 text-purple-600" />
                           </div>
                           <div>
                             <p className="text-xs text-gray-600">Nationality</p>
-                            <p className="font-medium text-gray-900">{property.landlord.nationality}</p>
+                            {property.landlord.nationality ? (
+                              <p className="font-medium text-gray-900">{property.landlord.nationality}</p>
+                            ) : (
+                              <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+                            <Flag className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-600">Nationality</p>
+                            <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
                           </div>
                         </div>
                       )}

@@ -7,7 +7,7 @@ import { ReputationScoreSummaryCard } from '../components/ReputationScoreSummary
 import { Card, CardContent } from '@/shared/ui/card';
 import { Shield, TrendingUp, Zap, Star, Loader2 } from 'lucide-react';
 import { studentService, StudentProfile } from '../services/studentService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 export function ProfilePage() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);

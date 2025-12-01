@@ -6,7 +6,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card';
 import { Eye, EyeOff, Check, AlertCircle, ArrowLeft } from 'lucide-react';
 import { authService } from '../services/authService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 export function ResetPasswordPage() {
   const navigate = useNavigate();

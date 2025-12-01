@@ -7,7 +7,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/shared/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { StudentProfilePage } from '../components/StudentProfilePage';
 import { studentSearchService, type CompatibleStudent } from '../services/studentSearchService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface SearchStudentsPageProps {
   onNavigate?: (page: string) => void;

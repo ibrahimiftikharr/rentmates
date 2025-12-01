@@ -6,7 +6,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Separator } from '@/shared/ui/separator';
 import { visitRequestService, VisitRequest as VisitRequestType } from '@/shared/services/visitRequestService';
 import { socketService } from '@/shared/services/socketService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface VisitRequest {
   id: string;

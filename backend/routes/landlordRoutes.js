@@ -40,4 +40,17 @@ landlordRouter.post('/profile/upload-document', uploadDocument.single('govIdDocu
 // Update reputation score
 landlordRouter.put('/reputation', landlordController.updateReputationScore);
 
+// ========================================
+// SETTINGS ROUTES
+// ========================================
+
+// Update password
+landlordRouter.put('/settings/password', landlordController.updatePassword);
+
+// Update notification preferences
+landlordRouter.put('/settings/notifications', landlordController.updateNotificationPreferences);
+
+// Update privacy settings
+landlordRouter.put('/settings/privacy', landlordController.updatePrivacySettings);
+
 module.exports = landlordRouter;

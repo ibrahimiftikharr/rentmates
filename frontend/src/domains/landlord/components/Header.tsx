@@ -5,7 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useNavigate } from 'react-router-dom';
 import { authService } from '@/domains/auth/services/authService';
 import { landlordService } from '@/domains/landlord/services/landlordService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { useState, useEffect } from 'react';
 
 interface HeaderProps {
@@ -73,19 +73,6 @@ export function Header({ currentPage, onNavigate }: HeaderProps) {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0 lg:justify-start justify-center">
           <h1 className="text-[#4A4A68] text-base sm:text-xl md:text-2xl truncate text-center lg:text-left">{pageLabels[currentPage] || 'Landlord Dashboard'}</h1>
-          {currentPage === 'dashboard' && (
-            <div className="hidden lg:flex items-center gap-2">
-              <Badge variant="secondary" className="bg-[#8C57FF]/10 text-[#8C57FF] border-0 text-xs">
-                Active Properties: 5
-              </Badge>
-              <Badge variant="secondary" className="bg-[#FF9F43]/10 text-[#FF9F43] border-0 text-xs">
-                Pending Requests: 2
-              </Badge>
-              <Badge variant="secondary" className="bg-[#28C76F]/10 text-[#28C76F] border-0 text-xs">
-                Total Earnings: $12,800
-              </Badge>
-            </div>
-          )}
         </div>
         
         <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 lg:relative absolute right-4">

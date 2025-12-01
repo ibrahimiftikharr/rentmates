@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { landlordService } from '../services/landlordService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface Property {
   id: string;

@@ -3,7 +3,7 @@ import { Bell, Check, Trash2, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { notificationService, Notification as NotificationType } from '@/shared/services/notificationService';
 import { socketService } from '@/shared/services/socketService';
 

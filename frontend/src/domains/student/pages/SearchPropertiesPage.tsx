@@ -10,7 +10,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { PropertyDetailsPage } from '../components/property-details/PropertyDetailsPage';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { studentService, Property as APIProperty } from '../services/studentService';
 import { getCurrencySymbol } from '@/shared/utils/currency';
 

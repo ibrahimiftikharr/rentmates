@@ -46,7 +46,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     loadDashboardData();
 
     // Get landlord name from user data
-    const user = authService.getUser();
+    const user = authService.getCurrentUser();
     if (user?.name) {
       setLandlordName(user.name.split(' ')[0]); // First name only
     }

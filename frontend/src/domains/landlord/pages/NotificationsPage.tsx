@@ -5,7 +5,7 @@ import { Button } from '@/shared/ui/button';
 import { useState, useEffect } from 'react';
 import { notificationService, Notification as NotificationType } from '@/shared/services/notificationService';
 import { socketService } from '@/shared/services/socketService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface Notification {
   id: string;

@@ -8,7 +8,7 @@ import { Badge } from '@/shared/ui/badge';
 import { messageService, Conversation, Message } from '@/shared/services/messageService';
 import { socketService } from '@/shared/services/socketService';
 import { authService } from '@/domains/auth/services/authService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 export function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);

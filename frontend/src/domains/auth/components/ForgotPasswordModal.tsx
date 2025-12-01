@@ -5,7 +5,7 @@ import { Label } from '@/shared/ui/label';
 import { Button } from '@/shared/ui/button';
 import { Mail, ArrowLeft } from 'lucide-react';
 import { authService } from '../services/authService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface ForgotPasswordModalProps {
   open: boolean;

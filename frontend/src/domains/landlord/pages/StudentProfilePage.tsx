@@ -4,7 +4,7 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
 import { publicStudentService, PublicStudentProfile } from '@/shared/services/publicStudentService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { format } from 'date-fns';
 
 interface StudentProfilePageProps {

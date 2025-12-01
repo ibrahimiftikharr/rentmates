@@ -22,6 +22,20 @@ const landlordSchema = new mongoose.Schema({
   // Profile Completion
   isProfileComplete: { type: Boolean, default: false },
   
+  // Notification Preferences (all enabled by default)
+  notificationPreferences: {
+    emailNotifications: { type: Boolean, default: true },
+    rentalBidsAlerts: { type: Boolean, default: true }, // Join request alerts
+    messageAlerts: { type: Boolean, default: true }
+  },
+  
+  // Privacy Settings (all visible by default)
+  privacySettings: {
+    showNationality: { type: Boolean, default: true },
+    showEmail: { type: Boolean, default: true },
+    showPhone: { type: Boolean, default: true }
+  },
+  
   // Timestamps
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

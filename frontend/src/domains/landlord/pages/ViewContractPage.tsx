@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Checkbox } from '@/shared/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 import { getLandlordJoinRequests, landlordSignContract } from '@/shared/services/joinRequestService';
 
 interface ViewContractPageProps {

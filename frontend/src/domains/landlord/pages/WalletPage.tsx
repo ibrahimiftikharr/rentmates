@@ -70,9 +70,9 @@ export function WalletPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [balance, setBalance] = useState('0');
   const [onChainBalance, setOnChainBalance] = useState('0');
+  const [totalRentalEarnings, setTotalRentalEarnings] = useState('0');
 
   const network = 'Polygon Amoy Testnet';
-  const totalEarnings = '4800.00'; // Mock data
 
   // Load transactions
   const loadTransactions = async () => {
@@ -122,6 +122,7 @@ export function WalletPage() {
           setWalletAddress(balanceData.walletAddress);
           setBalance(balanceData.offChainBalance.toString());
           setOnChainBalance(balanceData.onChainBalance);
+          setTotalRentalEarnings(balanceData.totalRentalEarnings?.toString() || '0');
           
           // Load transactions after wallet is connected
           loadTransactions();
@@ -195,6 +196,7 @@ export function WalletPage() {
       setWalletAddress(address);
       setBalance(balanceData.offChainBalance.toString());
       setOnChainBalance(usdtBalance);
+      setTotalRentalEarnings(balanceData.totalRentalEarnings?.toString() || '0');
       
       showSuccessToast('✅ Wallet connected successfully!');
     } catch (error: any) {
@@ -229,6 +231,7 @@ export function WalletPage() {
       // Refresh balance
       const balanceData = await getWalletBalance();
       setBalance(balanceData.offChainBalance.toString());
+      setTotalRentalEarnings(balanceData.totalRentalEarnings?.toString() || '0');
       
       setShowDepositModal(false);
       setDepositAmount('');
@@ -263,6 +266,7 @@ export function WalletPage() {
       // Refresh balance
       const balanceData = await getWalletBalance();
       setBalance(balanceData.offChainBalance.toString());
+      setTotalRentalEarnings(balanceData.totalRentalEarnings?.toString() || '0');
       
       setShowWithdrawModal(false);
       setWithdrawAmount('');
@@ -394,7 +398,7 @@ export function WalletPage() {
                 <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
                 <p className="text-xs md:text-sm text-muted-foreground">Total Earnings from Rentals</p>
               </div>
-              <h2 className="text-[#4A4A68] mb-1">{totalEarnings} USDT</h2>
+              <h2 className="text-[#4A4A68] mb-1">{totalRentalEarnings} USDT</h2>
               <p className="text-xs text-muted-foreground">Earnings from tenant rent payments</p>
             </div>
             <div className="w-10 h-10 md:w-12 md:h-12 bg-green-500/10 rounded-full flex items-center justify-center flex-shrink-0">

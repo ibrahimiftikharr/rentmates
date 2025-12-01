@@ -35,7 +35,7 @@ import { Badge } from '@/shared/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/tabs';
 import { Calendar } from '@/shared/ui/calendar';
 import { landlordService } from '../services/landlordService';
-import { toast } from 'sonner';
+import { toast } from '@/shared/utils/toast';
 
 interface PropertyDetailsPageProps {
   onNavigate: (page: string) => void;
