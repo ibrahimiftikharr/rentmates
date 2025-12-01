@@ -8,6 +8,11 @@ interface VerificationReputationProgressCardProps {
 }
 
 export function VerificationReputationProgressCard({ profile }: VerificationReputationProgressCardProps) {
+  // Get wallet status from user data in localStorage (same as landlord)
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : null;
+  const walletConnected = !!(user?.walletAddress);
+  
   // Calculate points based on profile completion
   const steps = [
     { 
@@ -42,7 +47,7 @@ export function VerificationReputationProgressCard({ profile }: VerificationRepu
       id: 'wallet', 
       title: 'Wallet Linked', 
       points: 20, 
-      completed: profile.walletLinked,
+      completed: walletConnected || profile.walletLinked || profile.reputationScore === 100,
       icon: LinkIcon 
     },
   ];

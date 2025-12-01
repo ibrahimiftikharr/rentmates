@@ -21,7 +21,7 @@ export function AddPropertyWizard() {
     title: '',
     location: '',
     rent: '',
-    currency: 'GBP',
+    currency: 'USD',
     amenities: [] as string[],
   });
 
@@ -31,7 +31,7 @@ export function AddPropertyWizard() {
   const handlePublish = () => {
     setOpen(false);
     setStep(1);
-    setFormData({ title: '', location: '', rent: '', currency: 'GBP', amenities: [] });
+    setFormData({ title: '', location: '', rent: '', currency: 'USD', amenities: [] });
   };
 
   const toggleAmenity = (amenity: string) => {

@@ -1,11 +1,25 @@
 const express = require('express');
 const landlordRouter = express.Router();
 const landlordController = require('../controllers/landlordController');
+const landlordDashboardController = require('../controllers/landlordDashboardController');
 const authenticateToken = require('../middleware/authenticateToken');
 const { uploadProfile, uploadDocument } = require('../config/cloudinary');
 
 // All routes require authentication
 landlordRouter.use(authenticateToken);
+
+// ========================================
+// DASHBOARD ROUTES
+// ========================================
+
+// Get dashboard metrics
+landlordRouter.get('/dashboard/metrics', landlordDashboardController.getDashboardMetrics);
+
+// Get upcoming payments
+landlordRouter.get('/dashboard/upcoming-payments', landlordDashboardController.getUpcomingPayments);
+
+// Get recent notifications for dashboard
+landlordRouter.get('/dashboard/notifications', landlordDashboardController.getRecentNotifications);
 
 // ========================================
 // PROFILE ROUTES

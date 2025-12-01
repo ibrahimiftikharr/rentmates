@@ -260,6 +260,25 @@ exports.payRent = async (req, res) => {
       return res.status(404).json({ error: 'No active rental found' });
     }
 
+    // Get current rent cycle info
+    const cycleInfo = rental.getCurrentRentCycle();
+    
+    console.log('💰 Processing rent payment for cycle:', {
+      forMonth: cycleInfo.forMonth,
+      forYear: cycleInfo.forYear,
+      canPayNow: cycleInfo.canPayNow,
+      isPaid: cycleInfo.isPaid
+    });
+    
+    // Check if payment window is open (20 days before due date)
+    if (!cycleInfo.canPayNow) {
+      return res.status(400).json({ 
+        error: 'Payment window not open yet',
+        message: `Rent payment will be available starting ${cycleInfo.paymentWindowStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+        daysUntilWindowOpens: cycleInfo.daysUntilWindowOpens
+      });
+    }
+
     const rentAmount = rental.monthlyRentAmount;
     const student = rental.student;
     const landlord = rental.landlord;
@@ -281,6 +300,8 @@ exports.payRent = async (req, res) => {
     await landlord.save();
 
     // Create transaction records for both parties
+    const monthName = new Date(cycleInfo.forYear, cycleInfo.forMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    
     const studentTransaction = await Transaction.create({
       user: student._id,
       type: 'rent_payment',
@@ -289,7 +310,7 @@ exports.payRent = async (req, res) => {
       rental: rental._id,
       relatedUser: landlord._id,
       balanceAfter: student.offChainBalance,
-      description: `Rent payment for ${rental.propertyInfo.title}`
+      description: `Rent payment for ${rental.propertyInfo.title} - ${monthName}`
     });
 
     await Transaction.create({
@@ -300,15 +321,17 @@ exports.payRent = async (req, res) => {
       rental: rental._id,
       relatedUser: student._id,
       balanceAfter: landlord.offChainBalance,
-      description: `Rent received from ${student.name} for ${rental.propertyInfo.title}`
+      description: `Rent received from ${student.name} for ${rental.propertyInfo.title} - ${monthName}`
     });
 
-    // Add to rental payment history
+    // Add to rental payment history with period info
     rental.payments.push({
       amount: rentAmount,
       type: 'rent',
       paidAt: new Date(),
-      status: 'paid'
+      status: 'paid',
+      forMonth: cycleInfo.forMonth,
+      forYear: cycleInfo.forYear
     });
 
     // Add to rental action history
@@ -316,10 +339,36 @@ exports.payRent = async (req, res) => {
       action: 'Rent Paid',
       amount: `$${rentAmount}`,
       date: new Date(),
-      notes: `Monthly rent payment for ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+      notes: `Monthly rent payment for ${monthName}`
     });
 
+    // Mark current cycle as paid and move to next cycle
+    rental.markCycleAsPaidAndMoveNext();
+
     await rental.save();
+    
+    console.log('✓ Rent payment completed and moved to next cycle');
+
+    // Emit Socket.IO event for real-time update
+    const io = req.app.get('io');
+    if (io) {
+      // Update student's rent card in real-time
+      io.to(`student_${studentId}`).emit('rent_cycle_updated', {
+        currentCycle: rental.currentRentCycle,
+        canPayNow: false, // Next cycle's window not open yet
+        isPaid: false
+      });
+      
+      // Notify landlord of rent received
+      io.to(`landlord_${landlord._id}`).emit('new_notification', {
+        type: 'rent_received',
+        title: 'Rent Payment Received',
+        message: `${student.name} paid rent of $${rentAmount} USDT for ${rental.propertyInfo.title} (${monthName})`,
+        rentalId: rental._id,
+        amount: rentAmount,
+        transactionId: studentTransaction._id
+      });
+    }
 
     // Send email notification to landlord
     try {
@@ -337,6 +386,7 @@ exports.payRent = async (req, res) => {
               <p style="margin: 10px 0;"><strong>Tenant:</strong> ${student.name}</p>
               <p style="margin: 10px 0;"><strong>Property:</strong> ${rental.propertyInfo.title}</p>
               <p style="margin: 10px 0;"><strong>Address:</strong> ${rental.propertyInfo.address}</p>
+              <p style="margin: 10px 0;"><strong>Period:</strong> ${monthName}</p>
               <p style="margin: 10px 0;"><strong>Amount:</strong> $${rentAmount} USDT</p>
               <p style="margin: 10px 0;"><strong>Date:</strong> ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
               <p style="margin: 10px 0;"><strong>New Balance:</strong> $${landlord.offChainBalance} USDT</p>
@@ -354,29 +404,18 @@ exports.payRent = async (req, res) => {
       console.error('Error sending rent payment email:', emailError);
     }
 
-    // Send in-app notification to landlord via Socket.IO
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`landlord_${landlord._id}`).emit('new_notification', {
-        type: 'rent_received',
-        title: 'Rent Payment Received',
-        message: `${student.name} paid rent of $${rentAmount} USDT for ${rental.propertyInfo.title}`,
-        rentalId: rental._id,
-        amount: rentAmount,
-        transactionId: studentTransaction._id
-      });
-    }
-
-    console.log(`Rent paid: ${rentAmount} USDT from ${student.email} to ${landlord.email}`);
+    console.log(`✓ Rent paid: ${rentAmount} USDT from ${student.email} to ${landlord.email} for ${monthName}`);
 
     res.json({
       success: true,
       message: 'Rent paid successfully',
       amount: rentAmount,
+      period: monthName,
       newBalance: student.offChainBalance,
       landlordName: landlord.name,
       propertyTitle: rental.propertyInfo.title,
-      transactionId: studentTransaction._id
+      transactionId: studentTransaction._id,
+      showMoveInWarning: paymentInfo.shouldShowMoveInWarning
     });
   } catch (error) {
     console.error('Pay rent error:', error);
@@ -483,11 +522,19 @@ exports.getStudentRentalInfo = async (req, res) => {
       });
     }
 
-    // Calculate next rent due date
-    const nextDueDate = rental.getNextRentDueDate();
-    const now = new Date();
-    const daysUntilDue = Math.ceil((nextDueDate - now) / (1000 * 60 * 60 * 24));
-
+    // Get current rent cycle info with new simple logic
+    const cycleInfo = rental.getCurrentRentCycle();
+    
+    console.log('📊 Current rent cycle for student:', {
+      studentId,
+      rentalId: rental._id,
+      forMonth: cycleInfo.forMonth,
+      forYear: cycleInfo.forYear,
+      canPayNow: cycleInfo.canPayNow,
+      isPaid: cycleInfo.isPaid,
+      daysUntilDue: cycleInfo.daysUntilDue
+    });
+    
     res.json({
       success: true,
       hasActiveRental: true,
@@ -497,8 +544,16 @@ exports.getStudentRentalInfo = async (req, res) => {
         propertyAddress: rental.propertyInfo.address,
         monthlyRent: rental.monthlyRentAmount,
         rentDueDay: rental.monthlyRentDueDate,
-        nextDueDate: nextDueDate,
-        daysUntilDue: daysUntilDue,
+        nextDueDate: cycleInfo.dueDate,
+        daysUntilDue: cycleInfo.daysUntilDue,
+        canPayNow: cycleInfo.canPayNow,
+        paymentWindowStart: cycleInfo.paymentWindowStart,
+        daysUntilWindowOpens: cycleInfo.daysUntilWindowOpens,
+        isFirstPayment: cycleInfo.isFirstPayment,
+        shouldShowMoveInWarning: cycleInfo.shouldShowMoveInWarning,
+        forMonth: cycleInfo.forMonth,
+        forYear: cycleInfo.forYear,
+        isPaid: cycleInfo.isPaid,
         landlord: {
           id: rental.landlord._id,
           name: rental.landlord.name,
@@ -507,7 +562,9 @@ exports.getStudentRentalInfo = async (req, res) => {
         },
         leaseStartDate: rental.leaseStartDate,
         leaseEndDate: rental.leaseEndDate,
-        status: rental.status
+        movingDate: rental.movingDate,
+        status: rental.status,
+        autoPaymentEnabled: rental.autoPaymentEnabled || false
       }
     });
   } catch (error) {
@@ -515,3 +572,43 @@ exports.getStudentRentalInfo = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch rental information' });
   }
 };
+
+/**
+ * Toggle auto-payment for student's rental
+ */
+exports.toggleAutoPayment = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Invalid enabled value. Must be boolean.' });
+    }
+
+    // Find the student's active rental
+    const rental = await Rental.findOne({
+      student: studentId,
+      status: { $in: ['registered', 'active'] }
+    });
+
+    if (!rental) {
+      return res.status(404).json({ error: 'No active rental found' });
+    }
+
+    // Update auto-payment setting
+    rental.autoPaymentEnabled = enabled;
+    await rental.save();
+
+    console.log(`✓ Auto-payment ${enabled ? 'enabled' : 'disabled'} for rental ${rental._id}`);
+
+    res.json({
+      success: true,
+      message: `Auto-payment ${enabled ? 'enabled' : 'disabled'} successfully`,
+      autoPaymentEnabled: rental.autoPaymentEnabled
+    });
+  } catch (error) {
+    console.error('Toggle auto-payment error:', error);
+    res.status(500).json({ error: 'Failed to toggle auto-payment' });
+  }
+};
+

@@ -400,12 +400,12 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
                       <div className="flex items-center gap-3">
                         <div className="flex-1 p-3 rounded-lg bg-primary/10 border-2 border-primary/20 text-center">
                           <p className="text-xs text-muted-foreground mb-1">Min</p>
-                          <p className="font-semibold text-primary">{getCurrencySymbol('GBP')}{priceRange[0]}</p>
+                          <p className="font-semibold text-primary">{getCurrencySymbol('USD')}{priceRange[0]}</p>
                         </div>
                         <div className="w-8 h-0.5 bg-border" />
                         <div className="flex-1 p-3 rounded-lg bg-primary/10 border-2 border-primary/20 text-center">
                           <p className="text-xs text-muted-foreground mb-1">Max</p>
-                          <p className="font-semibold text-primary">{getCurrencySymbol('GBP')}{priceRange[1]}</p>
+                          <p className="font-semibold text-primary">{getCurrencySymbol('USD')}{priceRange[1]}</p>
                         </div>
                       </div>
                     </div>

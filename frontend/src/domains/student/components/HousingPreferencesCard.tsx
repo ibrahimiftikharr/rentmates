@@ -102,7 +102,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
           <div className="space-y-2">
             <Label htmlFor="budgetMin" className="text-sm flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-primary" />
-              Min Budget (£/month)
+              Min Budget ($/month)
             </Label>
             <Input 
               id="budgetMin" 
@@ -116,7 +116,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="budgetMax" className="text-sm">Max Budget (£/month)</Label>
+            <Label htmlFor="budgetMax" className="text-sm">Max Budget ($/month)</Label>
             <Input 
               id="budgetMax" 
               type="number"

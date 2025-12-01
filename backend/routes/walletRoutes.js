@@ -27,6 +27,9 @@ router.get('/transactions', walletController.getTransactionHistory);
 // GET /api/wallet/rental-info - Get student's active rental information
 router.get('/rental-info', walletController.getStudentRentalInfo);
 
+// POST /api/wallet/toggle-auto-payment - Toggle auto-payment for rent
+router.post('/toggle-auto-payment', walletController.toggleAutoPayment);
+
 // GET /api/wallet/vault-info - Get vault contract information
 router.get('/vault-info', walletController.getVaultInfo);
 

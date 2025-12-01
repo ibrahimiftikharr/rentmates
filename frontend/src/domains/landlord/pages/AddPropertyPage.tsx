@@ -101,7 +101,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     bathrooms: '',
     size: '',
     rent: '',
-    currency: 'GBP',
+    currency: 'USD',
     deposit: '',
     minStay: '',
     maxStay: '',

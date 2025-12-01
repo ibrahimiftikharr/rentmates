@@ -52,66 +52,6 @@ interface Transaction {
   };
 }
 
-// Mock transaction data (kept as-is)
-const MOCK_TRANSACTIONS: Transaction[] = [
-  {
-    id: '1',
-    date: '2025-11-08',
-    type: 'rent',
-    amount: '1200',
-    status: 'completed',
-    description: 'Rent received from Michael Chen'
-  },
-  {
-    id: '2',
-    date: '2025-11-07',
-    type: 'deposit',
-    amount: '500',
-    status: 'completed',
-    description: 'Wallet top-up'
-  },
-  {
-    id: '3',
-    date: '2025-11-06',
-    type: 'rent',
-    amount: '1800',
-    status: 'completed',
-    description: 'Rent received from Sarah Johnson'
-  },
-  {
-    id: '4',
-    date: '2025-11-05',
-    type: 'withdrawal',
-    amount: '2000',
-    status: 'pending',
-    description: 'Withdrawal to external wallet'
-  },
-  {
-    id: '5',
-    date: '2025-11-04',
-    type: 'refund',
-    amount: '500',
-    status: 'completed',
-    description: 'Security deposit refund'
-  },
-  {
-    id: '6',
-    date: '2025-11-03',
-    type: 'termination_fee',
-    amount: '2',
-    status: 'completed',
-    description: 'Contract termination gas fee'
-  },
-  {
-    id: '7',
-    date: '2025-11-01',
-    type: 'rent',
-    amount: '850',
-    status: 'completed',
-    description: 'Rent received from Emma Williams'
-  }
-];
-
 export function WalletPage() {
   const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');

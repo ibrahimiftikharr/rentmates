@@ -50,7 +50,8 @@ const getStudentProfile = async (req, res) => {
           documentsCount: populatedStudent.getDocumentsCount(),
           completedTasks: populatedStudent.getCompletedTasks(),
           profileSteps: populatedStudent.profileSteps,
-          isProfileComplete: populatedStudent.isProfileComplete
+          isProfileComplete: populatedStudent.isProfileComplete,
+          walletLinked: populatedStudent.walletLinked || false
         }
       });
     }
@@ -81,7 +82,8 @@ const getStudentProfile = async (req, res) => {
         documentsCount: student.getDocumentsCount(),
         completedTasks: student.getCompletedTasks(),
         profileSteps: student.profileSteps,
-        isProfileComplete: student.isProfileComplete
+        isProfileComplete: student.isProfileComplete,
+        walletLinked: student.walletLinked || false
       }
     });
   } catch (error) {

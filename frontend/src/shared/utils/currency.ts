@@ -29,13 +29,13 @@ export const CURRENCIES: Currency[] = [
   { code: 'SAR', symbol: 'SR', name: 'Saudi Riyal' },
 ];
 
-export const DEFAULT_CURRENCY = 'GBP';
+export const DEFAULT_CURRENCY = 'USD';
 
 /**
  * Get currency symbol by currency code
  */
 export function getCurrencySymbol(currencyCode?: string): string {
-  if (!currencyCode) return '£'; // Default to GBP
+  if (!currencyCode) return '$'; // Default to USD
   const currency = CURRENCIES.find(c => c.code === currencyCode);
   return currency?.symbol || currencyCode;
 }

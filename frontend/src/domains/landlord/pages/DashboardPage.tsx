@@ -1,32 +1,145 @@
+import { useState, useEffect } from 'react';
 import { OverviewCards } from '../components/OverviewCards';
 import { UpcomingPayments } from '../components/UpcomingPayments';
 import { ReputationTracking } from '../components/ReputationTracking';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { Card } from '@/shared/ui/card';
 import { Bell, ChevronRight } from 'lucide-react';
+import { landlordService } from '../services/landlordService';
+import { socketService } from '@/shared/services/socketService';
+import { authService } from '@/domains/auth/services/authService';
 
 interface DashboardPageProps {
   onNavigate?: (page: string) => void;
 }
 
+interface DashboardMetrics {
+  totalProperties: number;
+  activeTenants: number;
+  pendingRequests: number;
+  totalEarnings: number;
+  totalDepositsHeld: number;
+  thisMonthRequests: number;
+  requestsChange: string;
+  earningsChange: string;
+  isRequestsPositive: boolean;
+  isEarningsPositive: boolean;
+}
+
+interface Notification {
+  _id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [landlordName, setLandlordName] = useState('Landlord');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDashboardData();
+
+    // Get landlord name from user data
+    const user = authService.getUser();
+    if (user?.name) {
+      setLandlordName(user.name.split(' ')[0]); // First name only
+    }
+
+    // Listen for real-time updates
+    socketService.on('metrics_updated', (data: any) => {
+      console.log('Metrics updated via Socket.IO:', data);
+      setMetrics(data.metrics);
+    });
+
+    socketService.on('new_notification', () => {
+      console.log('New notification received');
+      loadNotifications();
+    });
+
+    socketService.on('payment_received', () => {
+      console.log('Payment received, refreshing metrics');
+      loadDashboardData();
+    });
+
+    return () => {
+      socketService.off('metrics_updated');
+      socketService.off('new_notification');
+      socketService.off('payment_received');
+    };
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      await Promise.all([
+        loadMetrics(),
+        loadNotifications()
+      ]);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMetrics = async () => {
+    try {
+      const response = await landlordService.getDashboardMetrics();
+      setMetrics(response.metrics);
+    } catch (error) {
+      console.error('Error loading metrics:', error);
+    }
+  };
+
+  const loadNotifications = async () => {
+    try {
+      const response = await landlordService.getRecentNotifications();
+      setNotifications(response.notifications || []);
+      setUnreadCount(response.unreadCount || 0);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    }
+  };
+
+  // Format notification message for display
+  const getNotificationPreview = () => {
+    if (notifications.length === 0) return 'No new notifications';
+    if (notifications.length === 1) return notifications[0].message;
+    
+    const types = notifications.map(n => {
+      if (n.type === 'join_request') return 'join request';
+      if (n.type === 'visit_request') return 'visit';
+      return n.type;
+    });
+    
+    return types.slice(0, 2).join(' and ');
+  };
   return (
     <div className="p-4 sm:p-6">
       {/* Hero Section with Illustration */}
       <div className="mb-4 sm:mb-6 bg-gradient-to-br from-[#8C57FF] to-[#B794F6] rounded-xl sm:rounded-2xl p-4 sm:p-6 flex items-center justify-between overflow-hidden relative shadow-xl">
         <div className="text-white z-10 flex-1">
-          <h2 className="text-white mb-2 text-xl sm:text-2xl">Welcome back, John!</h2>
+          <h2 className="text-white mb-2 text-xl sm:text-2xl">Welcome back, {landlordName}!</h2>
           <p className="text-white/90 text-xs sm:text-sm mb-3 sm:mb-4">
             Here's what's happening with your properties today
           </p>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <div className="bg-white/20 backdrop-blur-sm px-3 sm:px-4 py-2 rounded-lg">
               <p className="text-xs text-white/80">This Month</p>
-              <p className="text-white text-sm sm:text-base">+5 New Requests</p>
+              <p className="text-white text-sm sm:text-base">
+                {loading ? '...' : `+${metrics?.thisMonthRequests || 0} New Requests`}
+              </p>
             </div>
             <div className="bg-white/20 backdrop-blur-sm px-3 sm:px-4 py-2 rounded-lg">
               <p className="text-xs text-white/80">Total Deposits Held</p>
-              <p className="text-white text-sm sm:text-base">$12,800</p>
+              <p className="text-white text-sm sm:text-base">
+                {loading ? '...' : `$${metrics?.totalDepositsHeld?.toLocaleString() || 0}`}
+              </p>
             </div>
           </div>
         </div>
@@ -51,10 +164,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-[#4A4A68] text-sm sm:text-base mb-0.5">
-                You have <span className="text-[#8C57FF]">2 new notifications</span>
+                You have <span className="text-[#8C57FF]">{unreadCount} new notification{unreadCount !== 1 ? 's' : ''}</span>
               </h3>
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                New join request and visit scheduled
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                {loading ? 'Loading...' : getNotificationPreview()}
               </p>
             </div>
           </div>
@@ -64,7 +177,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {/* Overview Cards */}
       <div className="mb-4 sm:mb-6">
-        <OverviewCards />
+        <OverviewCards metrics={metrics} loading={loading} />
       </div>
 
       {/* Two Column Layout */}

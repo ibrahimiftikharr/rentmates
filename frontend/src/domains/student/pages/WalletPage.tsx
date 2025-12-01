@@ -12,6 +12,7 @@ import { Calendar } from '../../../shared/ui/calendar';
 import { Wallet, ArrowDownToLine, ArrowUpFromLine, Clock, CheckCircle, XCircle, CalendarIcon, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { socketService } from '@/shared/services/socketService';
 import {
   connectMetaMask,
   getUSDTBalance,
@@ -22,7 +23,8 @@ import {
   withdrawFromVault,
   payRent,
   getTransactionHistory,
-  getStudentRentalInfo
+  getStudentRentalInfo,
+  toggleAutoPayment
 } from '../../../shared/services/walletService';
 
 type TransactionType = 'deposit' | 'withdraw' | 'rent_payment' | 'rent_received';
@@ -56,6 +58,14 @@ interface RentalInfo {
   rentDueDay: number;
   nextDueDate: string;
   daysUntilDue: number;
+  canPayNow: boolean;
+  paymentWindowStart: string;
+  daysUntilWindowOpens: number;
+  isFirstPayment: boolean;
+  shouldShowMoveInWarning: boolean;
+  forMonth: number;
+  forYear: number;
+  isPaid?: boolean; // Added for cycle-based system
   landlord: {
     id: string;
     name: string;
@@ -64,7 +74,9 @@ interface RentalInfo {
   };
   leaseStartDate: string;
   leaseEndDate: string;
+  movingDate: string;
   status: string;
+  autoPaymentEnabled?: boolean;
 }
 
 export function WalletPage() {
@@ -121,14 +133,55 @@ export function WalletPage() {
     loadWalletState();
   }, []);
 
+  // Socket.IO listener for real-time rent cycle updates
+  useEffect(() => {
+    // Listen for rent cycle updates
+    socketService.on('rent_cycle_updated', (data: any) => {
+      console.log('🔄 Rent cycle updated via Socket.IO:', data);
+      
+      // Update rental info with new cycle
+      if (rentalInfo) {
+        setRentalInfo({
+          ...rentalInfo,
+          forMonth: data.currentCycle.forMonth,
+          forYear: data.currentCycle.forYear,
+          nextDueDate: data.currentCycle.dueDate,
+          paymentWindowStart: data.currentCycle.paymentWindowStart,
+          canPayNow: data.canPayNow,
+          isPaid: data.isPaid
+        });
+        
+        toast.success('Payment processed! Card updated to next cycle.', {
+          description: `Next rent due: ${formatRentPeriod(data.currentCycle.forMonth, data.currentCycle.forYear)}`
+        });
+      }
+    });
+
+    // Cleanup listener on unmount
+    return () => {
+      socketService.off('rent_cycle_updated');
+    };
+  }, [rentalInfo]); // Dependency on rentalInfo to access latest state
+
   // Load rental information
   const loadRentalInfo = async () => {
     setIsLoadingRental(true);
     try {
+      // Add cache-busting timestamp to force fresh data
       const response = await getStudentRentalInfo();
       if (response.hasActiveRental && response.rental) {
         setHasActiveRental(true);
         setRentalInfo(response.rental);
+        // Load auto-payment setting
+        setAutoRepayment(response.rental.autoPaymentEnabled || false);
+        console.log('Rental Info Loaded:', {
+          forPeriod: `${response.rental.forMonth}/${response.rental.forYear}`,
+          dueDate: response.rental.nextDueDate,
+          canPayNow: response.rental.canPayNow,
+          daysUntilWindowOpens: response.rental.daysUntilWindowOpens,
+          autoPaymentEnabled: response.rental.autoPaymentEnabled,
+          full: response.rental
+        });
       } else {
         setHasActiveRental(false);
         setRentalInfo(null);
@@ -138,6 +191,41 @@ export function WalletPage() {
     } finally {
       setIsLoadingRental(false);
     }
+  };
+
+  // Helper function to format rent period
+  const formatRentPeriod = (month: number | undefined, year: number | undefined): string => {
+    if (month === undefined || year === undefined || month === null || year === null) {
+      return 'Loading...';
+    }
+    try {
+      const date = new Date(year, month, 1);
+      if (isNaN(date.getTime())) {
+        return 'Loading...';
+      }
+      return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } catch (error) {
+      console.error('Error formatting rent period:', error);
+      return 'Loading...';
+    }
+  };
+
+  // Helper function to format date safely
+  const formatDate = (dateStr: string | undefined): string => {
+    if (!dateStr) return 'Loading...';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return 'Loading...';
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (error) {
+      return 'Loading...';
+    }
+  };
+
+  // Helper function to get days value safely
+  const getDaysValue = (days: number | undefined): string => {
+    if (days === undefined || days === null || isNaN(days)) return '...';
+    return `${days}`;
   };
 
   // Load transactions
@@ -321,6 +409,12 @@ export function WalletPage() {
       return;
     }
 
+    // Check if payment window is open
+    if (!rentalInfo.canPayNow) {
+      toast.error(`Payment will be available starting ${new Date(rentalInfo.paymentWindowStart).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
+      return;
+    }
+
     setIsPayingRent(true);
     
     try {
@@ -338,11 +432,24 @@ export function WalletPage() {
       setBalance(balanceData.offChainBalance);
       
       setOpenPayRentDialog(false);
-      toast.success(`Rent of $${rentalInfo.monthlyRent} USDT paid successfully to ${result.landlordName}!`);
       
-      // Reload rental info and transactions
-      loadRentalInfo();
-      loadTransactions();
+      const monthName = formatRentPeriod(rentalInfo.forMonth, rentalInfo.forYear);
+      toast.success(`Rent of $${rentalInfo.monthlyRent} USDT paid successfully for ${monthName} to ${result.landlordName}!`);
+      
+      // Show move-in warning if returned from backend
+      if (result.showMoveInWarning) {
+        setTimeout(() => {
+          toast.info('💡 Note: We recommend paying rent at least 3 days after move-in to help prevent property-related fraud.', {
+            duration: 8000
+          });
+        }, 1000);
+      }
+      
+      // Reload transactions to show new payment
+      await loadTransactions();
+      
+      // Socket.IO will handle rent cycle update in real-time (no manual reload needed!)
+      console.log('✓ Payment complete. Socket.IO will update cycle automatically.');
     } catch (error: any) {
       console.error('Pay rent error:', error);
       toast.error(error.message || 'Failed to pay rent');
@@ -733,32 +840,61 @@ export function WalletPage() {
                 ) : (
                   <>
                     {/* Next Repayment */}
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                    <div className={`rounded-lg p-4 border ${
+                      !rentalInfo.canPayNow 
+                        ? 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300' 
+                        : 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200'
+                    }`}>
                       <div className="flex items-center gap-2 mb-3">
-                        <Clock className="w-5 h-5 text-blue-600" />
-                        <span className="font-medium text-blue-900">Next Rent Payment</span>
+                        <Clock className={`w-5 h-5 ${!rentalInfo.canPayNow ? 'text-gray-500' : 'text-blue-600'}`} />
+                        <span className={`font-medium ${!rentalInfo.canPayNow ? 'text-gray-700' : 'text-blue-900'}`}>
+                          {!rentalInfo.canPayNow ? 'Payment Window Not Open' : 'Next Rent Payment'}
+                        </span>
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-blue-700">Property:</span>
-                          <span className="font-medium text-blue-900 text-right text-sm">{rentalInfo.propertyTitle}</span>
+                          <span className={`text-sm ${!rentalInfo.canPayNow ? 'text-gray-600' : 'text-blue-700'}`}>Property:</span>
+                          <span className={`font-medium text-right text-sm ${!rentalInfo.canPayNow ? 'text-gray-800' : 'text-blue-900'}`}>{rentalInfo.propertyTitle}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-blue-700">Date:</span>
-                          <span className="font-medium text-blue-900">
-                            {new Date(rentalInfo.nextDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          <span className={`text-sm ${!rentalInfo.canPayNow ? 'text-gray-600' : 'text-blue-700'}`}>For Period:</span>
+                          <span className={`font-medium ${!rentalInfo.canPayNow ? 'text-gray-800' : 'text-blue-900'}`}>
+                            {formatRentPeriod(rentalInfo.forMonth, rentalInfo.forYear)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-blue-700">Amount:</span>
-                          <span className="font-medium text-blue-900">${rentalInfo.monthlyRent} USDT</span>
+                          <span className={`text-sm ${!rentalInfo.canPayNow ? 'text-gray-600' : 'text-blue-700'}`}>Due Date:</span>
+                          <span className={`font-medium ${!rentalInfo.canPayNow ? 'text-gray-800' : 'text-blue-900'}`}>
+                            {formatDate(rentalInfo.nextDueDate)}
+                          </span>
                         </div>
-                        <div className="flex items-center justify-between pt-2 border-t border-blue-300">
-                          <span className="text-sm text-blue-700">Days Until:</span>
-                          <Badge className="bg-blue-600 text-white">
-                            {rentalInfo.daysUntilDue} {rentalInfo.daysUntilDue === 1 ? 'day' : 'days'}
-                          </Badge>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-sm ${!rentalInfo.canPayNow ? 'text-gray-600' : 'text-blue-700'}`}>Amount:</span>
+                          <span className={`font-medium ${!rentalInfo.canPayNow ? 'text-gray-800' : 'text-blue-900'}`}>${rentalInfo.monthlyRent} USDT</span>
                         </div>
+                        {!rentalInfo.canPayNow ? (
+                          <>
+                            <div className="flex items-center justify-between pt-2 border-t border-gray-300">
+                              <span className="text-sm text-gray-600">Payment Opens:</span>
+                              <span className="font-medium text-gray-800 text-sm">
+                                {formatDate(rentalInfo.paymentWindowStart)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-gray-600">Opens In:</span>
+                              <Badge className="bg-gray-500 text-white">
+                                {getDaysValue(rentalInfo.daysUntilWindowOpens)} {rentalInfo.daysUntilWindowOpens === 1 ? 'day' : 'days'}
+                              </Badge>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex items-center justify-between pt-2 border-t border-blue-300">
+                            <span className="text-sm text-blue-700">Days Until Due:</span>
+                            <Badge className="bg-blue-600 text-white">
+                              {getDaysValue(rentalInfo.daysUntilDue)} {rentalInfo.daysUntilDue === 1 ? 'day' : 'days'}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -767,7 +903,7 @@ export function WalletPage() {
                   <div className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors">
                     <div className="flex-1 pr-4">
                       <Label htmlFor="auto-repayment" className="cursor-pointer">
-                        Auto-trigger repayments
+                        Auto-trigger rent payments
                       </Label>
                       <p className="text-sm text-muted-foreground mt-1">
                         Automatically pay on due date
@@ -776,33 +912,56 @@ export function WalletPage() {
                     <Switch
                       id="auto-repayment"
                       checked={autoRepayment}
-                      onCheckedChange={(checked) => {
-                        setAutoRepayment(checked);
-                        toast.success(
-                          checked 
-                            ? 'Auto-repayment enabled' 
-                            : 'Auto-repayment disabled'
-                        );
+                      onCheckedChange={async (checked) => {
+                        try {
+                          // Save to backend
+                          await toggleAutoPayment(checked);
+                          setAutoRepayment(checked);
+                          toast.success(
+                            checked 
+                              ? 'Auto-payment enabled - Rent will be paid automatically 1 day before due date' 
+                              : 'Auto-payment disabled'
+                          );
+                        } catch (error: any) {
+                          console.error('Toggle auto-payment error:', error);
+                          toast.error(error.message || 'Failed to toggle auto-payment');
+                        }
                       }}
                     />
                   </div>
-                  {autoRepayment && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                      <p className="text-sm text-green-800">
-                        ✓ Repayments will be automatically processed on the due date
-                      </p>
-                    </div>
-                  )}
+                
                 </div>
 
-                    {/* Pay Rent Now Button */}
-                    <Button 
-                      className="w-full bg-primary hover:bg-primary/90 h-11"
-                      onClick={() => setOpenPayRentDialog(true)}
+                    {/* Pay Rent Now Button or Auto-Payment Message */}
+                    {autoRepayment ? (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                        <p className="text-sm font-medium text-blue-900">🔄 Auto-payment enabled</p>
+                        <p className="text-xs text-blue-700 mt-1">
+                          Rent will be automatically deducted 1 day before the due date
+                        </p>
+                      </div>
+                    ) : (
+                      <Button 
+                      className={`w-full h-11 ${
+                        !rentalInfo.canPayNow 
+                          ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed' 
+                          : 'bg-primary hover:bg-primary/90'
+                      }`}
+                      onClick={() => {
+                        if (rentalInfo.canPayNow) {
+                          setOpenPayRentDialog(true);
+                        } else {
+                          toast.error(`Payment will be available starting ${new Date(rentalInfo.paymentWindowStart).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
+                        }
+                      }}
                       disabled={!hasActiveRental || !rentalInfo}
                     >
-                      Pay Rent Now
+                      {!rentalInfo.canPayNow 
+                        ? `Payment Opens ${new Date(rentalInfo.paymentWindowStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` 
+                        : 'Pay Rent Now'
+                      }
                     </Button>
+                    )}
                   </>
                 )}
 
@@ -813,7 +972,7 @@ export function WalletPage() {
                       <DialogHeader>
                         <DialogTitle>Pay Rent</DialogTitle>
                         <DialogDescription>
-                          Pay the next rent of ${rentalInfo.monthlyRent} USDT for {rentalInfo.propertyTitle}
+                          Pay rent for {formatRentPeriod(rentalInfo.forMonth, rentalInfo.forYear)} - ${rentalInfo.monthlyRent} USDT for {rentalInfo.propertyTitle}
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4">
@@ -827,7 +986,7 @@ export function WalletPage() {
                         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
                           <div className="flex items-center gap-2 mb-3">
                             <Clock className="w-5 h-5 text-blue-600" />
-                            <span className="font-medium text-blue-900">Rent Payment</span>
+                            <span className="font-medium text-blue-900">Rent Payment Details</span>
                           </div>
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
@@ -837,6 +996,12 @@ export function WalletPage() {
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-blue-700">Landlord:</span>
                               <span className="font-medium text-blue-900">{rentalInfo.landlord.name}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-blue-700">For Period:</span>
+                              <span className="font-medium text-blue-900">
+                                {formatRentPeriod(rentalInfo.forMonth, rentalInfo.forYear)}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-sm text-blue-700">Due Date:</span>
@@ -850,6 +1015,19 @@ export function WalletPage() {
                             </div>
                           </div>
                         </div>
+                        {rentalInfo.shouldShowMoveInWarning && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <div className="flex gap-2">
+                              <span className="text-yellow-600">⚠️</span>
+                              <div className="flex-1">
+                                <p className="text-sm text-yellow-800 font-medium">Move-in Fraud Prevention Notice</p>
+                                <p className="text-xs text-yellow-700 mt-1">
+                                  We recommend paying rent at least 3 days after move-in to help verify the property and prevent fraud. You can still proceed if you're confident.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <DialogFooter>
                         <Button 
@@ -857,7 +1035,7 @@ export function WalletPage() {
                           onClick={handlePayRent}
                           disabled={isPayingRent}
                         >
-                          {isPayingRent ? 'Paying...' : 'Pay Rent'}
+                          {isPayingRent ? 'Paying...' : 'Confirm Payment'}
                         </Button>
                       </DialogFooter>
                     </DialogContent>

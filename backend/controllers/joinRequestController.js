@@ -759,6 +759,17 @@ exports.landlordSignContract = async (req, res) => {
     await rental.save();
     console.log('Rental saved successfully with ID:', rental._id);
 
+    // Initialize rent cycle for the new rental
+    console.log('Initializing rent cycle...');
+    rental.initializeRentCycle();
+    await rental.save();
+    console.log('Rent cycle initialized:', {
+      forMonth: rental.currentRentCycle.forMonth,
+      forYear: rental.currentRentCycle.forYear,
+      dueDate: rental.currentRentCycle.dueDate,
+      paymentWindowStart: rental.currentRentCycle.paymentWindowStart
+    });
+
     // Create notification for student
     console.log('Creating notification...');
     const notification = new Notification({

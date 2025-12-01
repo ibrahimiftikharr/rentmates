@@ -19,7 +19,7 @@ const propertySchema = new mongoose.Schema({
   
   // Pricing
   price: { type: Number, required: true }, // Monthly rent
-  currency: { type: String, default: 'GBP' },
+  currency: { type: String, default: 'USD' },
   deposit: { type: Number }, // Security deposit
   
   // Amenities & Bills

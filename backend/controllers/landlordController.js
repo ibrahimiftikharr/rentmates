@@ -35,6 +35,14 @@ const getProfile = async (req, res) => {
         await landlord.save();
         console.log('✓ Fixed reputation score for existing landlord:', landlord.reputationScore);
       }
+      
+      // Check basic profile completion to ensure isProfileComplete is up to date
+      const wasComplete = landlord.isProfileComplete;
+      landlord.checkBasicProfileCompletion();
+      if (wasComplete !== landlord.isProfileComplete) {
+        await landlord.save();
+        console.log('✓ Updated profile completion status:', landlord.isProfileComplete);
+      }
     }
 
     res.status(200).json({
@@ -91,8 +99,8 @@ const updateProfile = async (req, res) => {
     if (postalCode) landlord.postalCode = postalCode;
     if (governmentId) landlord.governmentId = governmentId;
 
-    // Check profile completion
-    landlord.checkProfileCompletion();
+    // Check basic profile completion (for adding properties)
+    landlord.checkBasicProfileCompletion();
     
     // Recalculate reputation score
     await landlord.calculateReputationScore();
@@ -171,6 +179,9 @@ const uploadProfileImage = async (req, res) => {
     // Save new image URL
     landlord.profileImage = req.file.path;
     
+    // Check basic profile completion (for adding properties)
+    landlord.checkBasicProfileCompletion();
+    
     // Recalculate reputation score
     await landlord.calculateReputationScore();
     
@@ -178,6 +189,7 @@ const uploadProfileImage = async (req, res) => {
     await landlord.save();
 
     console.log('✓ Profile image uploaded:', req.file.path);
+    console.log('✓ Profile complete status:', landlord.isProfileComplete);
     console.log('✓ New reputation score:', landlord.reputationScore);
 
     // Emit Socket.IO event for real-time reputation update
@@ -185,7 +197,8 @@ const uploadProfileImage = async (req, res) => {
     if (io) {
       io.to(`landlord_${userId}`).emit('reputation_updated', {
         reputationScore: landlord.reputationScore,
-        profileImage: landlord.profileImage
+        profileImage: landlord.profileImage,
+        isProfileComplete: landlord.isProfileComplete
       });
     }
 

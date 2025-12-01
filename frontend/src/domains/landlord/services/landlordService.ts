@@ -257,4 +257,40 @@ export const landlordService = {
       throw new Error(error.response?.data?.message || 'Failed to delete property');
     }
   },
+
+  /**
+   * Get dashboard metrics
+   */
+  async getDashboardMetrics() {
+    try {
+      const { data } = await api.get('/landlord/dashboard/metrics');
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch dashboard metrics');
+    }
+  },
+
+  /**
+   * Get upcoming rental payments
+   */
+  async getUpcomingPayments() {
+    try {
+      const { data } = await api.get('/landlord/dashboard/upcoming-payments');
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch upcoming payments');
+    }
+  },
+
+  /**
+   * Get recent notifications for dashboard
+   */
+  async getRecentNotifications() {
+    try {
+      const { data } = await api.get('/landlord/dashboard/notifications');
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch notifications');
+    }
+  },
 };

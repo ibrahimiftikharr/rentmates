@@ -109,6 +109,7 @@ export interface StudentProfile {
     bioCompleted: boolean;
   };
   isProfileComplete: boolean;
+  walletLinked?: boolean;
 }
 
 // ========================================

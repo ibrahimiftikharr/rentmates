@@ -417,3 +417,24 @@ export const getVaultInfo = async () => {
 
   return await response.json();
 };
+
+/**
+ * Toggle auto-payment for rent
+ */
+export const toggleAutoPayment = async (enabled: boolean) => {
+  const response = await fetch(`${API_URL}/wallet/toggle-auto-payment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${getAuthToken()}`
+    },
+    body: JSON.stringify({ enabled })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to toggle auto-payment');
+  }
+
+  return await response.json();
+};

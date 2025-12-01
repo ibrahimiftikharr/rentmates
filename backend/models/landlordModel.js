@@ -27,6 +27,20 @@ const landlordSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// Method to check if basic profile is complete (for adding properties)
+landlordSchema.methods.checkBasicProfileCompletion = function() {
+  const requiredFields = [
+    this.phone,
+    this.nationality,
+    this.address,
+    this.profileImage
+  ];
+  
+  const isComplete = requiredFields.every(field => field && field.toString().trim() !== '');
+  this.isProfileComplete = isComplete;
+  return isComplete;
+};
+
 // Method to check if profile is complete (including govt ID for accepting join requests)
 landlordSchema.methods.checkProfileCompletion = function() {
   const requiredFields = [
@@ -38,8 +52,7 @@ landlordSchema.methods.checkProfileCompletion = function() {
     this.govIdDocument
   ];
   
-  this.isProfileComplete = requiredFields.every(field => field && field.toString().trim() !== '');
-  return this.isProfileComplete;
+  return requiredFields.every(field => field && field.toString().trim() !== '');
 };
 
 // Method to calculate reputation score

@@ -1,42 +1,58 @@
 import { Home, Users, Clock, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 
-const stats = [
-  {
-    title: 'Total Properties',
-    value: '5',
-    change: '+12%',
-    isPositive: true,
-    icon: Home,
-    gradient: 'from-[#8C57FF] to-[#B794F6]',
-  },
-  {
-    title: 'Active Tenants',
-    value: '12',
-    change: '+8%',
-    isPositive: true,
-    icon: Users,
-    gradient: 'from-[#00CFE8] to-[#5BE7F5]',
-  },
-  {
-    title: 'Pending Requests',
-    value: '2',
-    change: '-4%',
-    isPositive: false,
-    icon: Clock,
-    gradient: 'from-[#FF9F43] to-[#FFB976]',
-  },
-  {
-    title: 'Total Earnings',
-    value: '$12,800',
-    change: '+18%',
-    isPositive: true,
-    icon: DollarSign,
-    gradient: 'from-[#28C76F] to-[#68DA89]',
-  },
-];
+interface DashboardMetrics {
+  totalProperties: number;
+  activeTenants: number;
+  pendingRequests: number;
+  totalEarnings: number;
+  requestsChange?: string;
+  earningsChange?: string;
+  isRequestsPositive?: boolean;
+  isEarningsPositive?: boolean;
+}
 
-export function OverviewCards() {
+interface OverviewCardsProps {
+  metrics: DashboardMetrics | null;
+  loading: boolean;
+}
+
+export function OverviewCards({ metrics, loading }: OverviewCardsProps) {
+  const stats = [
+    {
+      title: 'Total Properties',
+      value: loading ? '...' : (metrics?.totalProperties || 0).toString(),
+      change: '+12%',
+      isPositive: true,
+      icon: Home,
+      gradient: 'from-[#8C57FF] to-[#B794F6]',
+    },
+    {
+      title: 'Active Tenants',
+      value: loading ? '...' : (metrics?.activeTenants || 0).toString(),
+      change: '+8%',
+      isPositive: true,
+      icon: Users,
+      gradient: 'from-[#00CFE8] to-[#5BE7F5]',
+    },
+    {
+      title: 'Pending Requests',
+      value: loading ? '...' : (metrics?.pendingRequests || 0).toString(),
+      change: metrics?.requestsChange || '0%',
+      isPositive: metrics?.isRequestsPositive ?? true,
+      icon: Clock,
+      gradient: 'from-[#FF9F43] to-[#FFB976]',
+    },
+    {
+      title: 'Total Earnings',
+      value: loading ? '...' : `$${(metrics?.totalEarnings || 0).toLocaleString()}`,
+      change: metrics?.earningsChange || '0%',
+      isPositive: metrics?.isEarningsPositive ?? true,
+      icon: DollarSign,
+      gradient: 'from-[#28C76F] to-[#68DA89]',
+    },
+  ];
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
       {stats.map((stat, index) => (
