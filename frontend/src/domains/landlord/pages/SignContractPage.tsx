@@ -126,7 +126,6 @@ export function SignContractPage({ requestId, onNavigate, onContractSigned }: Si
                 <div>
                   <p className="mb-2"><strong>1️⃣ Rent Payments</strong></p>
                   <p className="mb-1">The tenant agrees to pay the monthly rent of $1200 on the 8th day of each month via the platform's blockchain payment system.</p>
-                  <p className="mb-1">A maximum payment delay of 5 days is allowed (i.e., the 13th day is the final due date).</p>
                   <p>All rents are paid in advance for every month.</p>
                 </div>
 
