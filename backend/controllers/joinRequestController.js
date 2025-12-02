@@ -457,13 +457,32 @@ exports.acceptJoinRequest = async (req, res) => {
     // Emit socket event if io is available
     const io = req.app.get('io');
     if (io) {
+      // Populate the join request for socket emission
+      const populatedRequest = await JoinRequest.findById(joinRequest._id)
+        .populate('property')
+        .populate('student')
+        .populate('landlord');
+
+      // Emit to student's room
       io.to(`student_${joinRequest.student}`).emit('join_request_approved', {
-        joinRequest,
-        landlord: {
-          name: user.name,
-          email: user.email
-        }
+        joinRequestId: joinRequest._id,
+        status: 'approved',
+        propertyTitle: joinRequest.property.title,
+        landlordName: user.name,
+        contract: joinRequest.contract,
+        joinRequest: populatedRequest
       });
+
+      // Emit to landlord's room for dashboard update
+      io.to(`landlord_${userId}`).emit('join_request_status_updated', {
+        joinRequestId: joinRequest._id,
+        status: 'approved',
+        studentName: studentUser.name,
+        propertyTitle: joinRequest.property.title
+      });
+
+      console.log(`✓ Emitted join_request_approved to student_${joinRequest.student}`);
+      console.log(`✓ Emitted join_request_status_updated to landlord_${userId}`);
     }
 
     res.json({
@@ -537,10 +556,32 @@ exports.rejectJoinRequest = async (req, res) => {
     // Emit socket event if io is available
     const io = req.app.get('io');
     if (io) {
+      // Populate the join request for socket emission
+      const populatedRequest = await JoinRequest.findById(joinRequest._id)
+        .populate('property')
+        .populate('student')
+        .populate('landlord');
+
+      // Emit to student's room
       io.to(`student_${joinRequest.student}`).emit('join_request_rejected', {
-        joinRequest,
-        reason
+        joinRequestId: joinRequest._id,
+        status: 'rejected',
+        reason: reason,
+        propertyTitle: joinRequest.property.title,
+        landlordName: user.name,
+        joinRequest: populatedRequest
       });
+
+      // Emit to landlord's room for dashboard update
+      io.to(`landlord_${userId}`).emit('join_request_status_updated', {
+        joinRequestId: joinRequest._id,
+        status: 'rejected',
+        studentName: studentUser.name,
+        propertyTitle: joinRequest.property.title
+      });
+
+      console.log(`✓ Emitted join_request_rejected to student_${joinRequest.student}`);
+      console.log(`✓ Emitted join_request_status_updated to landlord_${userId}`);
     }
 
     res.json({
@@ -618,13 +659,33 @@ exports.studentSignContract = async (req, res) => {
     // Emit socket event if io is available
     const io = req.app.get('io');
     if (io) {
+      // Populate the join request for socket emission
+      const populatedRequest = await JoinRequest.findById(joinRequest._id)
+        .populate('property')
+        .populate('student')
+        .populate('landlord');
+
+      // Emit to landlord's room
       io.to(`landlord_${joinRequest.landlord}`).emit('contract_student_signed', {
-        joinRequest,
-        student: {
-          name: user.name,
-          email: user.email
-        }
+        joinRequestId: joinRequest._id,
+        status: 'waiting_completion',
+        studentName: user.name,
+        propertyTitle: joinRequest.property.title,
+        contract: joinRequest.contract,
+        joinRequest: populatedRequest
       });
+
+      // Emit to student's room for their own dashboard update
+      io.to(`student_${userId}`).emit('contract_status_updated', {
+        joinRequestId: joinRequest._id,
+        status: 'waiting_completion',
+        studentSigned: true,
+        landlordSigned: false,
+        propertyTitle: joinRequest.property.title
+      });
+
+      console.log(`✓ Emitted contract_student_signed to landlord_${joinRequest.landlord}`);
+      console.log(`✓ Emitted contract_status_updated to student_${userId}`);
     }
 
     res.json({
@@ -802,10 +863,46 @@ exports.landlordSignContract = async (req, res) => {
     console.log('Emitting socket event...');
     const io = req.app.get('io');
     if (io) {
+      // Populate the join request for socket emission
+      const populatedRequest = await JoinRequest.findById(joinRequest._id)
+        .populate('property')
+        .populate('student')
+        .populate('landlord');
+
+      // Emit to student's room
+      io.to(`student_${joinRequest.student}`).emit('contract_landlord_signed', {
+        joinRequestId: joinRequest._id,
+        rentalId: rental._id,
+        status: 'completed',
+        studentSigned: true,
+        landlordSigned: true,
+        propertyTitle: joinRequest.property.title,
+        landlordName: user.name,
+        contract: joinRequest.contract,
+        rental: rental,
+        joinRequest: populatedRequest
+      });
+
+      // Also emit rental_completed for backward compatibility
       io.to(`student_${joinRequest.student}`).emit('rental_completed', {
         rental,
-        joinRequest
+        joinRequest: populatedRequest
       });
+
+      // Emit to landlord's room for their own dashboard update
+      io.to(`landlord_${userId}`).emit('contract_status_updated', {
+        joinRequestId: joinRequest._id,
+        rentalId: rental._id,
+        status: 'completed',
+        studentSigned: true,
+        landlordSigned: true,
+        studentName: studentUser.name,
+        propertyTitle: joinRequest.property.title
+      });
+
+      console.log(`✓ Emitted contract_landlord_signed to student_${joinRequest.student}`);
+      console.log(`✓ Emitted rental_completed to student_${joinRequest.student}`);
+      console.log(`✓ Emitted contract_status_updated to landlord_${userId}`);
     }
 
     console.log('=== LANDLORD SIGN CONTRACT SUCCESS ===');

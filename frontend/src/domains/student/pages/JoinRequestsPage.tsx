@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toast } from '@/shared/utils/toast';
 import { ContractSigningPage } from './ContractSigningPage';
 import { getStudentJoinRequests, deleteJoinRequest, studentSignContract } from '@/shared/services/joinRequestService';
+import { socketService } from '@/shared/services/socketService';
 
 interface JoinRequest {
   id: string;
@@ -35,6 +36,78 @@ export function JoinRequestsPage() {
   // Fetch join requests from API
   useEffect(() => {
     fetchJoinRequests();
+
+    // Listen for real-time join request updates via Socket.IO
+    socketService.on('join_request_approved', (data: any) => {
+      console.log('Join request approved (real-time):', data);
+      toast.success(`Your join request for "${data.propertyTitle}" has been approved! Please sign the contract.`);
+      
+      // Update the specific join request in the list
+      setJoinRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? {
+                ...req,
+                status: 'approved',
+                leaseDuration: data.contract?.leaseDurationMonths ? `${data.contract.leaseDurationMonths} months` : req.leaseDuration,
+                securityDeposit: data.contract?.securityDeposit || req.securityDeposit
+              }
+            : req
+        )
+      );
+    });
+
+    socketService.on('join_request_rejected', (data: any) => {
+      console.log('Join request rejected (real-time):', data);
+      toast.error(`Your join request for "${data.propertyTitle}" has been rejected.`);
+      
+      // Update the specific join request in the list
+      setJoinRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? { ...req, status: 'rejected' }
+            : req
+        )
+      );
+    });
+
+    socketService.on('contract_landlord_signed', (data: any) => {
+      console.log('Contract signed by landlord (real-time):', data);
+      toast.success(`🎉 Congratulations! Your rental agreement for "${data.propertyTitle}" is now complete!`);
+      
+      // Update the specific join request to completed status
+      setJoinRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? { ...req, status: 'completed' }
+            : req
+        )
+      );
+    });
+
+    socketService.on('contract_status_updated', (data: any) => {
+      console.log('Contract status updated (real-time):', data);
+      
+      // Update the specific join request status
+      setJoinRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? { 
+                ...req, 
+                status: mapBackendStatus(data.status)
+              }
+            : req
+        )
+      );
+    });
+
+    // Cleanup listeners on unmount
+    return () => {
+      socketService.off('join_request_approved');
+      socketService.off('join_request_rejected');
+      socketService.off('contract_landlord_signed');
+      socketService.off('contract_status_updated');
+    };
   }, []);
 
   const fetchJoinRequests = async () => {

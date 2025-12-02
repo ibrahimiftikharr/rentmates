@@ -71,8 +71,70 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
       fetchJoinRequests(); // Refresh the list
     });
 
+    // Listen for contract signed by student
+    socketService.on('contract_student_signed', (data: any) => {
+      console.log('Student signed contract (real-time):', data);
+      toast.info(`${data.studentName} has signed the rental contract for "${data.propertyTitle}". Please review and sign.`);
+      
+      // Update the specific join request in the list
+      setRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? {
+                ...req,
+                studentSigned: true,
+                // Keep status as 'approved' since we map 'waiting_completion' to 'approved'
+                status: 'approved' as const
+              }
+            : req
+        )
+      );
+    });
+
+    // Listen for status updates on our own actions
+    socketService.on('join_request_status_updated', (data: any) => {
+      console.log('Join request status updated (real-time):', data);
+      
+      // Update the specific join request status
+      setRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? { 
+                ...req, 
+                status: mapBackendStatus(data.status),
+                landlordApproved: data.status === 'approved' || data.status === 'waiting_completion' || data.status === 'completed'
+              }
+            : req
+        )
+      );
+    });
+
+    // Listen for contract completion updates
+    socketService.on('contract_status_updated', (data: any) => {
+      console.log('Contract status updated (real-time):', data);
+      
+      // Update the specific join request with signing statuses
+      setRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? {
+                ...req,
+                studentSigned: data.studentSigned || req.studentSigned,
+                landlordSigned: data.landlordSigned || req.landlordSigned,
+                contractSigned: data.status === 'completed',
+                blockchainVerified: data.status === 'completed',
+                status: mapBackendStatus(data.status)
+              }
+            : req
+        )
+      );
+    });
+
     return () => {
       socketService.off('new_join_request');
+      socketService.off('contract_student_signed');
+      socketService.off('join_request_status_updated');
+      socketService.off('contract_status_updated');
     };
   }, []);
 
