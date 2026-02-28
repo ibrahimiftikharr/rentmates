@@ -51,6 +51,22 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
     title: 'Settings & Preferences',
     subtitle: 'Customize your account settings and preferences',
   },
+  'loan-center': {
+    title: 'Loan Center',
+    subtitle: 'Overview of your loans, repayments, and important notifications',
+  },
+  'apply-loan': {
+    title: 'Apply for Loan',
+    subtitle: 'Apply for new loans or view your active loan status',
+  },
+  'loan-repayment': {
+    title: 'Loan Repayment',
+    subtitle: 'Manage your active loan and track repayment progress',
+  },
+  'collateral-deposit': {
+    title: 'Deposit Collateral',
+    subtitle: 'Complete your collateral deposit to activate your loan',
+  },
 };
 
 export function DashboardHeader({ currentPage, onNavigate }: DashboardHeaderProps) {

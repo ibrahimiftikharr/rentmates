@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, User, Settings, Bell, Shield, ChevronLeft, ChevronRight, Home, FileText, MessageSquare, Award, Search, Heart, CalendarCheck, UserPlus, Wallet, Users, Banknote, DollarSign, CreditCard } from 'lucide-react';
-import { Button } from '@/shared/ui/button';
-import { TooltipProvider } from '@/shared/ui/tooltip';
-import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+import { LayoutDashboard, User, Settings, Bell, Shield, ChevronLeft, ChevronRight, Home, FileText, MessageSquare, Award, Search, Heart, CalendarCheck, UserPlus, Wallet, Users, DollarSign, FileCheck, TrendingUp } from 'lucide-react';
+import { Button } from './ui/button';
+import { TooltipProvider } from './ui/tooltip';
+import * as TooltipPrimitive from '@radix-ui/react-tooltip@1.1.8';
 
 // MetaMask Icon Component
 const MetaMaskIcon = ({ className }: { className?: string }) => (
@@ -59,10 +59,10 @@ export function CollapsibleSidebar({ currentPage, onNavigate }: CollapsibleSideb
     { id: 'visit-requests', icon: CalendarCheck, label: 'Visit Requests', customIcon: null },
     { id: 'join-requests', icon: UserPlus, label: 'Join Requests', customIcon: null },
     { id: 'security-deposit', icon: Shield, label: 'Security Deposit', customIcon: null },
+    { id: 'loan-center', icon: DollarSign, label: 'Loan Center', customIcon: null },
+    { id: 'applied-loans', icon: FileCheck, label: 'Apply Loan', customIcon: null },
+    { id: 'loan-repayment', icon: TrendingUp, label: 'Loan Repayment', customIcon: null },
     { id: 'wallet', icon: Wallet, label: 'Wallet', customIcon: null },
-    { id: 'loan-center', icon: Banknote, label: 'Loan Center', customIcon: null },
-    { id: 'apply-loan', icon: DollarSign, label: 'Apply Loan', customIcon: null },
-    { id: 'loan-repayment', icon: CreditCard, label: 'Loan Repayment', customIcon: null },
     { id: 'messages', icon: MessageSquare, label: 'Messages', customIcon: null },
     { id: 'notifications', icon: Bell, label: 'Notifications', customIcon: null },
     { id: 'settings', icon: Settings, label: 'Settings', customIcon: null },

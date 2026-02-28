@@ -16,15 +16,30 @@ import { WishlistPage } from './WishlistPage';
 import { VisitRequestsPage } from './VisitRequestsPage';
 import { JoinRequestsPage } from './JoinRequestsPage';
 import { SecurityDepositPage } from './SecurityDepositPage';
+import { LoanCenterPage } from './LoanCenterPage';
+import { ApplyLoanPage } from './ApplyLoanPage';
+import { LoanRepaymentPage } from './LoanRepaymentPage';
+import { CollateralDepositPage } from './CollateralDepositPage';
 import { Toaster } from '@/shared/ui/sonner';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
 import '../styles/index.css';
 import '../styles/globals.css';
 
+interface CollateralDepositData {
+  requiredCollateral: number;
+  poolName: string;
+  loanAmount: number;
+  interestRate: number;
+  monthlyRepayment: number;
+  duration: number;
+  expiryTime: number;
+}
+
 export function StudentDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [collateralData, setCollateralData] = useState<CollateralDepositData | null>(null);
   
   // Extract current page from pathname
   const getCurrentPage = () => {
@@ -36,6 +51,14 @@ export function StudentDashboard() {
 
   const handleNavigate = (page: string) => {
     navigate(`/student/${page}`);
+  };
+
+  const handleStartCollateralDeposit = (data: CollateralDepositData) => {
+    setCollateralData(data);
+  };
+
+  const handleDepositComplete = () => {
+    setCollateralData(null);
   };
 
   // Initialize Socket.IO connection
@@ -103,6 +126,10 @@ export function StudentDashboard() {
             <Route path="/visit-requests" element={<VisitRequestsPage />} />
             <Route path="/join-requests" element={<JoinRequestsPage />} />
             <Route path="/security-deposit" element={<SecurityDepositPage />} />
+            <Route path="/loan-center" element={<LoanCenterPage onNavigate={handleNavigate} collateralData={collateralData} />} />
+            <Route path="/apply-loan" element={<ApplyLoanPage onNavigate={handleNavigate} onStartCollateralDeposit={handleStartCollateralDeposit} />} />
+            <Route path="/loan-repayment" element={<LoanRepaymentPage />} />
+            <Route path="/collateral-deposit" element={<CollateralDepositPage onNavigate={handleNavigate} collateralData={collateralData} onDepositComplete={handleDepositComplete} />} />
           </Routes>
         </main>
       </div>
