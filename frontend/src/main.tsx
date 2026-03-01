@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import App from './App';
-import './domains/auth/styles/index.css';
-import './domains/auth/styles/globals.css';
+// No global CSS - each dashboard loads its own
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

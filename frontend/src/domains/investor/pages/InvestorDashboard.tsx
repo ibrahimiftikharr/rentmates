@@ -10,9 +10,6 @@ import { WalletPage } from './WalletPage';
 import { AnalyticsPage } from './AnalyticsPage';
 import { ProfilePage } from './ProfilePage';
 import { DemoPage } from './DemoPage';
-import '../styles/index.css';
-import '../styles/globals.css';
-import '../styles/mobile.css';
 
 export function InvestorDashboard() {
   const navigate = useNavigate();
@@ -32,7 +29,7 @@ export function InvestorDashboard() {
   };
 
   return (
-    <div className="investor-dashboard min-h-screen bg-background pb-16 md:pb-0">
+    <div className="min-h-screen bg-background pb-16 md:pb-0">
       <Toaster position="top-right" richColors closeButton />
       <Header onNavigate={handleNavigate} />
       

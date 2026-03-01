@@ -19,6 +19,8 @@ import { SettingsPage } from './SettingsPage';
 import { NotificationsPage } from './NotificationsPage';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
+import '../styles/index.css';
+import '../styles/globals.css';
 
 export function LandlordDashboard() {
   const navigate = useNavigate();

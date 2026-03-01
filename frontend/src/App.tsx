@@ -6,12 +6,15 @@ import { LandlordDashboard } from './domains/landlord/pages/LandlordDashboard';
 import { InvestorDashboard } from './domains/investor/pages/InvestorDashboard';
 import { authService } from './domains/auth/services/authService';
 import { ProtectedRoute } from './shared/components/ProtectedRoute';
+import { CSSLoader } from './shared/components/CSSLoader';
 
 function App() {
   console.log('[App] Rendering, current path:', window.location.pathname);
   
   return (
-    <Routes>
+    <>
+      <CSSLoader />
+      <Routes>
       <Route 
         path="/auth" 
         element={
@@ -46,6 +49,7 @@ function App() {
       <Route path="/" element={<Navigate to="/auth" replace />} />
       <Route path="*" element={<Navigate to="/auth" replace />} />
     </Routes>
+    </>
   );
 }
 

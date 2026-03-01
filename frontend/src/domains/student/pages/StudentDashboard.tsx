@@ -23,8 +23,6 @@ import { CollateralDepositPage } from './CollateralDepositPage';
 import { Toaster } from '@/shared/ui/sonner';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
-import '../styles/index.css';
-import '../styles/globals.css';
 
 interface CollateralDepositData {
   requiredCollateral: number;

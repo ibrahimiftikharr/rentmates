@@ -1,14 +1,12 @@
 import { Header } from '../components/Header';
 import { IllustrationPanel } from '../components/IllustrationPanel';
 import { AuthCard } from '../components/AuthCard';
-import '../styles/index.css';
-import '../styles/globals.css';
 
 export function AuthPage() {
   console.log('[AuthPage] Rendering');
   
   return (
-    <div className="auth-page min-h-screen flex flex-col bg-background" style={{ minHeight: '100vh', backgroundColor: '#FAFBFC' }}>
+    <div className="min-h-screen flex flex-col bg-background" style={{ minHeight: '100vh', backgroundColor: '#FAFBFC' }}>
       <div className="lg:hidden">
         <Header />
       </div>
