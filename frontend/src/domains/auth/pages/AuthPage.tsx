@@ -8,7 +8,7 @@ export function AuthPage() {
   console.log('[AuthPage] Rendering');
   
   return (
-    <div className="min-h-screen flex flex-col bg-background" style={{ minHeight: '100vh', backgroundColor: '#FAFBFC' }}>
+    <div className="auth-page min-h-screen flex flex-col bg-background" style={{ minHeight: '100vh', backgroundColor: '#FAFBFC' }}>
       <div className="lg:hidden">
         <Header />
       </div>

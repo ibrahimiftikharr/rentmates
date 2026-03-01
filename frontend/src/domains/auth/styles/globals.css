@@ -190,3 +190,22 @@ html {
   font-size: var(--font-size);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
+
+/* Auth Page Specific Overrides - Ensure proper display even with other dashboard CSS loaded */
+.auth-page .hidden {
+  display: none !important;
+}
+
+@media (min-width: 1024px) {
+  .auth-page .lg\:flex {
+    display: flex !important;
+  }
+  
+  .auth-page .lg\:w-1\/2 {
+    width: 50% !important;
+  }
+  
+  .auth-page .lg\:hidden {
+    display: none !important;
+  }
+}

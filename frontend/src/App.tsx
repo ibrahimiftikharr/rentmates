@@ -3,6 +3,7 @@ import { AuthPage } from './domains/auth/pages/AuthPage';
 import { ResetPasswordPage } from './domains/auth/pages/ResetPasswordPage';
 import { StudentDashboard } from './domains/student/pages/StudentDashboard';
 import { LandlordDashboard } from './domains/landlord/pages/LandlordDashboard';
+import { InvestorDashboard } from './domains/investor/pages/InvestorDashboard';
 import { authService } from './domains/auth/services/authService';
 import { ProtectedRoute } from './shared/components/ProtectedRoute';
 
@@ -37,6 +38,10 @@ function App() {
             <LandlordDashboard />
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/investor/*"
+        element={<InvestorDashboard />}
       />
       <Route path="/" element={<Navigate to="/auth" replace />} />
       <Route path="*" element={<Navigate to="/auth" replace />} />
