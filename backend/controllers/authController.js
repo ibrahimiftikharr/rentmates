@@ -2,6 +2,7 @@ const { generateOTP, sendOTPEmail, sendPasswordResetEmail } = require('../servic
 const User = require('../models/userModel');
 const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
+const Investor = require('../models/investorModel');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -19,7 +20,7 @@ const signup = async (req, res) => {
     }
 
     // Validate role
-    if (!['student', 'landlord'].includes(role)) {
+    if (!['student', 'landlord', 'investor'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
@@ -69,6 +70,15 @@ const signup = async (req, res) => {
       await landlord.save();
       profileId = landlord._id.toString();
       console.log('✓ Landlord profile created:', profileId);
+    } else if (role === 'investor') {
+      console.log('Creating investor profile for user:', user._id.toString());
+      const investor = new Investor({
+        user: user._id,
+        reputationScore: 20
+      });
+      await investor.save();
+      profileId = investor._id.toString();
+      console.log('✓ Investor profile created:', profileId);
     }
 
     // Generate JWT token for automatic login after signup
@@ -90,11 +100,13 @@ const signup = async (req, res) => {
       }
     };
 
-    // Add studentId or landlordId to response
+    // Add studentId, landlordId, or investorId to response
     if (role === 'student' && profileId) {
       response.user.studentId = profileId;
     } else if (role === 'landlord' && profileId) {
       response.user.landlordId = profileId;
+    } else if (role === 'investor' && profileId) {
+      response.user.investorId = profileId;
     }
 
     res.status(201).json(response);
@@ -128,7 +140,7 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Get student or landlord ID based on role
+    // Get student, landlord, or investor ID based on role
     let profileId = null;
     if (user.role === 'student') {
       const student = await Student.findOne({ user: user._id });
@@ -136,6 +148,9 @@ const login = async (req, res) => {
     } else if (user.role === 'landlord') {
       const landlord = await Landlord.findOne({ user: user._id });
       profileId = landlord ? landlord._id.toString() : null;
+    } else if (user.role === 'investor') {
+      const investor = await Investor.findOne({ user: user._id });
+      profileId = investor ? investor._id.toString() : null;
     }
 
     // Generate JWT token for authenticated session
@@ -157,11 +172,13 @@ const login = async (req, res) => {
       }
     };
 
-    // Add studentId or landlordId based on role
+    // Add studentId, landlordId, or investorId based on role
     if (user.role === 'student' && profileId) {
       response.user.studentId = profileId;
     } else if (user.role === 'landlord' && profileId) {
       response.user.landlordId = profileId;
+    } else if (user.role === 'investor' && profileId) {
+      response.user.investorId = profileId;
     }
 
     res.json(response);

@@ -44,7 +44,11 @@ function App() {
       />
       <Route
         path="/investor/*"
-        element={<InvestorDashboard />}
+        element={
+          <ProtectedRoute requiredRole="investor">
+            <InvestorDashboard />
+          </ProtectedRoute>
+        }
       />
       <Route path="/" element={<Navigate to="/auth" replace />} />
       <Route path="*" element={<Navigate to="/auth" replace />} />
@@ -56,7 +60,10 @@ function App() {
 function getDashboardPath(): string {
   const user = authService.getCurrentUser();
   if (!user) return '/auth';
-  return user.role === 'student' ? '/student' : '/landlord';
+  if (user.role === 'student') return '/student';
+  if (user.role === 'landlord') return '/landlord';
+  if (user.role === 'investor') return '/investor';
+  return '/auth';
 }
 
 export default App;

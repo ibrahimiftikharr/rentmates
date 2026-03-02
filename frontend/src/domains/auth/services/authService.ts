@@ -25,8 +25,10 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'student' | 'landlord';
+  role: 'student' | 'landlord' | 'investor';
   studentId?: string; // For students, this is the Student model ID
+  landlordId?: string; // For landlords, this is the Landlord model ID
+  investorId?: string; // For investors, this is the Investor model ID
 }
 
 export interface LoginCredentials {
@@ -38,7 +40,7 @@ export interface SignupData {
   name: string;
   email: string;
   password: string;
-  role: 'student' | 'landlord';
+  role: 'student' | 'landlord' | 'investor';
   otp: string;
 }
 

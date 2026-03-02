@@ -272,6 +272,7 @@ export function SignUpForm({ onOTPSent }: SignUpFormProps) {
           <SelectContent>
             <SelectItem value="student">Student</SelectItem>
             <SelectItem value="landlord">Landlord</SelectItem>
+            <SelectItem value="investor">Investor</SelectItem>
           </SelectContent>
         </Select>
       </div>

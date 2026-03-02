@@ -33,7 +33,11 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
       const user = authService.getCurrentUser();
       toast.success('Login successful!');
       // Redirect based on role
-      navigate(user?.role === 'student' ? '/student' : '/landlord', { replace: true });
+      let redirectPath = '/auth';
+      if (user?.role === 'student') redirectPath = '/student';
+      else if (user?.role === 'landlord') redirectPath = '/landlord';
+      else if (user?.role === 'investor') redirectPath = '/investor';
+      navigate(redirectPath, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Login failed. Please try again.');
       toast.error(err.message || 'Login failed');
@@ -107,10 +111,10 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-border"></div>
         </div>
-          //place or continue with code here
+         
       </div>
 
-      //paste button code here
+
 
     </div>
   );

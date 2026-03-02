@@ -16,7 +16,10 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     const user = authService.getCurrentUser();
     if (user?.role !== requiredRole) {
       // Redirect to correct dashboard based on user role
-      const redirectPath = user?.role === 'student' ? '/student' : '/landlord';
+      let redirectPath = '/auth';
+      if (user?.role === 'student') redirectPath = '/student';
+      else if (user?.role === 'landlord') redirectPath = '/landlord';
+      else if (user?.role === 'investor') redirectPath = '/investor';
       return <Navigate to={redirectPath} replace />;
     }
   }

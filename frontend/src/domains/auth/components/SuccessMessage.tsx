@@ -14,7 +14,11 @@ export function SuccessMessage({ onContinue }: SuccessMessageProps) {
   const handleContinue = () => {
     const user = authService.getCurrentUser();
     if (user) {
-      navigate(user.role === 'student' ? '/student' : '/landlord', { replace: true });
+      let redirectPath = '/auth';
+      if (user.role === 'student') redirectPath = '/student';
+      else if (user.role === 'landlord') redirectPath = '/landlord';
+      else if (user.role === 'investor') redirectPath = '/investor';
+      navigate(redirectPath, { replace: true });
     } else {
       onContinue();
     }
