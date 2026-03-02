@@ -285,12 +285,14 @@ export function DemoPage() {
       <InvestmentConfirmationModal
         isOpen={investmentModalOpen}
         onClose={() => setInvestmentModalOpen(false)}
+        poolId="demo-pool-id"
         poolName="Conservative Growth"
         duration={12}
         riskLevel="Low"
-        estimatedROI="8-12%"
-        maxAmount={10000}
-        minAmount={100}
+        estimatedROI="12.60"
+        maxAmount={1000}
+        minAmount={1}
+        walletBalance={2500}
       />
 
       <WithdrawalModal

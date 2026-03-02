@@ -24,7 +24,8 @@ export interface InvestmentPool {
   timePremiumRate: number;
   minInvestment: number;
   maxInvestment: number;
-  maxInvestors: number;
+  maxCapital: number;
+  maxInvestors?: number; // Deprecated, kept for backward compatibility
   expectedROI: number;
   poolSize: number;
   investorCount: number;
@@ -66,11 +67,19 @@ export interface InvestmentResponse {
   newBalance: number;
 }
 
+export interface PoolsResponse {
+  pools: InvestmentPool[];
+  userBalance: number;
+}
+
 // Get all investment pools with dynamic calculations
-export const getAllPools = async (): Promise<InvestmentPool[]> => {
+export const getAllPools = async (): Promise<PoolsResponse> => {
   try {
     const response = await axios.get(`${API_URL}/api/investment/pools`, getAuthHeaders());
-    return response.data.pools;
+    return {
+      pools: response.data.pools,
+      userBalance: response.data.userBalance
+    };
   } catch (error: any) {
     console.error('Error fetching investment pools:', error);
     throw new Error(error.response?.data?.message || 'Failed to fetch investment pools');
@@ -94,7 +103,6 @@ export const investInPool = async (
   amount: number
 ): Promise<InvestmentResponse> => {
   try {
-    console.log('Sending investment request:', { poolId, amount });
     const response = await axios.post(
       `${API_URL}/api/investment/invest`,
       { poolId, amount },
@@ -103,8 +111,6 @@ export const investInPool = async (
     return response.data;
   } catch (error: any) {
     console.error('Error investing in pool:', error);
-    console.error('Error response:', error.response);
-    console.error('Error response data:', error.response?.data);
     const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to invest in pool';
     throw new Error(errorMessage);
   }

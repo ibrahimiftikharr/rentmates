@@ -15,7 +15,8 @@ const investmentPoolSchema = new mongoose.Schema({
   // Investment Limits
   minInvestment: { type: Number, default: 1 }, // Minimum 1 USDT
   maxInvestment: { type: Number, default: 1000 }, // Maximum 1000 USDT
-  maxInvestors: { type: Number, default: 50 }, // Maximum 50 investors per pool
+  maxCapital: { type: Number, default: 5000 }, // Maximum 5000 USDT total capital per pool
+  maxInvestors: { type: Number, default: 50 }, // Deprecated: kept for backward compatibility
   
   // Pool Status
   isActive: { type: Boolean, default: true },

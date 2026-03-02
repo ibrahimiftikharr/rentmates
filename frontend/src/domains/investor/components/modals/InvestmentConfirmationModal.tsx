@@ -11,41 +11,39 @@ import { investInPool } from "../../services/investmentService";
 interface InvestmentConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  poolId: string;
+  poolId?: string;
   poolName: string;
   duration: number;
   riskLevel: "Low" | "Medium" | "High";
   estimatedROI: string;
   maxAmount: number;
   minAmount: number;
+  walletBalance?: number;
   isWalletConnected?: boolean;
 }
 
 export function InvestmentConfirmationModal({
   isOpen,
   onClose,
-  poolId,
+  poolId = '',
   poolName,
   duration,
   riskLevel,
   estimatedROI,
   maxAmount,
   minAmount,
+  walletBalance = 0,
   isWalletConnected = true
 }: InvestmentConfirmationModalProps) {
   const [amount, setAmount] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      console.log('Modal opened with poolId:', poolId, 'poolName:', poolName);
-    }
-  }, [isOpen, poolId, poolName]);
-
-  const gasFee = 0; // No gas fee for off-chain investments
-  const estimatedReturn = amount ? (parseFloat(amount) * parseFloat(estimatedROI) / 100).toFixed(2) : "0";
-  const totalInvestment = amount ? parseFloat(amount) : 0;
+  const amountNum = amount ? parseFloat(amount) : 0;
+  const estimatedReturn = amount ? (amountNum * parseFloat(estimatedROI) / 100).toFixed(2) : "0";
+  const estimatedRevenue = amount ? (amountNum + parseFloat(estimatedReturn)).toFixed(2) : "0";
+  const hasInsufficientBalance = amountNum > 0 && amountNum > walletBalance;
+  const isAmountValid = amountNum >= minAmount && amountNum <= maxAmount && amountNum <= walletBalance;
 
   const getRiskColor = () => {
     switch (riskLevel) {
@@ -56,15 +54,28 @@ export function InvestmentConfirmationModal({
   };
 
   const handleMaxClick = () => {
-    setAmount(maxAmount.toString());
+    const maxAllowedAmount = Math.min(maxAmount, walletBalance);
+    setAmount(maxAllowedAmount.toString());
   };
 
   const handleConfirm = async () => {
-    console.log('Modal handleConfirm - poolId:', poolId, 'amount:', amount);
-    
-    if (!amount || parseFloat(amount) < minAmount || parseFloat(amount) > maxAmount) {
+    if (!poolId) {
+      toast.error("Invalid pool", {
+        description: "Pool ID is required for investment"
+      });
+      return;
+    }
+
+    if (!amount || amountNum < minAmount || amountNum > maxAmount) {
       toast.error("Invalid amount", {
         description: `Please enter an amount between ${minAmount} and ${maxAmount} USDT`
+      });
+      return;
+    }
+
+    if (amountNum > walletBalance) {
+      toast.error("Insufficient balance", {
+        description: `Your wallet balance is ${(walletBalance || 0).toFixed(2)} USDT`
       });
       return;
     }
@@ -79,7 +90,6 @@ export function InvestmentConfirmationModal({
     try {
       setIsLoading(true);
       
-      console.log('About to call investInPool with:', { poolId, amount: parseFloat(amount) });
       const response = await investInPool(poolId, parseFloat(amount));
       
       toast.success("Investment successful! 🎉", {
@@ -127,6 +137,14 @@ export function InvestmentConfirmationModal({
             </div>
           </div>
 
+          {/* Wallet Balance Display */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Available Wallet Balance</span>
+              <span className="text-xl font-bold text-blue-600">${(walletBalance || 0).toFixed(2)} USDT</span>
+            </div>
+          </div>
+
           {/* Amount Input */}
           <div className="space-y-2">
             <Label htmlFor="amount">Investment Amount (USDT)</Label>
@@ -137,12 +155,17 @@ export function InvestmentConfirmationModal({
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="text-lg h-12 pr-16"
+                className={`text-lg h-12 pr-16 ${hasInsufficientBalance ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
                 USDT
               </span>
             </div>
+            {hasInsufficientBalance && (
+              <p className="text-sm text-red-600 font-medium">
+                ⚠️ Insufficient wallet balance
+              </p>
+            )}
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Min: {minAmount} USDT</span>
               <Button 
@@ -150,7 +173,7 @@ export function InvestmentConfirmationModal({
                 className="h-auto p-0 text-primary"
                 onClick={handleMaxClick}
               >
-                Max: {maxAmount} USDT
+                Max: {Math.min(maxAmount, walletBalance)} USDT
               </Button>
             </div>
           </div>
@@ -160,17 +183,25 @@ export function InvestmentConfirmationModal({
             <h4 className="font-semibold text-base">Investment Summary</h4>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Investment Amount</span>
+                <span className="font-medium">{amountNum.toFixed(2)} USDT</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Duration</span>
                 <span className="font-medium">{duration} months</span>
               </div>
               <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Expected ROI</span>
+                <span className="font-medium text-primary">{estimatedROI}%</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Estimated Return</span>
-                <span className="font-medium text-green-600">~{estimatedReturn} USDT ({estimatedROI}%)</span>
+                <span className="font-medium text-green-600">~{estimatedReturn} USDT</span>
               </div>
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between">
-                <span className="font-semibold">Total Investment</span>
-                <span className="font-bold text-lg">{totalInvestment.toFixed(2)} USDT</span>
+                <span className="font-semibold text-lg">Estimated Revenue</span>
+                <span className="font-bold text-xl text-green-600">{estimatedRevenue} USDT</span>
               </div>
             </div>
           </div>
@@ -216,9 +247,9 @@ export function InvestmentConfirmationModal({
               Cancel
             </Button>
             <Button
-              className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:opacity-90"
+              className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:opacity-90 disabled:opacity-50"
               onClick={handleConfirm}
-              disabled={!isWalletConnected || isLoading}
+              disabled={!isWalletConnected || isLoading || !isAmountValid || !agreedToTerms}
             >
               {isLoading ? (
                 <>

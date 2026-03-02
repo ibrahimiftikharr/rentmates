@@ -18,7 +18,7 @@ const investmentPools = [
     timePremiumRate: 0.5, // 0.5% per month
     minInvestment: 1,
     maxInvestment: 1000,
-    maxInvestors: 50
+    maxCapital: 5000
   },
   {
     name: 'Balanced Portfolio',
@@ -29,7 +29,7 @@ const investmentPools = [
     timePremiumRate: 0.5,
     minInvestment: 1,
     maxInvestment: 1000,
-    maxInvestors: 50
+    maxCapital: 5000
   },
   {
     name: 'High Yield Growth',
@@ -40,7 +40,7 @@ const investmentPools = [
     timePremiumRate: 0.5,
     minInvestment: 1,
     maxInvestment: 1000,
-    maxInvestors: 50
+    maxCapital: 5000
   }
 ];
 
@@ -68,7 +68,7 @@ async function seedInvestmentPools() {
       console.log(`   - Duration: ${pool.durationMonths} months`);
       console.log(`   - Expected ROI: ${roi.toFixed(2)}%`);
       console.log(`   - Investment Range: $${pool.minInvestment} - $${pool.maxInvestment}`);
-      console.log(`   - Max Investors: ${pool.maxInvestors}`);
+      console.log(`   - Max Pool Capital: $${pool.maxCapital}`);
       console.log('');
     });
 

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 export function InvestmentPoolExplorer() {
   const [pools, setPools] = useState<InvestmentPool[]>([]);
+  const [userBalance, setUserBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPool, setSelectedPool] = useState<InvestmentPool | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,7 +26,8 @@ export function InvestmentPoolExplorer() {
     try {
       setIsLoading(true);
       const data = await getAllPools();
-      setPools(data);
+      setPools(data.pools);
+      setUserBalance(data.userBalance);
     } catch (error: any) {
       toast.error("Failed to load investment pools", {
         description: error.message
@@ -62,8 +64,6 @@ export function InvestmentPoolExplorer() {
   };
 
   const handleInvestClick = (pool: InvestmentPool) => {
-    console.log('InvestmentPoolExplorer - handleInvestClick called with pool:', pool);
-    console.log('Pool _id:', pool._id);
     setSelectedPool(pool);
     setIsModalOpen(true);
   };
@@ -135,7 +135,11 @@ export function InvestmentPoolExplorer() {
                       </div>
                       <div className="flex justify-between text-xs md:text-sm">
                         <span className="text-muted-foreground">Investors</span>
-                        <span className="font-medium">{pool.investorCount}/{pool.maxInvestors}</span>
+                        <span className="font-medium">{pool.investorCount}</span>
+                      </div>
+                      <div className="flex justify-between text-xs md:text-sm">
+                        <span className="text-muted-foreground">Pool Capacity</span>
+                        <span className="font-medium">${pool.poolSize.toLocaleString()} / ${pool.maxCapital.toLocaleString()}</span>
                       </div>
                     </div>
 
@@ -230,24 +234,21 @@ export function InvestmentPoolExplorer() {
       </Card>
 
       {selectedPool && (
-        <>
-          {console.log('Rendering modal with selectedPool:', selectedPool)}
-          {console.log('selectedPool._id:', selectedPool._id)}
-          <InvestmentConfirmationModal
-            isOpen={isModalOpen}
-            onClose={() => {
-              setIsModalOpen(false);
-              loadPools(); // Refresh pools after closing modal
-            }}
-            poolId={selectedPool._id}
-            poolName={selectedPool.name}
-            duration={selectedPool.durationMonths}
-            riskLevel={getRiskInfo(selectedPool.ltv).level as "Low" | "Medium" | "High"}
-            estimatedROI={selectedPool.expectedROI.toFixed(2)}
-            maxAmount={selectedPool.maxInvestment}
-            minAmount={selectedPool.minInvestment}
-          />
-        </>
+        <InvestmentConfirmationModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            loadPools(); // Refresh pools after closing modal
+          }}
+          poolId={selectedPool._id}
+          poolName={selectedPool.name}
+          duration={selectedPool.durationMonths}
+          riskLevel={getRiskInfo(selectedPool.ltv).level as "Low" | "Medium" | "High"}
+          estimatedROI={selectedPool.expectedROI.toFixed(2)}
+          maxAmount={selectedPool.maxInvestment}
+          minAmount={selectedPool.minInvestment}
+          walletBalance={userBalance}
+        />
       )}
     </>
   );

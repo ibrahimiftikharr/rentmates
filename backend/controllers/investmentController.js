@@ -33,33 +33,28 @@ exports.getAllPools = async (req, res) => {
       const uniqueInvestors = new Set(investments.map(inv => inv.investor.toString()));
       const investorCount = uniqueInvestors.size;
       
-      // Calculate Pool Filled % (number of investors / 50 × 100)
-      const poolFilledPercentage = (investorCount / pool.maxInvestors) * 100;
+      // Calculate Pool Filled % (total capital invested / max capital × 100)
+      const poolFilledPercentage = (poolSize / pool.maxCapital) * 100;
       
       // Calculate Remaining Capacity
       const remainingCapacity = 100 - poolFilledPercentage;
       
-      // Check if user has invested in this pool
-      const userInvestment = await PoolInvestment.findOne({
+      // Get all user's investments in this pool
+      const userInvestments = await PoolInvestment.find({
         investor: userId,
         pool: pool._id,
         status: 'active'
       });
       
-      // Calculate user's contribution share
-      let userContributionShare = 0;
-      let userInvestedAmount = 0;
-      
-      if (userInvestment) {
-        userInvestedAmount = userInvestment.amountInvested;
-        userContributionShare = poolSize > 0 ? (userInvestedAmount / poolSize) * 100 : 0;
-      }
+      // Calculate user's total contribution (sum of all investments)
+      const userTotalInvested = userInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+      const userContributionShare = poolSize > 0 ? (userTotalInvested / poolSize) * 100 : 0;
       
       // Calculate Expected ROI
       const expectedROI = pool.calculateROI();
       
-      // Check if pool is full
-      const isFull = investorCount >= pool.maxInvestors;
+      // Check if pool is full based on capital
+      const isFull = poolSize >= pool.maxCapital;
       
       return {
         _id: pool._id,
@@ -72,13 +67,13 @@ exports.getAllPools = async (req, res) => {
         poolFilledPercentage: Number(poolFilledPercentage.toFixed(2)),
         remainingCapacity: Number(remainingCapacity.toFixed(2)),
         investorCount: investorCount,
-        maxInvestors: pool.maxInvestors,
+        maxCapital: pool.maxCapital,
         minInvestment: pool.minInvestment,
         maxInvestment: pool.maxInvestment,
-        userInvestmentAmount: Number(userInvestedAmount.toFixed(2)),
+        userInvestmentAmount: Number(userTotalInvested.toFixed(2)),
         userContributionShare: Number(userContributionShare.toFixed(2)),
         isFull: isFull,
-        canInvest: !isFull && !userInvestment // Can invest if not full and user hasn't invested yet
+        canInvest: !isFull // Can invest if pool is not full (multiple investments allowed)
       };
     }));
 
@@ -139,16 +134,8 @@ exports.investInPool = async (req, res) => {
     const { poolId, amount } = req.body;
     const userId = req.user.id;
 
-    console.log('Investment request received:', {
-      poolId,
-      amount,
-      userId,
-      body: req.body
-    });
-
     // Validate input
     if (!poolId || !amount || amount <= 0) {
-      console.log('Validation failed:', { poolId, amount, userId });
       return res.status(400).json({ error: 'Invalid pool ID or amount' });
     }
 
@@ -185,26 +172,15 @@ exports.investInPool = async (req, res) => {
       });
     }
 
-    // Check if user already invested in this pool
-    const existingInvestment = await PoolInvestment.findOne({
-      investor: userId,
-      pool: poolId,
-      status: 'active'
-    });
-
-    if (existingInvestment) {
-      return res.status(400).json({
-        error: 'You have already invested in this pool. Each investor can invest only once per pool.'
-      });
-    }
-
-    // Check pool capacity
+    // Check pool capital capacity
     const investments = await PoolInvestment.find({ pool: poolId, status: 'active' });
-    const uniqueInvestors = new Set(investments.map(inv => inv.investor.toString()));
+    const currentPoolSize = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
     
-    if (uniqueInvestors.size >= pool.maxInvestors) {
+    // Check if adding this investment would exceed pool capacity
+    if (currentPoolSize + amount > pool.maxCapital) {
+      const availableCapacity = pool.maxCapital - currentPoolSize;
       return res.status(400).json({
-        error: 'Pool is full - maximum 50 investors reached'
+        error: `Pool capacity exceeded. Maximum capacity: ${pool.maxCapital} USDT, Current: ${currentPoolSize.toFixed(2)} USDT, Available: ${availableCapacity.toFixed(2)} USDT`
       });
     }
 
@@ -259,14 +235,6 @@ exports.investInPool = async (req, res) => {
     });
   } catch (error) {
     console.error('Invest in pool error:', error);
-    
-    // Handle duplicate investment error
-    if (error.code === 11000) {
-      return res.status(400).json({
-        error: 'You have already invested in this pool'
-      });
-    }
-    
     res.status(500).json({ error: 'Failed to process investment' });
   }
 };

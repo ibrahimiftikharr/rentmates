@@ -52,8 +52,8 @@ poolInvestmentSchema.pre('save', async function(next) {
   next();
 });
 
-// Create compound index to ensure one investment per user per pool
-poolInvestmentSchema.index({ investor: 1, pool: 1 }, { unique: true });
+// Index for efficient queries (non-unique to allow multiple investments)
+poolInvestmentSchema.index({ investor: 1, pool: 1 });
 
 const PoolInvestment = mongoose.model('PoolInvestment', poolInvestmentSchema);
 

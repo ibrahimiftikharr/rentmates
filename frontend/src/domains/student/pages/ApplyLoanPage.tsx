@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Label } from '@/shared/ui/label';
@@ -8,16 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/ui/dialog';
 import { DollarSign, TrendingUp, Lock, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface LoanPool {
-  id: string;
-  name: string;
-  availableLiquidity: number;
-  duration: number; // in months
-  interestRate: number; // APR percentage
-  requiredCollateral: number; // PAXG
-  monthlyRepayment: number;
-}
+import { checkLoanAvailability, applyForLoan, getPAXGPrice, LoanPool, LoanApplication } from '../services/loanService';
 
 interface ApplyLoanPageProps {
   onNavigate: (page: string) => void;
@@ -38,48 +29,44 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
   const [loanAmount, setLoanAmount] = useState<number[]>([500]);
   const [loanDuration, setLoanDuration] = useState<string>('');
   const [showPools, setShowPools] = useState(false);
+  const [loanPools, setLoanPools] = useState<LoanPool[]>([]);
   const [selectedPool, setSelectedPool] = useState<LoanPool | null>(null);
+  const [selectedLoanApplication, setSelectedLoanApplication] = useState<LoanApplication | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showCollateralDeposit, setShowCollateralDeposit] = useState(false);
   const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
+  const [isLoading, setIsLoading] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [paxgPrice, setPaxgPrice] = useState<number>(2000); // Default PAXG price
 
-  // Mock loan pools data
-  const loanPools: LoanPool[] = [
-    {
-      id: '1',
-      name: 'Conservative Growth',
-      availableLiquidity: 50000,
-      duration: 12,
-      interestRate: 8.5,
-      requiredCollateral: 2.5,
-      monthlyRepayment: 85
-    },
-    {
-      id: '2',
-      name: 'Balanced Portfolio',
-      availableLiquidity: 30000,
-      duration: 9,
-      interestRate: 10.2,
-      requiredCollateral: 3.2,
-      monthlyRepayment: 115
-    },
-    {
-      id: '3',
-      name: 'High Yield Growth',
-      availableLiquidity: 20000,
-      duration: 6,
-      interestRate: 12.5,
-      requiredCollateral: 4.0,
-      monthlyRepayment: 175
-    }
-  ];
+  // Fetch PAXG price on mount and refresh every 5 seconds
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const response = await getPAXGPrice();
+        setPaxgPrice(response.paxgPrice);
+      } catch (error) {
+        console.error('Failed to fetch PAXG price:', error);
+        // Keep using existing price or fallback
+      }
+    };
+
+    // Fetch immediately on mount
+    fetchPrice();
+
+    // Set up 5-second interval
+    const intervalId = setInterval(fetchPrice, 5000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(intervalId);
+  }, []);
 
   const activeLoanData = {
     amount: 10000,
     poolName: 'Medium Risk Pool'
   };
 
-  const handleCheckAvailability = () => {
+  const handleCheckAvailability = async () => {
     if (!loanPurpose) {
       toast.error('Please select a loan purpose');
       return;
@@ -89,8 +76,23 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
       return;
     }
     
-    setShowPools(true);
-    toast.success('Checking available pools...');
+    setIsLoading(true);
+    try {
+      const response = await checkLoanAvailability(
+        loanAmount[0],
+        parseInt(loanDuration),
+        loanPurpose
+      );
+      
+      setLoanPools(response.pools);
+      setShowPools(true);
+      toast.success(`Found ${response.pools.length} loan pools`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check loan availability');
+      console.error('Check availability error:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleApplyToPool = (pool: LoanPool) => {
@@ -98,30 +100,43 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
     setShowConfirmation(true);
   };
 
-  const handleConfirmLoan = () => {
-    setShowConfirmation(false);
+  const handleConfirmLoan = async () => {
+    if (!selectedPool) return;
     
-    if (selectedPool) {
-      // Calculate expiry time (5 minutes from now)
-      const expiryTime = Date.now() + (5 * 60 * 1000);
+    setIsApplying(true);
+    try {
+      const response = await applyForLoan(
+        selectedPool._id,
+        loanAmount[0],
+        parseInt(loanDuration),
+        loanPurpose
+      );
+      
+      setSelectedLoanApplication(response.loan);
+      setShowConfirmation(false);
       
       // Pass collateral data and navigate to collateral deposit page
       if (onStartCollateralDeposit) {
         onStartCollateralDeposit({
-          requiredCollateral: selectedPool.requiredCollateral,
-          poolName: selectedPool.name,
-          loanAmount: loanAmount[0],
-          interestRate: selectedPool.interestRate,
-          monthlyRepayment: selectedPool.monthlyRepayment,
-          duration: selectedPool.duration,
-          expiryTime: expiryTime
+          requiredCollateral: response.loan.requiredCollateral,
+          poolName: response.loan.poolName,
+          loanAmount: response.loan.loanAmount,
+          interestRate: response.loan.apr,
+          monthlyRepayment: response.loan.monthlyRepayment,
+          duration: response.loan.duration,
+          expiryTime: response.loan.expiryTime
         });
       }
       
-      toast.success('Proceeding to collateral deposit...');
+      toast.success('Loan application submitted! Proceeding to collateral deposit...');
       setTimeout(() => {
         onNavigate('collateral-deposit');
       }, 500);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to submit loan application');
+      console.error('Apply for loan error:', error);
+    } finally {
+      setIsApplying(false);
     }
   };
 
@@ -145,11 +160,6 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-
-  const filteredPools = loanPools.filter(pool => 
-    pool.availableLiquidity >= loanAmount[0] && 
-    pool.duration === parseInt(loanDuration || '0')
-  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -251,9 +261,10 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
               <Button 
                 className="w-full bg-primary hover:bg-primary/90 h-12"
                 onClick={handleCheckAvailability}
+                disabled={isLoading}
               >
                 <TrendingUp className="w-5 h-5 mr-2" />
-                Check Availability
+                {isLoading ? 'Checking Availability...' : 'Check Availability'}
               </Button>
             </CardContent>
           </Card>
@@ -264,66 +275,52 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
               <div className="flex items-center justify-between">
                 <h2>Available Loan Pools</h2>
                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                  {filteredPools.length} Pools Available
+                  {loanPools.length} Pools
                 </Badge>
               </div>
 
-              {filteredPools.length === 0 ? (
-                <Card className="shadow-xl">
-                  <CardContent className="pt-6">
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-6 text-center">
-                      <AlertCircle className="w-12 h-12 text-orange-600 mx-auto mb-3" />
-                      <h3 className="font-medium text-orange-900 mb-2">No Pools Available</h3>
-                      <p className="text-orange-800">
-                        No pools match your requested amount and duration. Please adjust your loan parameters.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredPools.map((pool) => (
-                    <Card key={pool.id} className="shadow-xl hover:shadow-2xl transition-shadow">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {loanPools.map((pool) => (
+                    <Card key={pool._id} className="shadow-xl hover:shadow-2xl transition-shadow">
                       <CardHeader>
                         <CardTitle className="text-base sm:text-lg">{pool.name}</CardTitle>
                         <CardDescription className="text-xs sm:text-sm">
-                          {pool.duration} months duration
+                          {pool.durationMonths} months • LTV: {(pool.ltv * 100).toFixed(0)}%
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-3">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs sm:text-sm text-muted-foreground">Available Liquidity</span>
-                            <span className="font-medium text-sm sm:text-base">${pool.availableLiquidity.toLocaleString()}</span>
+                            <span className="text-xs sm:text-sm text-muted-foreground">Available Capital</span>
+                            <span className="font-medium text-sm sm:text-base">${pool.availableCapital.toLocaleString()} USDT</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs sm:text-sm text-muted-foreground">Interest Rate (APR)</span>
                             <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs sm:text-sm">
-                              {pool.interestRate}%
+                              {pool.apr}%
                             </Badge>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs sm:text-sm text-muted-foreground">Required Collateral</span>
-                            <span className="font-medium text-sm sm:text-base">{pool.requiredCollateral} PAXG</span>
+                            <span className="font-medium text-sm sm:text-base">{(pool.requiredCollateralUSDT / paxgPrice).toFixed(9)} PAXG</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-xs sm:text-sm text-muted-foreground">Monthly Repayment</span>
-                            <span className="font-medium text-primary text-sm sm:text-base">${pool.monthlyRepayment}</span>
+                            <span className="font-medium text-primary text-sm sm:text-base">${pool.monthlyRepayment.toFixed(2)}</span>
                           </div>
                         </div>
 
                         <Button 
-                          className="w-full bg-primary hover:bg-primary/90 h-10 sm:h-11 text-sm sm:text-base"
+                          className="w-full bg-primary hover:bg-primary/90 h-10 sm:h-11 text-sm sm:text-base disabled:bg-purple-300 disabled:text-purple-600 disabled:cursor-not-allowed"
                           onClick={() => handleApplyToPool(pool)}
-                          disabled={pool.availableLiquidity < loanAmount[0]}
+                          disabled={!pool.isEligible}
                         >
-                          {pool.availableLiquidity < loanAmount[0] ? 'Insufficient Liquidity' : 'Apply to Pool'}
+                          {pool.buttonText}
                         </Button>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
-              )}
             </div>
           )}
 
@@ -349,40 +346,54 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs sm:text-sm text-muted-foreground">Duration</span>
-                      <span className="font-medium text-sm sm:text-base">{selectedPool.duration} months</span>
+                      <span className="font-medium text-sm sm:text-base">{selectedPool.durationMonths} months</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs sm:text-sm text-muted-foreground">Interest Rate</span>
+                      <span className="text-xs sm:text-sm text-muted-foreground">LTV Ratio</span>
+                      <span className="font-medium text-sm sm:text-base">{(selectedPool.ltv * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs sm:text-sm text-muted-foreground">Interest Rate (APR)</span>
                       <Badge className="bg-orange-100 text-orange-700 border-orange-200 text-xs sm:text-sm">
-                        {selectedPool.interestRate}% APR
+                        {selectedPool.apr}%
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs sm:text-sm text-muted-foreground">Required Collateral</span>
-                      <span className="font-medium text-primary text-sm sm:text-base">{selectedPool.requiredCollateral} PAXG</span>
+                      <span className="font-medium text-primary text-sm sm:text-base">{(selectedPool.requiredCollateralUSDT / paxgPrice).toFixed(9)} PAXG</span>
                     </div>
                     <div className="flex items-center justify-between border-t border-border pt-3">
                       <span className="text-xs sm:text-sm text-muted-foreground">Monthly Repayment</span>
-                      <span className="font-semibold text-base sm:text-lg text-primary">${selectedPool.monthlyRepayment}</span>
+                      <span className="font-semibold text-base sm:text-lg text-primary">${selectedPool.monthlyRepayment.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs sm:text-sm text-muted-foreground">Total Repayment</span>
+                      <span className="font-semibold text-base sm:text-lg">${selectedPool.totalRepayment.toFixed(2)}</span>
                     </div>
                   </div>
                   
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-xs sm:text-sm text-blue-800">
-                      By confirming, you agree to deposit {selectedPool.requiredCollateral} PAXG as collateral. This will be locked until the loan is fully repaid.
+                      By confirming, you agree to deposit {(selectedPool.requiredCollateralUSDT / paxgPrice).toFixed(9)} PAXG as collateral. This will be locked until the loan is fully repaid.
                     </p>
                   </div>
                 </div>
               )}
               <DialogFooter className="gap-2 sm:gap-0">
-                <Button variant="outline" onClick={() => setShowConfirmation(false)} className="text-sm sm:text-base">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowConfirmation(false)} 
+                  className="text-sm sm:text-base"
+                  disabled={isApplying}
+                >
                   Cancel
                 </Button>
                 <Button 
                   className="bg-primary hover:bg-primary/90 text-sm sm:text-base"
                   onClick={handleConfirmLoan}
+                  disabled={isApplying}
                 >
-                  Confirm & Proceed
+                  {isApplying ? 'Submitting...' : 'Confirm & Proceed'}
                 </Button>
               </DialogFooter>
             </DialogContent>
