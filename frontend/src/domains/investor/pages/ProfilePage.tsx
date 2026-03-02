@@ -63,6 +63,9 @@ export function ProfilePage() {
       const imageUrl = await investorService.uploadProfileImage(file);
       setProfilePhoto(imageUrl);
       toast.success("Profile photo updated successfully!");
+      
+      // Trigger profile update event for header avatar
+      window.dispatchEvent(new Event('investorProfileUpdated'));
     } catch (error: any) {
       toast.error("Upload failed", {
         description: error.message
@@ -97,18 +100,6 @@ export function ProfilePage() {
       });
     } finally {
       setIsUploading(null);
-    }
-  };
-
-  const handleDeleteProfilePhoto = async () => {
-    try {
-      await investorService.deleteProfileImage();
-      setProfilePhoto("");
-      toast.success("Profile photo deleted");
-    } catch (error: any) {
-      toast.error("Delete failed", {
-        description: error.message
-      });
     }
   };
 
@@ -192,14 +183,6 @@ export function ProfilePage() {
                   <Camera className="h-4 w-4 text-white" />
                 )}
               </label>
-              {profilePhoto && (
-                <button
-                  onClick={handleDeleteProfilePhoto}
-                  className="absolute bottom-1 left-1 bg-red-500 rounded-full p-2.5 shadow-lg border-2 border-white hover:bg-red-600 transition-all hover:scale-105"
-                >
-                  <X className="h-4 w-4 text-white" />
-                </button>
-              )}
             </div>
             
             <div className="flex flex-col items-center gap-2">
