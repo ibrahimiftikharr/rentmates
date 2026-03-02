@@ -62,6 +62,8 @@ export function InvestmentPoolExplorer() {
   };
 
   const handleInvestClick = (pool: InvestmentPool) => {
+    console.log('InvestmentPoolExplorer - handleInvestClick called with pool:', pool);
+    console.log('Pool _id:', pool._id);
     setSelectedPool(pool);
     setIsModalOpen(true);
   };
@@ -228,20 +230,24 @@ export function InvestmentPoolExplorer() {
       </Card>
 
       {selectedPool && (
-        <InvestmentConfirmationModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            loadPools(); // Refresh pools after closing modal
-          }}
-          poolId={selectedPool._id}
-          poolName={selectedPool.name}
-          duration={selectedPool.durationMonths}
-          riskLevel={getRiskInfo(selectedPool.ltv).level as "Low" | "Medium" | "High"}
-          estimatedROI={selectedPool.expectedROI.toFixed(2)}
-          maxAmount={selectedPool.maxInvestment}
-          minAmount={selectedPool.minInvestment}
-        />
+        <>
+          {console.log('Rendering modal with selectedPool:', selectedPool)}
+          {console.log('selectedPool._id:', selectedPool._id)}
+          <InvestmentConfirmationModal
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              loadPools(); // Refresh pools after closing modal
+            }}
+            poolId={selectedPool._id}
+            poolName={selectedPool.name}
+            duration={selectedPool.durationMonths}
+            riskLevel={getRiskInfo(selectedPool.ltv).level as "Low" | "Medium" | "High"}
+            estimatedROI={selectedPool.expectedROI.toFixed(2)}
+            maxAmount={selectedPool.maxInvestment}
+            minAmount={selectedPool.minInvestment}
+          />
+        </>
       )}
     </>
   );

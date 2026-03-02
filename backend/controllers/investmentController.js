@@ -62,7 +62,7 @@ exports.getAllPools = async (req, res) => {
       const isFull = investorCount >= pool.maxInvestors;
       
       return {
-        id: pool._id,
+        _id: pool._id,
         name: pool.name,
         description: pool.description,
         ltv: pool.ltv,
@@ -75,7 +75,7 @@ exports.getAllPools = async (req, res) => {
         maxInvestors: pool.maxInvestors,
         minInvestment: pool.minInvestment,
         maxInvestment: pool.maxInvestment,
-        userInvestedAmount: Number(userInvestedAmount.toFixed(2)),
+        userInvestmentAmount: Number(userInvestedAmount.toFixed(2)),
         userContributionShare: Number(userContributionShare.toFixed(2)),
         isFull: isFull,
         canInvest: !isFull && !userInvestment // Can invest if not full and user hasn't invested yet
@@ -139,8 +139,16 @@ exports.investInPool = async (req, res) => {
     const { poolId, amount } = req.body;
     const userId = req.user.id;
 
+    console.log('Investment request received:', {
+      poolId,
+      amount,
+      userId,
+      body: req.body
+    });
+
     // Validate input
     if (!poolId || !amount || amount <= 0) {
+      console.log('Validation failed:', { poolId, amount, userId });
       return res.status(400).json({ error: 'Invalid pool ID or amount' });
     }
 

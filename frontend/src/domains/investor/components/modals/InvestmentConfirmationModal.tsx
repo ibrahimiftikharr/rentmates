@@ -37,6 +37,12 @@ export function InvestmentConfirmationModal({
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (isOpen) {
+      console.log('Modal opened with poolId:', poolId, 'poolName:', poolName);
+    }
+  }, [isOpen, poolId, poolName]);
+
   const gasFee = 0; // No gas fee for off-chain investments
   const estimatedReturn = amount ? (parseFloat(amount) * parseFloat(estimatedROI) / 100).toFixed(2) : "0";
   const totalInvestment = amount ? parseFloat(amount) : 0;
@@ -54,6 +60,8 @@ export function InvestmentConfirmationModal({
   };
 
   const handleConfirm = async () => {
+    console.log('Modal handleConfirm - poolId:', poolId, 'amount:', amount);
+    
     if (!amount || parseFloat(amount) < minAmount || parseFloat(amount) > maxAmount) {
       toast.error("Invalid amount", {
         description: `Please enter an amount between ${minAmount} and ${maxAmount} USDT`
@@ -71,6 +79,7 @@ export function InvestmentConfirmationModal({
     try {
       setIsLoading(true);
       
+      console.log('About to call investInPool with:', { poolId, amount: parseFloat(amount) });
       const response = await investInPool(poolId, parseFloat(amount));
       
       toast.success("Investment successful! 🎉", {

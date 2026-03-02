@@ -94,6 +94,7 @@ export const investInPool = async (
   amount: number
 ): Promise<InvestmentResponse> => {
   try {
+    console.log('Sending investment request:', { poolId, amount });
     const response = await axios.post(
       `${API_URL}/api/investment/invest`,
       { poolId, amount },
@@ -102,7 +103,10 @@ export const investInPool = async (
     return response.data;
   } catch (error: any) {
     console.error('Error investing in pool:', error);
-    throw new Error(error.response?.data?.message || 'Failed to invest in pool');
+    console.error('Error response:', error.response);
+    console.error('Error response data:', error.response?.data);
+    const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to invest in pool';
+    throw new Error(errorMessage);
   }
 };
 
