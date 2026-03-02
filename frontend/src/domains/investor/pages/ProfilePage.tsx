@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { User, Upload, CheckCircle2, Clock, FileText, Bell, Camera, Mail, Shield, Star, DollarSign, BarChart3, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { User, Upload, CheckCircle2, Clock, FileText, Bell, Camera, Mail, Shield, Star, DollarSign, BarChart3, AlertCircle, Loader2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -7,12 +7,15 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { toast } from "sonner";
+import { investorService, InvestorProfile } from "../services/investorService";
 
 export function ProfilePage() {
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-  const [idDocument, setIdDocument] = useState<File | null>(null);
-  const [driverLicense, setDriverLicense] = useState<File | null>(null);
-  const [isVerified, setIsVerified] = useState(true);
+  const [profile, setProfile] = useState<InvestorProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [profilePhoto, setProfilePhoto] = useState<string>("");
+  const [govDocument, setGovDocument] = useState<string>("");
+  const [isVerified, setIsVerified] = useState(false);
+  const [isUploading, setIsUploading] = useState<'photo' | 'document' | null>(null);
 
   // Notification preferences
   const [notificationPrefs, setNotificationPrefs] = useState({
@@ -22,48 +25,103 @@ export function ProfilePage() {
     earningsCredits: true
   });
 
-  // Pre-filled user data (read-only)
-  const userData = {
-    fullName: "John Anderson",
-    email: "john.anderson@example.com"
-  };
+  // Fetch profile data on mount
+  useEffect(() => {
+    fetchProfile();
+  }, []);
 
-  const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("File too large", {
-          description: "Profile photo must be less than 5MB"
-        });
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfilePhoto(reader.result as string);
-        toast.success("Profile photo updated!");
-      };
-      reader.readAsDataURL(file);
+  const fetchProfile = async () => {
+    try {
+      setIsLoading(true);
+      const data = await investorService.getProfile();
+      setProfile(data);
+      setProfilePhoto(data.profileImage || "");
+      setGovDocument(data.govIdDocument || "");
+      setIsVerified(data.isVerified || false);
+    } catch (error: any) {
+      toast.error("Failed to load profile", {
+        description: error.message
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleDocumentUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "id" | "license") => {
+  const handleProfilePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error("File too large", {
-          description: "Document must be less than 10MB"
-        });
-        return;
-      }
+    if (!file) return;
 
-      if (type === "id") {
-        setIdDocument(file);
-      } else {
-        setDriverLicense(file);
-      }
-      
-      toast.success("Document uploaded successfully!");
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large", {
+        description: "Profile photo must be less than 5MB"
+      });
+      return;
+    }
+
+    try {
+      setIsUploading('photo');
+      const imageUrl = await investorService.uploadProfileImage(file);
+      setProfilePhoto(imageUrl);
+      toast.success("Profile photo updated successfully!");
+    } catch (error: any) {
+      toast.error("Upload failed", {
+        description: error.message
+      });
+    } finally {
+      setIsUploading(null);
+    }
+  };
+
+  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large", {
+        description: "Document must be less than 10MB"
+      });
+      return;
+    }
+
+    try {
+      setIsUploading('document');
+      const result = await investorService.uploadGovIdDocument(file);
+      setGovDocument(result.documentUrl);
+      setIsVerified(result.isVerified);
+      toast.success("Document uploaded successfully!", {
+        description: "Your account is now verified"
+      });
+    } catch (error: any) {
+      toast.error("Upload failed", {
+        description: error.message
+      });
+    } finally {
+      setIsUploading(null);
+    }
+  };
+
+  const handleDeleteProfilePhoto = async () => {
+    try {
+      await investorService.deleteProfileImage();
+      setProfilePhoto("");
+      toast.success("Profile photo deleted");
+    } catch (error: any) {
+      toast.error("Delete failed", {
+        description: error.message
+      });
+    }
+  };
+
+  const handleDeleteDocument = async () => {
+    try {
+      const newVerificationStatus = await investorService.deleteGovIdDocument();
+      setGovDocument("");
+      setIsVerified(newVerificationStatus);
+      toast.success("Document deleted");
+    } catch (error: any) {
+      toast.error("Delete failed", {
+        description: error.message
+      });
     }
   };
 
@@ -76,6 +134,12 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <>
       {/* Page Header */}
       <div className="relative overflow-hidden rounded-xl md:rounded-2xl bg-gradient-to-br from-primary via-purple-600 to-[#7367F0] p-4 md:p-8 shadow-2xl">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMzLjMxNCAwIDYgMi42ODYgNiA2cy0yLjY4NiA2LTYgNi02LTIuNjg2LTYtNiAyLjY4Ni02IDYtNiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii4xIi8+PC9nPjwvc3ZnPg==')] opacity-10"></div>
@@ -122,8 +186,20 @@ export function ProfilePage() {
                 </div>
               </div>
               <label htmlFor="profile-photo" className="absolute bottom-1 right-1 bg-primary rounded-full p-2.5 shadow-lg border-2 border-white cursor-pointer hover:bg-primary/90 transition-all hover:scale-105">
-                <Camera className="h-4 w-4 text-white" />
+                {isUploading === 'photo' ? (
+                  <Loader2 className="h-4 w-4 text-white animate-spin" />
+                ) : (
+                  <Camera className="h-4 w-4 text-white" />
+                )}
               </label>
+              {profilePhoto && (
+                <button
+                  onClick={handleDeleteProfilePhoto}
+                  className="absolute bottom-1 left-1 bg-red-500 rounded-full p-2.5 shadow-lg border-2 border-white hover:bg-red-600 transition-all hover:scale-105"
+                >
+                  <X className="h-4 w-4 text-white" />
+                </button>
+              )}
             </div>
             
             <div className="flex flex-col items-center gap-2">
@@ -133,6 +209,7 @@ export function ProfilePage() {
                 accept="image/png,image/jpeg,image/jpg"
                 onChange={handleProfilePhotoChange}
                 className="hidden"
+                disabled={isUploading === 'photo'}
               />
               <p className="text-xs text-muted-foreground">
                 JPG or PNG • Max 5MB
@@ -177,7 +254,7 @@ export function ProfilePage() {
                     Full Name
                   </Label>
                   <Input
-                    value={userData.fullName}
+                    value={profile?.name || ''}
                     disabled
                     className="bg-purple-50/50 cursor-not-allowed border-purple-200"
                   />
@@ -200,7 +277,7 @@ export function ProfilePage() {
                   </Label>
                   <Input
                     type="email"
-                    value={userData.email}
+                    value={profile?.email || ''}
                     disabled
                     className="bg-purple-50/50 cursor-not-allowed border-purple-200"
                   />
@@ -229,19 +306,19 @@ export function ProfilePage() {
           </p>
         </CardHeader>
         <CardContent className="pt-8 space-y-8">
-          {/* Government ID / Passport Upload */}
+          {/* Government ID / Driver's License Upload */}
           <div className="space-y-4">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center text-white text-sm font-bold shadow-md">
                 1
               </div>
               <Label className="font-semibold">
-                Government ID / Passport
+                Government ID / Driver's License
               </Label>
             </div>
             
             <div className="border-3 border-dashed rounded-2xl p-8 hover:border-primary/70 transition-all duration-300 bg-gradient-to-br from-gray-50 to-white shadow-inner" style={{ borderWidth: '3px' }}>
-              {idDocument ? (
+              {govDocument ? (
                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200 shadow-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -249,22 +326,34 @@ export function ProfilePage() {
                         <FileText className="h-7 w-7 text-white" />
                       </div>
                       <div>
-                        <p className="font-semibold text-green-900">{idDocument.name}</p>
-                        <p className="text-xs text-green-700">
-                          {(idDocument.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
+                        <p className="font-semibold text-green-900">Government ID / Driver's License</p>
+                        <p className="text-xs text-green-700">Document uploaded</p>
                       </div>
                     </div>
-                    <Badge className="bg-green-500 text-white border-0 px-3 py-1.5 shadow-md">
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Uploaded
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-green-500 text-white border-0 px-3 py-1.5 shadow-md">
+                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                        Verified
+                      </Badge>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleDeleteDocument}
+                        className="h-8 w-8 p-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-6">
                   <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-br from-primary/10 to-purple-100 flex items-center justify-center">
-                    <Upload className="h-8 w-8 text-primary" />
+                    {isUploading === 'document' ? (
+                      <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                    ) : (
+                      <Upload className="h-8 w-8 text-primary" />
+                    )}
                   </div>
                   <p className="mb-2">
                     <Label htmlFor="id-document" className="text-primary cursor-pointer hover:underline font-semibold">
@@ -273,7 +362,7 @@ export function ProfilePage() {
                     {" "}or drag and drop
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    PNG, JPG or PDF • Maximum 10MB
+                    Government ID or Driver's License • PNG, JPG or PDF • Maximum 10MB
                   </p>
                 </div>
               )}
@@ -283,68 +372,9 @@ export function ProfilePage() {
               id="id-document"
               type="file"
               accept="image/png,image/jpeg,image/jpg,application/pdf"
-              onChange={(e) => handleDocumentUpload(e, "id")}
+              onChange={handleDocumentUpload}
               className="hidden"
-            />
-          </div>
-
-          {/* Driver's License Upload (Optional) */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white text-sm font-bold shadow-md">
-                2
-              </div>
-              <Label className="font-semibold">
-                Driver's License 
-                <span className="text-muted-foreground font-normal ml-2 text-sm">(Optional Alternative)</span>
-              </Label>
-            </div>
-            
-            <div className="border-3 border-dashed rounded-2xl p-8 hover:border-blue-500/70 transition-all duration-300 bg-gradient-to-br from-blue-50/30 to-white shadow-inner" style={{ borderWidth: '3px' }}>
-              {driverLicense ? (
-                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-6 border-2 border-blue-200 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg">
-                        <FileText className="h-7 w-7 text-white" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-blue-900">{driverLicense.name}</p>
-                        <p className="text-xs text-blue-700">
-                          {(driverLicense.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                    </div>
-                    <Badge className="bg-blue-500 text-white border-0 px-3 py-1.5 shadow-md">
-                      <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                      Uploaded
-                    </Badge>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center">
-                    <Upload className="h-8 w-8 text-blue-600" />
-                  </div>
-                  <p className="mb-2">
-                    <Label htmlFor="driver-license" className="text-blue-600 cursor-pointer hover:underline font-semibold">
-                      Click to upload
-                    </Label>
-                    {" "}or drag and drop
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    PNG, JPG or PDF • Maximum 10MB
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            <Input
-              id="driver-license"
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,application/pdf"
-              onChange={(e) => handleDocumentUpload(e, "license")}
-              className="hidden"
+              disabled={isUploading === 'document'}
             />
           </div>
         </CardContent>
@@ -441,6 +471,8 @@ export function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const authRouter = require('./routes/authRoutes.js');
 const landlordRouter = require('./routes/landlordRoutes.js');
+const investorRouter = require('./routes/investorRoutes.js');
 const propertyRouter = require('./routes/propertyRoutes.js');
 const studentRouter = require('./routes/studentRoutes.js');
 const publicStudentRouter = require('./routes/publicStudentRoutes.js');
@@ -117,6 +118,9 @@ app.use('/api/auth', authRouter);
 
 // Landlord routes (profile, documents, reputation)
 app.use('/api/landlord', landlordRouter);
+
+// Investor routes (profile, documents, verification)
+app.use('/api/investor', investorRouter);
 
 // Property routes (CRUD operations)
 app.use('/api/properties', propertyRouter);
