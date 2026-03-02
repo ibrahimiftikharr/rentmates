@@ -3,6 +3,7 @@ import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { DollarSign, TrendingUp, Calendar, Bell, Lock, AlertTriangle, CheckCircle, XCircle, Unlock, Clock, ArrowRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { getMyLoans } from '../services/loanService';
 
 type NotificationType = 'approved' | 'active' | 'collateral-locked' | 'collateral-released' | 'payment-due' | 'payment-missed' | 'delinquent' | 'defaulted' | 'liquidation';
 
@@ -27,9 +28,69 @@ interface LoanCenterPageProps {
   } | null;
 }
 
-export function LoanCenterPage({ onNavigate, collateralData }: LoanCenterPageProps) {
+export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData }: LoanCenterPageProps) {
   const hasActiveLoan = true; // Set to false to enable "Apply for New Loan" button
   const [countdown, setCountdown] = useState(0);
+  const [pendingLoan, setPendingLoan] = useState<any>(null);
+  const [collateralData, setCollateralData] = useState(propsCollateralData);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch loans on mount to check for pending collateral deposits
+  useEffect(() => {
+    const fetchLoans = async () => {
+      try {
+        setIsLoading(true);
+        const response = await getMyLoans();
+        const loans = response.loans || [];
+        
+        // Find any loan with collateral_pending status
+        const pendingCollateralLoan = loans.find(
+          (loan: any) => loan.status === 'collateral_pending'
+        );
+        
+        if (pendingCollateralLoan) {
+          setPendingLoan(pendingCollateralLoan);
+          
+          // Calculate expiry time (5 minutes from application date)
+          const applicationTime = new Date(pendingCollateralLoan.applicationDate).getTime();
+          const expiryTime = applicationTime + (5 * 60 * 1000); // 5 minutes
+          
+          // Only set collateral data if not expired
+          if (Date.now() < expiryTime) {
+            const data = {
+              loanId: pendingCollateralLoan._id,
+              requiredCollateral: pendingCollateralLoan.requiredCollateral,
+              poolName: pendingCollateralLoan.poolName,
+              loanAmount: pendingCollateralLoan.loanAmount,
+              interestRate: pendingCollateralLoan.lockedAPR,
+              monthlyRepayment: pendingCollateralLoan.monthlyRepayment,
+              duration: pendingCollateralLoan.duration,
+              expiryTime: expiryTime
+            };
+            setCollateralData(data);
+            // Also store in localStorage for persistence
+            localStorage.setItem('pendingCollateralData', JSON.stringify(data));
+          }
+        } else {
+          // No pending loan, clear any stale data
+          localStorage.removeItem('pendingCollateralData');
+        }
+      } catch (error) {
+        console.error('Failed to fetch loans:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchLoans();
+  }, []);
+  
+  // Sync with props if changed externally
+  useEffect(() => {
+    if (propsCollateralData) {
+      setCollateralData(propsCollateralData);
+    }
+  }, [propsCollateralData]);
 
   useEffect(() => {
     if (!collateralData) return;

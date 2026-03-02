@@ -13,6 +13,7 @@ import { checkLoanAvailability, applyForLoan, getPAXGPrice, LoanPool, LoanApplic
 interface ApplyLoanPageProps {
   onNavigate: (page: string) => void;
   onStartCollateralDeposit?: (data: {
+    loanId: string;
     requiredCollateral: number;
     poolName: string;
     loanAmount: number;
@@ -118,6 +119,7 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
       // Pass collateral data and navigate to collateral deposit page
       if (onStartCollateralDeposit) {
         onStartCollateralDeposit({
+          loanId: response.loan._id,
           requiredCollateral: response.loan.requiredCollateral,
           poolName: response.loan.poolName,
           loanAmount: response.loan.loanAmount,

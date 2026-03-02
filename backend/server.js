@@ -18,6 +18,7 @@ const joinRequestRouter = require('./routes/joinRequestRoutes.js');
 const studentDashboardRouter = require('./routes/studentDashboardRoutes.js');
 const investmentRouter = require('./routes/investmentRoutes.js');
 const loanRouter = require('./routes/loanRoutes.js');
+const collateralRouter = require('./routes/collateralRoutes.js');
 const { initRentNotificationScheduler } = require('./services/rentNotificationScheduler.js');
 const { initializeAutoPaymentScheduler } = require('./services/autoPaymentScheduler.js');
 
@@ -150,6 +151,9 @@ app.use('/api/investment', investmentRouter);
 
 // Loan routes (loan applications, availability check)
 app.use('/api/loans', loanRouter);
+
+// Collateral routes (deposit, verify, balances)
+app.use('/api/collateral', collateralRouter);
 
 // Join request routes (rental request workflow)
 app.use('/api/join-requests', joinRequestRouter);

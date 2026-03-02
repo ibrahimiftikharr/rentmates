@@ -18,6 +18,11 @@ const investmentPoolSchema = new mongoose.Schema({
   maxCapital: { type: Number, default: 5000 }, // Maximum 5000 USDT total capital per pool
   maxInvestors: { type: Number, default: 50 }, // Deprecated: kept for backward compatibility
   
+  // Pool Balance Tracking (Real-time)
+  totalInvested: { type: Number, default: 0 }, // Total capital invested in pool
+  availableBalance: { type: Number, default: 0 }, // Available capital (invested - disbursed)
+  disbursedLoans: { type: Number, default: 0 }, // Total amount currently lent out
+  
   // Pool Status
   isActive: { type: Boolean, default: true },
   

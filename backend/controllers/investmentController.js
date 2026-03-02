@@ -23,13 +23,11 @@ exports.getAllPools = async (req, res) => {
 
     // Calculate dynamic data for each pool
     const poolsWithData = await Promise.all(pools.map(async (pool) => {
-      // Get all investments in this pool
+      // Use real-time pool balance (much more efficient)
+      const poolSize = pool.totalInvested;
+      
+      // Get unique investor count (still need to query for this)
       const investments = await PoolInvestment.find({ pool: pool._id, status: 'active' });
-      
-      // Calculate Pool Size (total USDT invested)
-      const poolSize = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-      
-      // Get unique investor count
       const uniqueInvestors = new Set(investments.map(inv => inv.investor.toString()));
       const investorCount = uniqueInvestors.size;
       
@@ -64,6 +62,8 @@ exports.getAllPools = async (req, res) => {
         durationMonths: pool.durationMonths,
         expectedROI: Number(expectedROI.toFixed(2)),
         poolSize: Number(poolSize.toFixed(2)),
+        availableBalance: Number(pool.availableBalance.toFixed(2)),
+        disbursedLoans: Number(pool.disbursedLoans.toFixed(2)),
         poolFilledPercentage: Number(poolFilledPercentage.toFixed(2)),
         remainingCapacity: Number(remainingCapacity.toFixed(2)),
         investorCount: investorCount,
@@ -172,15 +172,11 @@ exports.investInPool = async (req, res) => {
       });
     }
 
-    // Check pool capital capacity
-    const investments = await PoolInvestment.find({ pool: poolId, status: 'active' });
-    const currentPoolSize = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-    
-    // Check if adding this investment would exceed pool capacity
-    if (currentPoolSize + amount > pool.maxCapital) {
-      const availableCapacity = pool.maxCapital - currentPoolSize;
+    // Check pool capital capacity using real-time balance
+    if (pool.totalInvested + amount > pool.maxCapital) {
+      const availableCapacity = pool.maxCapital - pool.totalInvested;
       return res.status(400).json({
-        error: `Pool capacity exceeded. Maximum capacity: ${pool.maxCapital} USDT, Current: ${currentPoolSize.toFixed(2)} USDT, Available: ${availableCapacity.toFixed(2)} USDT`
+        error: `Pool capacity exceeded. Maximum capacity: ${pool.maxCapital} USDT, Current: ${pool.totalInvested.toFixed(2)} USDT, Available: ${availableCapacity.toFixed(2)} USDT`
       });
     }
 
@@ -198,6 +194,12 @@ exports.investInPool = async (req, res) => {
     });
 
     await investment.save();
+
+    // Update pool balances
+    pool.totalInvested += amount;
+    pool.availableBalance += amount;
+    await pool.save();
+    console.log(`📊 Pool ${pool.name}: Available balance increased by ${amount} USDT → ${pool.availableBalance} USDT`);
 
     // Deduct from user's off-chain balance
     user.offChainBalance -= amount;

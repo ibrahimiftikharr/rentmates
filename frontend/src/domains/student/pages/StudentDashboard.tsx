@@ -25,6 +25,7 @@ import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
 
 interface CollateralDepositData {
+  loanId: string;
   requiredCollateral: number;
   poolName: string;
   loanAmount: number;
@@ -37,7 +38,24 @@ interface CollateralDepositData {
 export function StudentDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [collateralData, setCollateralData] = useState<CollateralDepositData | null>(null);
+  const [collateralData, setCollateralData] = useState<CollateralDepositData | null>(() => {
+    // Initialize from localStorage
+    const stored = localStorage.getItem('pendingCollateralData');
+    if (stored) {
+      try {
+        const data = JSON.parse(stored);
+        // Check if expired (5 minutes from application)
+        if (data.expiryTime && Date.now() < data.expiryTime) {
+          return data;
+        } else {
+          localStorage.removeItem('pendingCollateralData');
+        }
+      } catch (e) {
+        localStorage.removeItem('pendingCollateralData');
+      }
+    }
+    return null;
+  });
   
   // Extract current page from pathname
   const getCurrentPage = () => {
@@ -53,10 +71,13 @@ export function StudentDashboard() {
 
   const handleStartCollateralDeposit = (data: CollateralDepositData) => {
     setCollateralData(data);
+    // Persist to localStorage
+    localStorage.setItem('pendingCollateralData', JSON.stringify(data));
   };
 
   const handleDepositComplete = () => {
     setCollateralData(null);
+    localStorage.removeItem('pendingCollateralData');
   };
 
   // Initialize Socket.IO connection

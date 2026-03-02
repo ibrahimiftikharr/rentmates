@@ -73,10 +73,27 @@ exports.checkLoanAvailability = async (req, res) => {
         error: 'Duration must be 6, 9, or 12 months' 
       });
     }
+    
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+    
+    // Clean up expired pending loans (older than 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const deleteResult = await Loan.deleteMany({
+      borrower: student._id,
+      status: 'collateral_pending',
+      applicationDate: { $lt: fiveMinutesAgo }
+    });
+    if (deleteResult.deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${deleteResult.deletedCount} expired loan(s) for user ${userId}`);
+    }
 
     // Check if student has an active loan
     const activeLoan = await Loan.findOne({
-      borrower: userId,
+      borrower: student._id,
       status: { $in: ['active', 'repaying', 'collateral_pending'] }
     });
 
@@ -97,17 +114,9 @@ exports.checkLoanAvailability = async (req, res) => {
 
     // Calculate availability for each pool
     const poolsWithAvailability = await Promise.all(pools.map(async (pool) => {
-      // Get all active investments in this pool
-      const investments = await PoolInvestment.find({ 
-        pool: pool._id, 
-        status: 'active' 
-      });
-
-      // Calculate current pool size (total capital IN the pool)
-      const currentPoolSize = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-      
-      // Available capital = same as pool size (total invested capital)
-      const availableCapital = currentPoolSize;
+      // Use real-time pool balance (much more efficient)
+      const currentPoolSize = pool.totalInvested;
+      const availableCapital = pool.availableBalance;
       
       // Calculate remaining capacity for new loans
       const remainingCapacity = pool.maxCapital - currentPoolSize;
@@ -116,11 +125,17 @@ exports.checkLoanAvailability = async (req, res) => {
       const apr = pool.calculateROI();
 
       // Calculate monthly repayment using POOL's duration, not requested duration
-      const monthlyRepayment = calculateMonthlyRepayment(
+      const monthlyRepaymentRaw = calculateMonthlyRepayment(
         requestedAmount,
         apr,
         pool.durationMonths
       );
+      
+      // Round monthly repayment first
+      const monthlyRepayment = Number(monthlyRepaymentRaw.toFixed(2));
+      
+      // Calculate total repayment using ROUNDED monthly repayment
+      const totalRepayment = monthlyRepayment * pool.durationMonths;
 
       // Calculate required collateral in USDT (for frontend dynamic conversion)
       const requiredCollateralUSDT = requestedAmount / pool.ltv;
@@ -157,10 +172,10 @@ exports.checkLoanAvailability = async (req, res) => {
         currentPoolSize: Number(currentPoolSize.toFixed(2)),
         remainingCapacity: Number(remainingCapacity.toFixed(2)),
         maxCapital: pool.maxCapital,
-        monthlyRepayment: Number(monthlyRepayment.toFixed(2)),
+        monthlyRepayment: monthlyRepayment,
         requiredCollateralUSDT: Number(requiredCollateralUSDT.toFixed(2)),
         requiredCollateral: Number(requiredCollateral.toFixed(9)),
-        totalRepayment: Number((monthlyRepayment * pool.durationMonths).toFixed(2)),
+        totalRepayment: totalRepayment,
         isEligible,
         buttonText,
         disableReason,
@@ -206,16 +221,24 @@ exports.applyForLoan = async (req, res) => {
         error: 'Loan amount must be between 1 and 1000 USDT' 
       });
     }
+    
+    // Clean up expired pending loans (older than 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await Loan.deleteMany({
+      status: 'collateral_pending',
+      applicationDate: { $lt: fiveMinutesAgo }
+    });
+    console.log('🧹 Cleaned up expired pending loans');
 
     // Check if student exists
-    const student = await Student.findOne({ userId });
+    const student = await Student.findOne({ user: userId });
     if (!student) {
       return res.status(404).json({ error: 'Student profile not found' });
     }
 
     // Check for active loans
     const activeLoan = await Loan.findOne({
-      borrower: userId,
+      borrower: student._id,
       status: { $in: ['active', 'repaying', 'collateral_pending'] }
     });
 
@@ -231,18 +254,11 @@ exports.applyForLoan = async (req, res) => {
       return res.status(404).json({ error: 'Investment pool not found' });
     }
 
-    // Calculate pool capacity
-    const investments = await PoolInvestment.find({ 
-      pool: poolId, 
-      status: 'active' 
-    });
-    const currentPoolSize = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-
-    // Validate pool has enough capital to fund the loan
-    if (currentPoolSize < requestedAmount) {
+    // Check available pool balance (real-time)
+    if (pool.availableBalance < requestedAmount) {
       return res.status(400).json({
         error: 'Insufficient pool capital to fund this loan',
-        availableCapital: Number(currentPoolSize.toFixed(2)),
+        availableCapital: Number(pool.availableBalance.toFixed(2)),
         requestedAmount
       });
     }
@@ -256,13 +272,19 @@ exports.applyForLoan = async (req, res) => {
 
     // Calculate loan terms
     const apr = pool.calculateROI();
-    const monthlyRepayment = calculateMonthlyRepayment(requestedAmount, apr, requestedDuration);
+    const monthlyRepaymentRaw = calculateMonthlyRepayment(requestedAmount, apr, requestedDuration);
+    
+    // Round monthly repayment first
+    const monthlyRepayment = Number(monthlyRepaymentRaw.toFixed(2));
+    
+    // Calculate total repayment using ROUNDED monthly repayment
     const totalRepayment = monthlyRepayment * requestedDuration;
+    
     const requiredCollateral = await calculateCollateral(requestedAmount, pool.ltv);
 
     // Create loan application
     const loan = new Loan({
-      borrower: userId,
+      borrower: student._id,
       loanAmount: requestedAmount,
       purpose,
       duration: requestedDuration,
@@ -270,10 +292,10 @@ exports.applyForLoan = async (req, res) => {
       poolName: pool.name,
       lockedAPR: apr,
       lockedLTV: pool.ltv,
-      monthlyRepayment: Number(monthlyRepayment.toFixed(2)),
-      totalRepayment: Number(totalRepayment.toFixed(2)),
+      monthlyRepayment: monthlyRepayment,
+      totalRepayment: totalRepayment,
       requiredCollateral: Number(requiredCollateral.toFixed(9)),
-      remainingBalance: Number(totalRepayment.toFixed(2)),
+      remainingBalance: totalRepayment,
       status: 'collateral_pending',
       applicationDate: new Date()
     });
@@ -310,7 +332,24 @@ exports.getMyLoans = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const loans = await Loan.find({ borrower: userId })
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+    
+    // Clean up expired pending loans before fetching
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const deleteResult = await Loan.deleteMany({
+      borrower: student._id,
+      status: 'collateral_pending',
+      applicationDate: { $lt: fiveMinutesAgo }
+    });
+    if (deleteResult.deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${deleteResult.deletedCount} expired loan(s) for user ${userId}`);
+    }
+
+    const loans = await Loan.find({ borrower: student._id })
       .populate('pool', 'name ltv durationMonths')
       .sort({ createdAt: -1 });
 
@@ -333,9 +372,15 @@ exports.getLoanById = async (req, res) => {
     const { loanId } = req.params;
     const userId = req.user.id;
 
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
     const loan = await Loan.findOne({ 
       _id: loanId, 
-      borrower: userId 
+      borrower: student._id 
     }).populate('pool', 'name ltv durationMonths');
 
     if (!loan) {
@@ -361,9 +406,15 @@ exports.cancelLoan = async (req, res) => {
     const { loanId } = req.params;
     const userId = req.user.id;
 
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
     const loan = await Loan.findOne({ 
       _id: loanId, 
-      borrower: userId 
+      borrower: student._id 
     });
 
     if (!loan) {

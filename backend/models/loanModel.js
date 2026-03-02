@@ -23,6 +23,13 @@ const loanSchema = new mongoose.Schema({
   requiredCollateral: { type: Number, required: true }, // PAXG amount
   collateralDeposited: { type: Boolean, default: false },
   collateralTxHash: { type: String }, // Blockchain transaction hash
+  collateralDepositedAt: { type: Date },
+  walletAddress: { type: String }, // Student's wallet address used for deposit
+  collateralStatus: { 
+    type: String, 
+    enum: ['pending', 'deposited', 'returned', 'liquidated'],
+    default: 'pending'
+  },
   
   // Loan Status
   status: { 

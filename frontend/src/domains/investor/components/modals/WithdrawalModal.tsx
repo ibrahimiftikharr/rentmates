@@ -62,7 +62,7 @@ export function WithdrawalModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] sm:max-w-[500px] p-0 gap-0">
+      <DialogContent className="max-w-md p-0 gap-0">
         <DialogHeader className="p-4 sm:p-6 pb-3">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Wallet className="h-5 w-5 text-primary" />

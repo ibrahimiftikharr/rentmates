@@ -126,8 +126,8 @@ export function InvestmentPoolExplorer() {
                         <span className="text-primary font-medium">{pool.expectedROI.toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between text-xs md:text-sm">
-                        <span className="text-muted-foreground">Pool Size</span>
-                        <span className="font-medium">${pool.poolSize.toLocaleString()}</span>
+                        <span className="text-muted-foreground">Available Capital</span>
+                        <span className="font-medium">${pool.availableBalance?.toLocaleString() || '0'}</span>
                       </div>
                       <div className="flex justify-between text-xs md:text-sm">
                         <span className="text-muted-foreground">Duration</span>

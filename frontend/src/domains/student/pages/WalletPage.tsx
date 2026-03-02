@@ -27,7 +27,7 @@ import {
   toggleAutoPayment
 } from '../../../shared/services/walletService';
 
-type TransactionType = 'deposit' | 'withdraw' | 'rent_payment' | 'rent_received';
+type TransactionType = 'deposit' | 'withdraw' | 'rent_payment' | 'rent_received' | 'loan_disbursement';
 type TransactionStatus = 'completed' | 'pending' | 'failed';
 
 interface Transaction {
@@ -398,6 +398,8 @@ export function WalletPage() {
         return 'Rent Payment';
       case 'rent_received':
         return 'Rent Received';
+      case 'loan_disbursement':
+        return 'Loan Disbursement';
       default:
         return type;
     }
@@ -668,6 +670,7 @@ export function WalletPage() {
                           <SelectItem value="withdraw">Withdraw</SelectItem>
                           <SelectItem value="rent_payment">Rent Payment</SelectItem>
                           <SelectItem value="rent_received">Rent Received</SelectItem>
+                          <SelectItem value="loan_disbursement">Loan Disbursement</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -780,7 +783,7 @@ export function WalletPage() {
                             </td>
                             <td className="py-3 px-2">
                               <span className={`text-sm ${
-                                transaction.type === 'deposit' ? 'text-green-600' :
+                                transaction.type === 'deposit' || transaction.type === 'loan_disbursement' ? 'text-green-600' :
                                 transaction.type === 'withdraw' ? 'text-orange-600' :
                                 'text-blue-600'
                               }`}>
@@ -789,10 +792,10 @@ export function WalletPage() {
                             </td>
                             <td className="py-3 px-2 text-right font-medium">
                               <span className={
-                                transaction.type === 'deposit' || transaction.type === 'rent_received' ? 'text-green-600' :
+                                transaction.type === 'deposit' || transaction.type === 'rent_received' || transaction.type === 'loan_disbursement' ? 'text-green-600' :
                                 'text-orange-600'
                               }>
-                                {transaction.type === 'deposit' || transaction.type === 'rent_received' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                                {transaction.type === 'deposit' || transaction.type === 'rent_received' || transaction.type === 'loan_disbursement' ? '+' : '-'}${transaction.amount.toFixed(2)}
                               </span>
                             </td>
                             <td className="py-3 px-2">

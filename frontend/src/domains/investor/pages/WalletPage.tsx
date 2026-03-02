@@ -187,6 +187,8 @@ export function WalletPage() {
         return 'bg-orange-100 text-orange-700 border-orange-200';
       case 'investment_income':
         return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'pool_investment':
+        return 'bg-purple-100 text-purple-700 border-purple-200';
       default:
         return 'bg-gray-100 text-gray-700 border-gray-200';
     }
@@ -200,6 +202,8 @@ export function WalletPage() {
         return 'Withdrawal';
       case 'investment_income':
         return 'Investment Income';
+      case 'pool_investment':
+        return 'Pool Investment';
       default:
         return type;
     }
@@ -394,8 +398,9 @@ export function WalletPage() {
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="deposit">Deposit</SelectItem>
-                  <SelectItem value="withdrawal">Withdrawal</SelectItem>
-                  <SelectItem value="earnings">Earnings</SelectItem>
+                  <SelectItem value="withdraw">Withdrawal</SelectItem>
+                  <SelectItem value="investment_income">Investment Income</SelectItem>
+                  <SelectItem value="pool_investment">Pool Investment</SelectItem>
                 </SelectContent>
               </Select>
             </div>
