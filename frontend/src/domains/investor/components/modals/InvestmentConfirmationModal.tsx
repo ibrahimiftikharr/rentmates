@@ -6,10 +6,12 @@ import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
 import { TrendingUp, AlertTriangle, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { investInPool } from "../../services/investmentService";
 
 interface InvestmentConfirmationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  poolId: string;
   poolName: string;
   duration: number;
   riskLevel: "Low" | "Medium" | "High";
@@ -22,6 +24,7 @@ interface InvestmentConfirmationModalProps {
 export function InvestmentConfirmationModal({
   isOpen,
   onClose,
+  poolId,
   poolName,
   duration,
   riskLevel,
@@ -34,8 +37,8 @@ export function InvestmentConfirmationModal({
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const gasFee = 2.5;
-  const estimatedReturn = amount ? (parseFloat(amount) * parseFloat(estimatedROI.split("-")[0]) / 100).toFixed(2) : "0";
+  const gasFee = 0; // No gas fee for off-chain investments
+  const estimatedReturn = amount ? (parseFloat(amount) * parseFloat(estimatedROI) / 100).toFixed(2) : "0";
   const totalInvestment = amount ? parseFloat(amount) : 0;
 
   const getRiskColor = () => {
@@ -65,17 +68,26 @@ export function InvestmentConfirmationModal({
       return;
     }
 
-    setIsLoading(true);
-    
-    // Simulate blockchain transaction
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast.success("Investment successful! 🎉", {
-      description: `You've invested ${amount} USDT in ${poolName}`
-    });
-    
-    setIsLoading(false);
-    onClose();
+    try {
+      setIsLoading(true);
+      
+      const response = await investInPool(poolId, parseFloat(amount));
+      
+      toast.success("Investment successful! 🎉", {
+        description: `You've invested ${amount} USDT in ${poolName}. New balance: $${response.newBalance.toFixed(2)}`
+      });
+      
+      // Reset form
+      setAmount("");
+      setAgreedToTerms(false);
+      onClose();
+    } catch (error: any) {
+      toast.error("Investment failed", {
+        description: error.message || "Failed to process investment"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -144,11 +156,7 @@ export function InvestmentConfirmationModal({
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Estimated Return</span>
-                <span className="font-medium text-green-600">~{estimatedReturn} USDT</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Gas Fee (est.)</span>
-                <span className="font-medium">~{gasFee} USDT</span>
+                <span className="font-medium text-green-600">~{estimatedReturn} USDT ({estimatedROI}%)</span>
               </div>
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between">

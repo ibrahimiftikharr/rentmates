@@ -1,173 +1,136 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Wallet, Copy, Check, AlertCircle } from "lucide-react";
+import { Wallet, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { depositToVault, recordDeposit } from "../../../../shared/services/walletService";
 
 interface DepositModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
-export function DepositModal({ isOpen, onClose }: DepositModalProps) {
-  const [selectedNetwork, setSelectedNetwork] = useState("ethereum");
-  const [copied, setCopied] = useState(false);
+export function DepositModal({ isOpen, onClose, onSuccess }: DepositModalProps) {
+  const [amount, setAmount] = useState("");
+  const [isDepositing, setIsDepositing] = useState(false);
 
-  const depositAddress = "0x742d35Cc6634C0532925a3b844Bc9e7595f89Ab";
-  
-  const networks = {
-    ethereum: {
-      name: "Ethereum",
-      symbol: "ERC-20",
-      confirmations: 12,
-      minDeposit: 10
-    },
-    polygon: {
-      name: "Polygon",
-      symbol: "Polygon",
-      confirmations: 50,
-      minDeposit: 5
-    },
-    bsc: {
-      name: "BSC",
-      symbol: "BEP-20",
-      confirmations: 15,
-      minDeposit: 5
+  const handleDeposit = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
+      toast.error("Invalid amount", {
+        description: "Please enter a valid amount to deposit"
+      });
+      return;
+    }
+
+    const depositAmount = parseFloat(amount);
+    if (depositAmount < 1) {
+      toast.error("Minimum deposit is 1 USDT");
+      return;
+    }
+
+    try {
+      setIsDepositing(true);
+      
+      // Step 1: Deposit USDT to vault (blockchain transaction)
+      toast.info("Please approve the transaction in MetaMask...");
+      const txHash = await depositToVault(amount);
+      
+      // Step 2: Record deposit in backend
+      await recordDeposit(amount, txHash); // Pass amount as string
+      
+      toast.success("Deposit successful! ✅", {
+        description: `${amount} USDT has been added to your wallet`
+      });
+      
+      setAmount("");
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('Deposit error:', error);
+      toast.error("Deposit failed", {
+        description: error.message || "Failed to deposit USDT"
+      });
+    } finally {
+      setIsDepositing(false);
     }
   };
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(depositAddress);
-    setCopied(true);
-    toast.success("Address copied!", {
-      description: "Deposit address copied to clipboard"
-    });
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const recentDeposits = [
-    { amount: 1000, status: "Confirmed", confirmations: "12/12" },
-    { amount: 500, status: "Pending", confirmations: "8/12" },
-    { amount: 2500, status: "Confirmed", confirmations: "12/12" }
-  ];
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] sm:max-w-[550px] p-0 gap-0 max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
-          <DialogTitle className="flex items-center gap-2 text-2xl">
-            <Wallet className="h-6 w-6 text-primary" />
+      <DialogContent className="max-w-[95vw] sm:max-w-[500px] p-0 gap-0">
+        <DialogHeader className="p-4 sm:p-6 pb-3">
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <Wallet className="h-5 w-5 text-primary" />
             Deposit USDT
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Send USDT to your wallet address
+            Transfer USDT from your wallet to the platform
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 pb-6 space-y-5">
-          {/* Network Selector */}
-          <Tabs value={selectedNetwork} onValueChange={setSelectedNetwork} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="ethereum">Ethereum</TabsTrigger>
-              <TabsTrigger value="polygon">Polygon</TabsTrigger>
-              <TabsTrigger value="bsc">BSC</TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* QR Code Placeholder */}
-          <div className="flex justify-center py-6">
-            <div className="w-48 h-48 bg-gradient-to-br from-primary/10 to-purple-500/10 border-2 border-primary/20 rounded-xl flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-40 h-40 bg-white rounded-lg flex items-center justify-center mb-2">
-                  <div className="grid grid-cols-8 gap-1 p-2">
-                    {[...Array(64)].map((_, i) => (
-                      <div 
-                        key={i} 
-                        className={`w-1 h-1 ${Math.random() > 0.5 ? 'bg-black' : 'bg-white'}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">Scan to deposit</p>
-              </div>
+        <div className="px-6 pb-6 space-y-4">
+          {/* Info Banner */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-blue-900">
+              <p className="font-medium mb-1">You will need to:</p>
+              <ol className="list-decimal list-inside space-y-0.5 text-blue-800">
+                <li>Approve USDT spending (if first time)</li>
+                <li>Confirm the deposit transaction</li>
+              </ol>
             </div>
           </div>
 
-          {/* Address Display */}
+          {/* Amount Input */}
           <div className="space-y-2">
-            <Label>Deposit Address</Label>
-            <div className="flex gap-2">
+            <Label htmlFor="deposit-amount">Deposit Amount (USDT)</Label>
+            <div className="relative">
               <Input
-                value={depositAddress}
-                readOnly
-                className="font-mono text-sm"
+                id="deposit-amount"
+                type="number"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={isDepositing}
+                className="text-lg h-11"
               />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleCopy}
-                className="shrink-0"
-              >
-                {copied ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+                USDT
+              </span>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Minimum deposit: 1 USDT
+            </p>
           </div>
 
-          {/* Important Notes */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-              <h4 className="font-semibold text-yellow-900">Important Notes</h4>
-            </div>
-            <ul className="text-xs text-yellow-800 space-y-1 ml-7">
-              <li>• Minimum deposit: {networks[selectedNetwork as keyof typeof networks].minDeposit} USDT</li>
-              <li>• Network: {networks[selectedNetwork as keyof typeof networks].name} ({networks[selectedNetwork as keyof typeof networks].symbol})</li>
-              <li>• Confirmations required: {networks[selectedNetwork as keyof typeof networks].confirmations}</li>
-              <li>• Only send USDT to this address - other tokens will be lost</li>
-            </ul>
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-2">
+            <Button 
+              variant="outline" 
+              onClick={onClose}
+              disabled={isDepositing}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDeposit}
+              disabled={isDepositing || !amount || parseFloat(amount) <= 0}
+              className="flex-1 bg-gradient-to-r from-primary to-purple-600"
+            >
+              {isDepositing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Confirm Deposit'
+              )}
+            </Button>
           </div>
-
-          {/* Recent Deposits */}
-          <div className="space-y-3">
-            <h4 className="font-semibold">Recent Deposits</h4>
-            <div className="border rounded-lg overflow-hidden">
-              <div className="divide-y">
-                {recentDeposits.map((deposit, index) => (
-                  <div key={index} className="p-3 flex items-center justify-between hover:bg-accent/50 transition-colors">
-                    <div>
-                      <p className="font-medium">{deposit.amount} USDT</p>
-                      <p className="text-xs text-muted-foreground">
-                        {deposit.confirmations} confirmations
-                      </p>
-                    </div>
-                    <div className={`px-2 py-1 rounded text-xs font-medium ${
-                      deposit.status === "Confirmed" 
-                        ? "bg-green-100 text-green-700" 
-                        : "bg-orange-100 text-orange-700"
-                    }`}>
-                      {deposit.status}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Close Button */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={onClose}
-          >
-            Close
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

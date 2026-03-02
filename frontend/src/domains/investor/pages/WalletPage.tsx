@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Copy, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Copy, Filter, XCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { WithdrawalModal } from "../components/modals/WithdrawalModal";
@@ -13,35 +13,197 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { toast } from "sonner";
+import {
+  connectMetaMask,
+  getWalletBalance,
+  connectWalletToBackend,
+  getTransactionHistory
+} from "../../../shared/services/walletService";
+
+type TransactionType = 'deposit' | 'withdraw' | 'investment_income';
+type TransactionStatus = 'completed' | 'pending' | 'failed';
+
+interface Transaction {
+  _id: string;
+  type: TransactionType;
+  amount: number;
+  status: TransactionStatus;
+  createdAt: string;
+  description?: string;
+  txHash?: string;
+}
 
 export function WalletPage() {
   const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
-  const [isWalletConnected, setIsWalletConnected] = useState(true);
+  const [isWalletConnected, setIsWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [offChainBalance, setOffChainBalance] = useState(0);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [onChainBalance, setOnChainBalance] = useState("0");
+  const [network, setNetwork] = useState("Polygon Amoy Testnet");
+  const [isConnecting, setIsConnecting] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
 
-  const walletAddress = "0xa274...1a50c3";
-  const network = "Polygon Amoy Testnet";
+  // Load wallet state on mount
+  useEffect(() => {
+    const loadWalletState = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
 
-  const handleCopyAddress = () => {
-    navigator.clipboard.writeText("0xa2741a50c3");
+        const balanceData = await getWalletBalance();
+        if (balanceData.walletAddress) {
+          setIsWalletConnected(true);
+          setWalletAddress(balanceData.walletAddress);
+          setOffChainBalance(balanceData.offChainBalance || 0);
+          setOnChainBalance(balanceData.onChainBalance || "0");
+          setTotalEarnings(balanceData.totalInvestmentEarnings || 0);
+          
+          // Load transactions
+          loadTransactions();
+        }
+      } catch (error) {
+        console.error('Error loading wallet state:', error);
+      }
+    };
+
+    loadWalletState();
+  }, []);
+
+  // Load transactions
+  const loadTransactions = async () => {
+    try {
+      setIsLoadingTransactions(true);
+      const txData = await getTransactionHistory();
+      setTransactions(txData.transactions || []);
+    } catch (error: any) {
+      console.error('Error loading transactions:', error);
+      toast.error('Failed to load transactions');
+    } finally {
+      setIsLoadingTransactions(false);
+    }
   };
 
-  const transactions = [
-    { date: "Feb 24, 2026", type: "Deposit", description: "Deposited 1 USDT to wallet", amount: "+$1.00", status: "Completed" },
-    { date: "Feb 23, 2026", type: "Withdrawal", description: "Withdrew earnings to wallet", amount: "-$5.00", status: "Completed" },
-    { date: "Feb 22, 2026", type: "Earnings", description: "Student loan repayment received", amount: "+$2.50", status: "Completed" },
-    { date: "Feb 20, 2026", type: "Deposit", description: "Deposited 50 USDT to wallet", amount: "+$50.00", status: "Completed" },
-    { date: "Feb 18, 2026", type: "Earnings", description: "Monthly interest payment", amount: "+$3.20", status: "Completed" },
-  ];
+  // Connect wallet handler
+  const handleConnectWallet = async () => {
+    try {
+      setIsConnecting(true);
+      
+      // Connect MetaMask
+      const address = await connectMetaMask();
+      toast.success('MetaMask connected!');
+      
+      // Save to backend
+      await connectWalletToBackend(address);
+      
+      // Fetch updated balance
+      const balanceData = await getWalletBalance();
+      
+      setIsWalletConnected(true);
+      setWalletAddress(address);
+      setOffChainBalance(balanceData.offChainBalance || 0);
+      setOnChainBalance(balanceData.onChainBalance || "0");
+      setTotalEarnings(balanceData.totalInvestmentEarnings || 0);
+      
+      toast.success('Wallet connected successfully!');
+      
+      // Load transactions
+      loadTransactions();
+    } catch (error: any) {
+      console.error('Connect wallet error:', error);
+      toast.error(error.message || 'Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
-  // Filter transactions by type
+  const handleCopyAddress = () => {
+    if (walletAddress) {
+      navigator.clipboard.writeText(walletAddress);
+      toast.success('Address copied to clipboard');
+    }
+  };
+
+  const handleDepositSuccess = async () => {
+    // Refresh balance and transactions after deposit
+    try {
+      const balanceData = await getWalletBalance();
+      setOffChainBalance(balanceData.offChainBalance || 0);
+      setOnChainBalance(balanceData.onChainBalance || "0");
+      loadTransactions();
+    } catch (error) {
+      console.error('Error refreshing balance:', error);
+    }
+  };
+
+  const handleWithdrawSuccess = async () => {
+    // Refresh balance and transactions after withdrawal
+    try {
+      const balanceData = await getWalletBalance();
+      setOffChainBalance(balanceData.offChainBalance || 0);
+      setOnChainBalance(balanceData.onChainBalance || "0");
+      loadTransactions();
+    } catch (error) {
+      console.error('Error refreshing balance:', error);
+    }
+  };
+
+  const formatAddress = (address: string) => {
+    if (!address) return "";
+    return `${address.slice(0, 6)}...${address.slice(-6)}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  // Filter transactions
   const filteredTransactions = transactions.filter((tx) => {
-    if (filterType === "all") return true;
-    return tx.type.toLowerCase() === filterType.toLowerCase();
+    // Filter by type
+    if (filterType !== "all" && tx.type !== filterType) return false;
+
+    // Filter by date range
+    if (fromDate || toDate) {
+      const txDate = new Date(tx.createdAt);
+      if (fromDate && txDate < new Date(fromDate)) return false;
+      if (toDate && txDate > new Date(toDate)) return false;
+    }
+
+    return true;
   });
+
+  const getTransactionBadgeColor = (type: string) => {
+    switch (type) {
+      case 'deposit':
+        return 'bg-green-100 text-green-700 border-green-200';
+      case 'withdraw':
+        return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'investment_income':
+        return 'bg-blue-100 text-blue-700 border-blue-200';
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const getTransactionLabel = (type: string) => {
+    switch (type) {
+      case 'deposit':
+        return 'Deposit';
+      case 'withdraw':
+        return 'Withdrawal';
+      case 'investment_income':
+        return 'Investment Income';
+      default:
+        return type;
+    }
+  };
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -72,7 +234,7 @@ export function WalletPage() {
                 <div>
                   <p className="text-xs md:text-sm text-muted-foreground mb-1">Address:</p>
                   <div className="flex items-center gap-2">
-                    <p className="font-mono text-xs md:text-sm">{walletAddress}</p>
+                    <p className="font-mono text-xs md:text-sm">{formatAddress(walletAddress)}</p>
                     <button onClick={handleCopyAddress} className="text-primary hover:text-primary/75 p-1">
                       <Copy className="h-3.5 w-3.5 md:h-4 md:w-4" />
                     </button>
@@ -85,8 +247,15 @@ export function WalletPage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => setIsWalletConnected(false)}
-                className="mt-3 md:mt-4 w-full md:w-auto text-sm"
+                onClick={() => {
+                  setIsWalletConnected(false);
+                  setWalletAddress("");
+                  setOffChainBalance(0);
+                  setOnChainBalance("0");
+                  setTotalEarnings(0);
+                  setTransactions([]);
+                }}
+                className="mt-3 md:mt-4 w-full md:w-auto border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-300"
                 size="sm"
               >
                 Disconnect Wallet
@@ -96,10 +265,18 @@ export function WalletPage() {
             <div className="text-center py-6 md:py-8">
               <p className="text-xs md:text-sm text-muted-foreground mb-4">No wallet connected</p>
               <Button
-                onClick={() => setIsWalletConnected(true)}
+                onClick={handleConnectWallet}
+                disabled={isConnecting}
                 className="bg-gradient-to-r from-primary to-[#7367F0] hover:opacity-90 w-full md:w-auto"
               >
-                Connect Wallet
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  'Connect Wallet'
+                )}
               </Button>
             </div>
           )}
@@ -113,7 +290,9 @@ export function WalletPage() {
           <CardContent className="pt-4 md:pt-6 pb-4 md:pb-6">
             <div className="mb-2">
               <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Wallet Balance</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-primary mb-1 md:mb-2">100 USDT</h2>
+              <h2 className="text-3xl md:text-4xl font-bold text-primary mb-1 md:mb-2">
+                {offChainBalance.toFixed(2)} USDT
+              </h2>
               <p className="text-[10px] md:text-xs text-muted-foreground">Includes deposits and earned interest</p>
             </div>
           </CardContent>
@@ -124,7 +303,9 @@ export function WalletPage() {
           <CardContent className="pt-4 md:pt-6 pb-4 md:pb-6">
             <div className="mb-2">
               <p className="text-xs md:text-sm text-muted-foreground mb-2">Total Earnings from Investments</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-green-600 mb-1 md:mb-2">9 USDT</h2>
+              <h2 className="text-3xl md:text-4xl font-bold text-green-600 mb-1 md:mb-2">
+                {totalEarnings.toFixed(2)} USDT
+              </h2>
               <p className="text-[10px] md:text-xs text-muted-foreground">Earnings from student loan payments</p>
             </div>
           </CardContent>
@@ -233,70 +414,118 @@ export function WalletPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredTransactions.map((tx, index) => (
-                  <tr key={index} className="hover:bg-accent/30 transition-colors">
-                    <td className="p-2 md:p-3 text-xs md:text-sm whitespace-nowrap">{tx.date}</td>
-                    <td className="p-2 md:p-3 text-xs md:text-sm">
-                      <Badge variant="secondary" className={`text-[10px] md:text-xs
-                        ${tx.type === "Deposit" ? "bg-green-100 text-green-700 border-green-200" : ""}
-                        ${tx.type === "Withdrawal" ? "bg-orange-100 text-orange-700 border-orange-200" : ""}
-                        ${tx.type === "Earnings" ? "bg-blue-100 text-blue-700 border-blue-200" : ""}
-                      `}>
-                        {tx.type}
-                      </Badge>
-                    </td>
-                    <td className="p-2 md:p-3 text-xs md:text-sm text-muted-foreground">{tx.description}</td>
-                    <td className={`p-2 md:p-3 text-xs md:text-sm text-right font-medium whitespace-nowrap ${
-                      tx.amount.startsWith('+') ? 'text-green-600' : 'text-foreground'
-                    }`}>
-                      {tx.amount}
-                    </td>
-                    <td className="p-2 md:p-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4 text-green-600" />
-                        <span className="text-[10px] md:text-xs text-green-600">{tx.status}</span>
-                      </div>
+                {isLoadingTransactions ? (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </td>
                   </tr>
-                ))}
+                ) : filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                      No transactions found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.map((tx) => (
+                    <tr key={tx._id} className="hover:bg-accent/30 transition-colors">
+                      <td className="p-2 md:p-3 text-xs md:text-sm whitespace-nowrap">
+                        {formatDate(tx.createdAt)}
+                      </td>
+                      <td className="p-2 md:p-3 text-xs md:text-sm">
+                        <Badge variant="secondary" className={`text-[10px] md:text-xs ${getTransactionBadgeColor(tx.type)}`}>
+                          {getTransactionLabel(tx.type)}
+                        </Badge>
+                      </td>
+                      <td className="p-2 md:p-3 text-xs md:text-sm text-muted-foreground">
+                        {tx.description || 'No description'}
+                      </td>
+                      <td className={`p-2 md:p-3 text-xs md:text-sm text-right font-medium whitespace-nowrap ${
+                        tx.type === 'deposit' || tx.type === 'investment_income' ? 'text-green-600' : 'text-foreground'
+                      }`}>
+                        {tx.type === 'deposit' || tx.type === 'investment_income' ? '+' : '-'}${tx.amount.toFixed(2)}
+                      </td>
+                      <td className="p-2 md:p-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {tx.status === 'completed' ? (
+                            <>
+                              <CheckCircle2 className="h-3 w-3 md:h-4 md:w-4 text-green-600" />
+                              <span className="text-[10px] md:text-xs text-green-600">Completed</span>
+                            </>
+                          ) : tx.status === 'failed' ? (
+                            <>
+                              <XCircle className="h-3 w-3 md:h-4 md:w-4 text-red-600" />
+                              <span className="text-[10px] md:text-xs text-red-600">Failed</span>
+                            </>
+                          ) : (
+                            <>
+                              <Loader2 className="h-3 w-3 md:h-4 md:w-4 text-yellow-600 animate-spin" />
+                              <span className="text-[10px] md:text-xs text-yellow-600">Pending</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Transaction Cards - Mobile */}
           <div className="md:hidden space-y-3">
-            {filteredTransactions.map((tx, index) => (
-              <Card key={index} className="border shadow-sm">
-                <CardContent className="p-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant="secondary" className={`text-[10px]
-                          ${tx.type === "Deposit" ? "bg-green-100 text-green-700 border-green-200" : ""}
-                          ${tx.type === "Withdrawal" ? "bg-orange-100 text-orange-700 border-orange-200" : ""}
-                          ${tx.type === "Earnings" ? "bg-blue-100 text-blue-700 border-blue-200" : ""}
-                        `}>
-                          {tx.type}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">{tx.date}</span>
+            {isLoadingTransactions ? (
+              <div className="py-8 text-center">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+              </div>
+            ) : filteredTransactions.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No transactions found
+              </div>
+            ) : (
+              filteredTransactions.map((tx) => (
+                <Card key={tx._id} className="border shadow-sm">
+                  <CardContent className="p-3">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="secondary" className={`text-[10px] ${getTransactionBadgeColor(tx.type)}`}>
+                            {getTransactionLabel(tx.type)}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground">{formatDate(tx.createdAt)}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">{tx.description || 'No description'}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-2">{tx.description}</p>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3 text-green-600" />
-                      <span className="text-[10px] text-green-600">{tx.status}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1">
+                        {tx.status === 'completed' ? (
+                          <>
+                            <CheckCircle2 className="h-3 w-3 text-green-600" />
+                            <span className="text-[10px] text-green-600">Completed</span>
+                          </>
+                        ) : tx.status === 'failed' ? (
+                          <>
+                            <XCircle className="h-3 w-3 text-red-600" />
+                            <span className="text-[10px] text-red-600">Failed</span>
+                          </>
+                        ) : (
+                          <>
+                            <Loader2 className="h-3 w-3 text-yellow-600 animate-spin" />
+                            <span className="text-[10px] text-yellow-600">Pending</span>
+                          </>
+                        )}
+                      </div>
+                      <span className={`text-sm font-bold ${
+                        tx.type === 'deposit' || tx.type === 'investment_income' ? 'text-green-600' : 'text-foreground'
+                      }`}>
+                        {tx.type === 'deposit' || tx.type === 'investment_income' ? '+' : '-'}${tx.amount.toFixed(2)}
+                      </span>
                     </div>
-                    <span className={`text-sm font-bold ${
-                      tx.amount.startsWith('+') ? 'text-green-600' : 'text-foreground'
-                    }`}>
-                      {tx.amount}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
@@ -304,12 +533,14 @@ export function WalletPage() {
       <WithdrawalModal
         isOpen={isWithdrawalModalOpen}
         onClose={() => setIsWithdrawalModalOpen(false)}
-        availableBalance={100}
+        availableBalance={offChainBalance}
+        onSuccess={handleWithdrawSuccess}
       />
 
       <DepositModal
         isOpen={isDepositModalOpen}
         onClose={() => setIsDepositModalOpen(false)}
+        onSuccess={handleDepositSuccess}
       />
     </div>
   );

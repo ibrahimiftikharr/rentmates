@@ -1,0 +1,308 @@
+const mongoose = require('mongoose');
+const User = require('../models/userModel');
+const Investor = require('../models/investorModel');
+const InvestmentPool = require('../models/investmentPoolModel');
+const PoolInvestment = require('../models/poolInvestmentModel');
+const Transaction = require('../models/transactionModel');
+
+/**
+ * Get all investment pools with dynamic calculations
+ */
+exports.getAllPools = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get all active pools
+    const pools = await InvestmentPool.find({ isActive: true });
+
+    // Get user's off-chain balance
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Calculate dynamic data for each pool
+    const poolsWithData = await Promise.all(pools.map(async (pool) => {
+      // Get all investments in this pool
+      const investments = await PoolInvestment.find({ pool: pool._id, status: 'active' });
+      
+      // Calculate Pool Size (total USDT invested)
+      const poolSize = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+      
+      // Get unique investor count
+      const uniqueInvestors = new Set(investments.map(inv => inv.investor.toString()));
+      const investorCount = uniqueInvestors.size;
+      
+      // Calculate Pool Filled % (number of investors / 50 × 100)
+      const poolFilledPercentage = (investorCount / pool.maxInvestors) * 100;
+      
+      // Calculate Remaining Capacity
+      const remainingCapacity = 100 - poolFilledPercentage;
+      
+      // Check if user has invested in this pool
+      const userInvestment = await PoolInvestment.findOne({
+        investor: userId,
+        pool: pool._id,
+        status: 'active'
+      });
+      
+      // Calculate user's contribution share
+      let userContributionShare = 0;
+      let userInvestedAmount = 0;
+      
+      if (userInvestment) {
+        userInvestedAmount = userInvestment.amountInvested;
+        userContributionShare = poolSize > 0 ? (userInvestedAmount / poolSize) * 100 : 0;
+      }
+      
+      // Calculate Expected ROI
+      const expectedROI = pool.calculateROI();
+      
+      // Check if pool is full
+      const isFull = investorCount >= pool.maxInvestors;
+      
+      return {
+        id: pool._id,
+        name: pool.name,
+        description: pool.description,
+        ltv: pool.ltv,
+        durationMonths: pool.durationMonths,
+        expectedROI: Number(expectedROI.toFixed(2)),
+        poolSize: Number(poolSize.toFixed(2)),
+        poolFilledPercentage: Number(poolFilledPercentage.toFixed(2)),
+        remainingCapacity: Number(remainingCapacity.toFixed(2)),
+        investorCount: investorCount,
+        maxInvestors: pool.maxInvestors,
+        minInvestment: pool.minInvestment,
+        maxInvestment: pool.maxInvestment,
+        userInvestedAmount: Number(userInvestedAmount.toFixed(2)),
+        userContributionShare: Number(userContributionShare.toFixed(2)),
+        isFull: isFull,
+        canInvest: !isFull && !userInvestment // Can invest if not full and user hasn't invested yet
+      };
+    }));
+
+    res.json({
+      success: true,
+      userBalance: user.offChainBalance,
+      pools: poolsWithData
+    });
+  } catch (error) {
+    console.error('Get all pools error:', error);
+    res.status(500).json({ error: 'Failed to fetch investment pools' });
+  }
+};
+
+/**
+ * Get user's investments across all pools
+ */
+exports.getUserInvestments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const investments = await PoolInvestment.find({
+      investor: userId,
+      status: 'active'
+    }).populate('pool', 'name ltv durationMonths');
+
+    const investmentsWithDetails = investments.map(inv => ({
+      id: inv._id,
+      poolName: inv.pool.name,
+      poolId: inv.pool._id,
+      amountInvested: inv.amountInvested,
+      lockedROI: inv.lockedROI,
+      investmentDate: inv.investmentDate,
+      maturityDate: inv.maturityDate,
+      status: inv.status,
+      expectedEarnings: (inv.amountInvested * inv.lockedROI) / 100
+    }));
+
+    // Calculate total invested
+    const totalInvested = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+
+    res.json({
+      success: true,
+      totalInvested,
+      investments: investmentsWithDetails
+    });
+  } catch (error) {
+    console.error('Get user investments error:', error);
+    res.status(500).json({ error: 'Failed to fetch user investments' });
+  }
+};
+
+/**
+ * Make an investment in a pool
+ */
+exports.investInPool = async (req, res) => {
+  try {
+    const { poolId, amount } = req.body;
+    const userId = req.user.id;
+
+    // Validate input
+    if (!poolId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid pool ID or amount' });
+    }
+
+    // Get pool
+    const pool = await InvestmentPool.findById(poolId);
+    if (!pool || !pool.isActive) {
+      return res.status(404).json({ error: 'Investment pool not found or inactive' });
+    }
+
+    // Validate investment amount
+    if (amount < pool.minInvestment) {
+      return res.status(400).json({
+        error: `Minimum investment is ${pool.minInvestment} USDT`
+      });
+    }
+
+    if (amount > pool.maxInvestment) {
+      return res.status(400).json({
+        error: `Maximum investment is ${pool.maxInvestment} USDT`
+      });
+    }
+
+    // Get user and check balance
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.offChainBalance < amount) {
+      return res.status(400).json({
+        error: 'Insufficient balance',
+        available: user.offChainBalance,
+        required: amount
+      });
+    }
+
+    // Check if user already invested in this pool
+    const existingInvestment = await PoolInvestment.findOne({
+      investor: userId,
+      pool: poolId,
+      status: 'active'
+    });
+
+    if (existingInvestment) {
+      return res.status(400).json({
+        error: 'You have already invested in this pool. Each investor can invest only once per pool.'
+      });
+    }
+
+    // Check pool capacity
+    const investments = await PoolInvestment.find({ pool: poolId, status: 'active' });
+    const uniqueInvestors = new Set(investments.map(inv => inv.investor.toString()));
+    
+    if (uniqueInvestors.size >= pool.maxInvestors) {
+      return res.status(400).json({
+        error: 'Pool is full - maximum 50 investors reached'
+      });
+    }
+
+    // Calculate ROI at time of investment (locked in)
+    const lockedROI = pool.calculateROI();
+
+    // Create investment record
+    const investment = new PoolInvestment({
+      investor: userId,
+      pool: poolId,
+      amountInvested: amount,
+      lockedROI: lockedROI,
+      investmentDate: new Date(),
+      status: 'active'
+    });
+
+    await investment.save();
+
+    // Deduct from user's off-chain balance
+    user.offChainBalance -= amount;
+    await user.save();
+
+    // Create transaction record
+    await Transaction.create({
+      user: userId,
+      type: 'pool_investment',
+      amount: amount,
+      status: 'completed',
+      balanceAfter: user.offChainBalance,
+      description: `Invested ${amount} USDT in ${pool.name}`,
+      metadata: {
+        poolId: pool._id,
+        poolName: pool.name,
+        lockedROI: lockedROI
+      }
+    });
+
+    console.log(`✓ Investment successful: ${amount} USDT in ${pool.name} by user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Investment successful',
+      investment: {
+        id: investment._id,
+        poolName: pool.name,
+        amountInvested: investment.amountInvested,
+        lockedROI: investment.lockedROI,
+        maturityDate: investment.maturityDate,
+        expectedEarnings: (investment.amountInvested * investment.lockedROI) / 100
+      },
+      newBalance: user.offChainBalance
+    });
+  } catch (error) {
+    console.error('Invest in pool error:', error);
+    
+    // Handle duplicate investment error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        error: 'You have already invested in this pool'
+      });
+    }
+    
+    res.status(500).json({ error: 'Failed to process investment' });
+  }
+};
+
+/**
+ * Get investment statistics for dashboard
+ */
+exports.getInvestmentStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get all user's active investments
+    const investments = await PoolInvestment.find({
+      investor: userId,
+      status: 'active'
+    }).populate('pool');
+
+    // Calculate total invested
+    const totalInvested = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+
+    // Calculate total expected earnings
+    const totalExpectedEarnings = investments.reduce((sum, inv) => {
+      return sum + (inv.amountInvested * inv.lockedROI) / 100;
+    }, 0);
+
+    // Calculate average ROI
+    const avgROI = investments.length > 0
+      ? investments.reduce((sum, inv) => sum + inv.lockedROI, 0) / investments.length
+      : 0;
+
+    // Count active pools
+    const activePools = investments.length;
+
+    res.json({
+      success: true,
+      stats: {
+        totalInvested: Number(totalInvested.toFixed(2)),
+        totalExpectedEarnings: Number(totalExpectedEarnings.toFixed(2)),
+        averageROI: Number(avgROI.toFixed(2)),
+        activePools: activePools
+      }
+    });
+  } catch (error) {
+    console.error('Get investment stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch investment statistics' });
+  }
+};

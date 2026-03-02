@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/userModel');
 const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
+const Investor = require('../models/investorModel');
 const Rental = require('../models/rentalModel');
 const Transaction = require('../models/transactionModel');
 const { getUSDTBalance, withdrawFromVault, getVaultBalance } = require('../services/contractService');
@@ -78,6 +79,26 @@ exports.connectWallet = async (req, res) => {
       }
     }
 
+    // If user is an investor, update reputation score
+    const investor = await Investor.findOne({ user: userId });
+    if (investor) {
+      // Add points for wallet connection (similar to students)
+      investor.reputationScore = Math.min(100, investor.reputationScore + 10);
+      await investor.save();
+      
+      reputationScore = investor.reputationScore;
+      console.log('✓ Investor reputation updated:', reputationScore);
+      
+      // Emit Socket.IO event for real-time reputation update
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`investor_${userId}`).emit('reputation_updated', {
+          reputationScore: investor.reputationScore,
+          walletConnected: true
+        });
+      }
+    }
+
     res.json({
       success: true,
       message: 'Wallet connected successfully',
@@ -144,13 +165,44 @@ exports.getBalance = async (req, res) => {
       }
     }
 
+    // Calculate total investment earnings for investors
+    let totalInvestmentEarnings = 0;
+    if (user.role === 'investor') {
+      const investor = await Investor.findOne({ user: userId });
+      if (investor) {
+        console.log('🔍 Fetching investment earnings for investor:', userId);
+        
+        // Sum all completed investment_income transactions
+        const earningsResult = await Transaction.aggregate([
+          {
+            $match: {
+              user: new mongoose.Types.ObjectId(userId),
+              type: 'investment_income',
+              status: 'completed'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: '$amount' }
+            }
+          }
+        ]);
+        
+        console.log('💰 Investment earnings result:', earningsResult);
+        totalInvestmentEarnings = earningsResult.length > 0 ? earningsResult[0].total : 0;
+        console.log('✅ Total investment earnings:', totalInvestmentEarnings);
+      }
+    }
+
     res.json({
       success: true,
       walletAddress: user.walletAddress,
       onChainBalance, // USDT in user's MetaMask wallet
       offChainBalance: user.offChainBalance, // User's balance in MongoDB (available in vault)
       totalBalance: user.offChainBalance, // What user can actually use in the app
-      totalRentalEarnings: totalRentalEarnings // Total earnings from rent payments
+      totalRentalEarnings: totalRentalEarnings, // Total earnings from rent payments (landlords)
+      totalInvestmentEarnings: totalInvestmentEarnings // Total earnings from investments (investors)
     });
   } catch (error) {
     console.error('Get balance error:', error);
