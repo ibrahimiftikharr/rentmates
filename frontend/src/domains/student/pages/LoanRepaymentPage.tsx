@@ -56,6 +56,18 @@ export function LoanRepaymentPage() {
   const [hasActiveLoan, setHasActiveLoan] = useState(false);
   const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
   const [repaymentHistory, setRepaymentHistory] = useState<RepaymentRecord[]>([]);
+  
+  // ⚠️ DEV ONLY: Allow paying outside payment window for testing
+  // Persist in localStorage so it survives page refreshes
+  const [devBypassPaymentWindow, setDevBypassPaymentWindow] = useState(() => {
+    const saved = localStorage.getItem('devBypassPaymentWindow');
+    return saved === 'true';
+  });
+
+  // Persist dev bypass setting to localStorage
+  useEffect(() => {
+    localStorage.setItem('devBypassPaymentWindow', String(devBypassPaymentWindow));
+  }, [devBypassPaymentWindow]);
 
   // Load active loan data
   useEffect(() => {
@@ -103,7 +115,7 @@ export function LoanRepaymentPage() {
   const handlePayInstallment = async () => {
     try {
       setIsPayingInstallment(true);
-      const result = await payLoanInstallment();
+      const result = await payLoanInstallment(devBypassPaymentWindow);
       toast.success(`Payment of $${result.amount} USDT processed successfully!`);
       
       // Reload loan data to get updated information
@@ -354,7 +366,7 @@ export function LoanRepaymentPage() {
             <Button 
               className="w-full bg-primary hover:bg-primary/90 h-12 sm:h-12 text-sm sm:text-base px-4 sm:px-6"
               onClick={handlePayInstallment}
-              disabled={isPayingInstallment || !activeLoan.currentInstallment?.canPayNow || activeLoan.status === 'completed'}
+              disabled={isPayingInstallment || (!activeLoan.currentInstallment?.canPayNow && !devBypassPaymentWindow) || activeLoan.status === 'completed'}
             >
               {isPayingInstallment ? (
                 <>
@@ -366,7 +378,7 @@ export function LoanRepaymentPage() {
                   <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                   <span className="truncate">Loan Fully Paid</span>
                 </>
-              ) : !activeLoan.currentInstallment?.canPayNow ? (
+              ) : !activeLoan.currentInstallment?.canPayNow && !devBypassPaymentWindow ? (
                 <>
                   <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                   <span className="truncate">Payment Window Not Open</span>
@@ -374,7 +386,7 @@ export function LoanRepaymentPage() {
               ) : (
                 <>
                   <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                  <span className="truncate">Pay Loan Installment Now</span>
+                  <span className="truncate">{devBypassPaymentWindow && !activeLoan.currentInstallment?.canPayNow ? '🔓 Pay Now (Dev Mode)' : 'Pay Loan Installment Now'}</span>
                 </>
               )}
             </Button>
@@ -507,6 +519,131 @@ export function LoanRepaymentPage() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ⚠️ DEV ONLY: Payment Window Bypass Feature */}
+      <Card style={{ 
+        border: '2px solid #e0e7ff', 
+        background: '#ffffff',
+        boxShadow: '0 10px 25px rgba(99, 102, 241, 0.25), 0 5px 10px rgba(0, 0, 0, 0.08)',
+        borderRadius: '0.75rem',
+        overflow: 'hidden'
+      }}>
+        <CardHeader style={{ 
+          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          color: '#ffffff',
+          padding: '1.5rem'
+        }}>
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+            <AlertCircle className="w-5 h-5" />
+            Development Mode
+          </CardTitle>
+          <CardDescription style={{ color: '#e0e7ff', fontWeight: 400, fontSize: '0.875rem' }}>
+            Testing feature - disable in production
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-6" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1.5rem' }}>
+          <div style={{ 
+            backgroundColor: '#fef9c3', 
+            border: '1px solid #fde047',
+            borderRadius: '0.5rem',
+            padding: '1rem',
+            borderLeft: '4px solid #eab308'
+          }}>
+            <p style={{ 
+              fontSize: '0.8125rem', 
+              fontWeight: 600, 
+              color: '#713f12',
+              marginBottom: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <span>ℹ️</span>
+              Payment Window Restriction
+            </p>
+            <p style={{ 
+              fontSize: '0.75rem', 
+              color: '#854d0e',
+              lineHeight: '1.6'
+            }}>
+              Normally, loans can only be paid within 20 days before the due date. Toggle below to bypass this restriction for immediate testing.
+            </p>
+          </div>
+          
+          <div style={{ 
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: devBypassPaymentWindow ? '#f0f9ff' : '#f9fafb',
+            border: devBypassPaymentWindow ? '2px solid #7dd3fc' : '1px solid #e5e7eb',
+            borderRadius: '0.5rem',
+            padding: '1.25rem',
+            transition: 'all 0.2s ease'
+          }}>
+            <div style={{ flex: 1 }}>
+              <Label htmlFor="dev-bypass" style={{ 
+                fontSize: '0.9375rem',
+                fontWeight: 600,
+                color: '#111827',
+                cursor: 'pointer',
+                display: 'block',
+                marginBottom: '0.375rem'
+              }}>
+                Bypass Payment Window
+              </Label>
+              <p style={{ 
+                fontSize: '0.8125rem',
+                color: devBypassPaymentWindow ? '#0369a1' : '#6b7280',
+                fontWeight: 500
+              }}>
+                {devBypassPaymentWindow 
+                  ? '✅ Enabled - payments allowed anytime' 
+                  : '⭕ Disabled - normal payment rules active'}
+              </p>
+            </div>
+            <Switch
+              id="dev-bypass"
+              checked={devBypassPaymentWindow}
+              onCheckedChange={setDevBypassPaymentWindow}
+              className="data-[state=checked]:bg-indigo-600"
+              style={{
+                boxShadow: devBypassPaymentWindow ? '0 0 0 3px rgba(99, 102, 241, 0.2)' : 'none'
+              }}
+            />
+          </div>
+
+          {devBypassPaymentWindow && (
+            <div style={{ 
+              backgroundColor: '#f0fdf4',
+              border: '2px solid #86efac',
+              borderRadius: '0.5rem',
+              padding: '1rem',
+              borderLeft: '4px solid #22c55e',
+              animation: 'fadeIn 0.3s ease'
+            }}>
+              <p style={{ 
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                color: '#14532d',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.375rem'
+              }}>
+                <CheckCircle className="w-4 h-4" />
+                Bypass Active
+              </p>
+              <p style={{ 
+                fontSize: '0.75rem',
+                color: '#166534',
+                lineHeight: '1.6'
+              }}>
+                Payment window check disabled. You can now make loan payments immediately for testing purposes.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

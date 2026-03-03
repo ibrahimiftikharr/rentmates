@@ -100,13 +100,21 @@ exports.payInstallment = async (req, res) => {
       status: installmentInfo.status
     });
     
-    // Check if payment window is open
-    if (!installmentInfo.canPayNow) {
+    // ⚠️ DEV ONLY: Allow bypassing payment window for testing purposes
+    const devBypassPaymentWindow = req.body.devBypassPaymentWindow === true;
+    
+    // Check if payment window is open (unless dev bypass is enabled)
+    if (!installmentInfo.canPayNow && !devBypassPaymentWindow) {
       return res.status(400).json({ 
         error: 'Payment window not open yet',
         message: `Loan installment payment will be available starting ${installmentInfo.paymentWindowStart.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
         daysUntilWindowOpens: installmentInfo.daysUntilWindowOpens
       });
+    }
+    
+    // Log dev bypass usage
+    if (devBypassPaymentWindow && !installmentInfo.canPayNow) {
+      console.log('⚠️ DEV MODE: Payment window bypassed for testing purposes');
     }
 
     const installmentAmount = installmentInfo.amount;

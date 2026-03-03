@@ -27,10 +27,15 @@ export const getActiveLoan = async () => {
 
 /**
  * Pay loan installment manually
+ * @param devBypassPaymentWindow - DEV ONLY: Bypass payment window restriction for testing
  */
-export const payLoanInstallment = async () => {
+export const payLoanInstallment = async (devBypassPaymentWindow = false) => {
   try {
-    const response = await axios.post(`${API_URL}/repayment/pay`, {}, getAuthHeader());
+    const response = await axios.post(
+      `${API_URL}/repayment/pay`, 
+      { devBypassPaymentWindow }, 
+      getAuthHeader()
+    );
     return response.data;
   } catch (error: any) {
     console.error('Pay loan installment error:', error);
