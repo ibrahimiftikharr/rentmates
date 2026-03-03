@@ -1,65 +1,176 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Label } from '@/shared/ui/label';
 import { Badge } from '@/shared/ui/badge';
 import { Switch } from '@/shared/ui/switch';
-import { DollarSign, Lock, TrendingUp, Calendar, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { DollarSign, Lock, TrendingUp, Calendar, CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { 
+  getActiveLoan, 
+  payLoanInstallment, 
+  toggleAutoRepayment as toggleAutoRepaymentAPI,
+  getRepaymentHistory 
+} from '@/shared/services/loanRepaymentService';
 
 interface RepaymentRecord {
   id: string;
+  installmentNumber: number;
+  dueDate: string;
   amount: number;
-  date: string;
+  principalAmount: number;
+  interestAmount: number;
+  status: 'pending' | 'paid' | 'overdue' | 'defaulted';
+  paidAt?: string;
   remainingBalance: number;
-  status: 'Paid' | 'Pending';
+}
+
+interface ActiveLoan {
+  _id: string;
+  loanAmount: number;
+  poolName: string;
+  collateralLocked: number;
+  interestRate: number;
+  monthlyInstallment: number;
+  totalRepaid: number;
+  remainingBalance: number;
+  status: 'active' | 'repaying' | 'completed';
+  duration: number;
+  paymentsCompleted: number;
+  autoRepaymentEnabled: boolean;
+  currentInstallment?: {
+    installmentNumber: number;
+    dueDate: string;
+    amount: number;
+    daysUntilDue: number;
+    isOverdue: boolean;
+    canPayNow: boolean;
+  };
 }
 
 export function LoanRepaymentPage() {
   const [autoRepayment, setAutoRepayment] = useState(false);
   const [isPayingInstallment, setIsPayingInstallment] = useState(false);
+  const [isTogglingAuto, setIsTogglingAuto] = useState(false);
+  const [isLoadingLoan, setIsLoadingLoan] = useState(true);
+  const [hasActiveLoan, setHasActiveLoan] = useState(false);
+  const [activeLoan, setActiveLoan] = useState<ActiveLoan | null>(null);
+  const [repaymentHistory, setRepaymentHistory] = useState<RepaymentRecord[]>([]);
 
-  // Active loan details
-  const activeLoan = {
-    loanAmount: 10000,
-    poolName: 'Balanced Portfolio',
-    collateralLocked: 5.2,
-    interestRate: 10.2,
-    monthlyInstallment: 1150,
-    nextDueDate: 'Dec 15, 2025',
-    daysUntil: 9,
-    status: 'ACTIVE' as 'ACTIVE' | 'DEFAULT' | 'PAID',
-    totalRepaid: 3450,
-    remainingBalance: 6550
-  };
+  // Load active loan data
+  useEffect(() => {
+    loadLoanData();
+  }, []);
 
-  // Repayment history
-  const repaymentHistory: RepaymentRecord[] = [
-    { id: '1', amount: 1150, date: 'Sep 15, 2025', remainingBalance: 8850, status: 'Paid' },
-    { id: '2', amount: 1150, date: 'Oct 15, 2025', remainingBalance: 7700, status: 'Paid' },
-    { id: '3', amount: 1150, date: 'Nov 15, 2025', remainingBalance: 6550, status: 'Paid' },
-    { id: '4', amount: 1150, date: 'Dec 15, 2025', remainingBalance: 5400, status: 'Pending' },
-  ];
-
-  const getStatusBadge = (status: typeof activeLoan.status) => {
-    switch (status) {
-      case 'ACTIVE':
-        return <Badge className="bg-green-100 text-green-700 border-green-200">ACTIVE</Badge>;
-      case 'DEFAULT':
-        return <Badge className="bg-red-100 text-red-700 border-red-200">DEFAULT</Badge>;
-      case 'PAID':
-        return <Badge className="bg-blue-100 text-blue-700 border-blue-200">PAID</Badge>;
+  const loadLoanData = async () => {
+    try {
+      setIsLoadingLoan(true);
+      const loanData = await getActiveLoan();
+      
+      if (loanData.hasActiveLoan && loanData.loan) {
+        setHasActiveLoan(true);
+        setActiveLoan(loanData.loan);
+        setAutoRepayment(loanData.loan.autoRepaymentEnabled);
+        
+        // Load repayment history
+        const historyData = await getRepaymentHistory();
+        if (historyData.repaymentHistory) {
+          setRepaymentHistory(historyData.repaymentHistory);
+        }
+      } else {
+        setHasActiveLoan(false);
+      }
+    } catch (error: any) {
+      console.error('Error loading loan data:', error);
+      toast.error(error.error || 'Failed to load loan data');
+    } finally {
+      setIsLoadingLoan(false);
     }
   };
 
-  const handlePayInstallment = () => {
-    setIsPayingInstallment(true);
-    
-    setTimeout(() => {
-      setIsPayingInstallment(false);
-      toast.success(`Payment of $${activeLoan.monthlyInstallment} USDT processed successfully!`);
-    }, 2000);
+  const getStatusBadge = (status: typeof activeLoan.status) => {
+    switch (status) {
+      case 'active':
+      case 'repaying':
+        return <Badge className="bg-green-100 text-green-700 border-green-200">ACTIVE</Badge>;
+      case 'completed':
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200">PAID</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-700 border-gray-200">{status.toUpperCase()}</Badge>;
+    }
   };
+
+  const handlePayInstallment = async () => {
+    try {
+      setIsPayingInstallment(true);
+      const result = await payLoanInstallment();
+      toast.success(`Payment of $${result.amount} USDT processed successfully!`);
+      
+      // Reload loan data to get updated information
+      await loadLoanData();
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      toast.error(error.error || 'Failed to process payment');
+    } finally {
+      setIsPayingInstallment(false);
+    }
+  };
+
+  const handleToggleAutoRepayment = async (checked: boolean) => {
+    try {
+      setIsTogglingAuto(true);
+      await toggleAutoRepaymentAPI(checked);
+      setAutoRepayment(checked);
+      toast.success(
+        checked 
+          ? 'Auto-repayment enabled' 
+          : 'Auto-repayment disabled'
+      );
+    } catch (error: any) {
+      console.error('Toggle auto-repayment error:', error);
+      toast.error(error.error || 'Failed to toggle auto-repayment');
+      // Revert the switch if API call failed
+      setAutoRepayment(!checked);
+    } finally {
+      setIsTogglingAuto(false);
+    }
+  };
+
+  // Loading state
+  if (isLoadingLoan) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6 flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Loading loan data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No active loan state
+  if (!hasActiveLoan || !activeLoan) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="mb-4 md:mb-6">
+          <h1 className="mb-2">Loan Repayment</h1>
+          <p className="text-muted-foreground text-sm md:text-base">
+            Manage your active loan and track repayment progress
+          </p>
+        </div>
+
+        <Card className="shadow-xl">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="w-16 h-16 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2">No Active Loan</h3>
+            <p className="text-muted-foreground text-center">
+              You do not have an active loan at this time.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -181,22 +292,34 @@ export function LoanRepaymentPage() {
                 <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                 <span className="font-medium text-blue-900 text-sm sm:text-base">Next Payment</span>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs sm:text-sm text-blue-700">Date:</span>
-                  <span className="font-medium text-blue-900 text-xs sm:text-sm">{activeLoan.nextDueDate}</span>
+              {activeLoan.currentInstallment ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs sm:text-sm text-blue-700">Date:</span>
+                    <span className="font-medium text-blue-900 text-xs sm:text-sm">
+                      {new Date(activeLoan.currentInstallment.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs sm:text-sm text-blue-700">Amount:</span>
+                    <span className="font-medium text-blue-900 text-xs sm:text-sm">${activeLoan.currentInstallment.amount.toFixed(2)} USDT</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-blue-300">
+                    <span className="text-xs sm:text-sm text-blue-700">Days Until:</span>
+                    <Badge className={`text-xs sm:text-sm ${
+                      activeLoan.currentInstallment.isOverdue 
+                        ? 'bg-red-600 text-white' 
+                        : 'bg-blue-600 text-white'
+                    }`}>
+                      {activeLoan.currentInstallment.isOverdue ? 'OVERDUE' : `${activeLoan.currentInstallment.daysUntilDue} days`}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs sm:text-sm text-blue-700">Amount:</span>
-                  <span className="font-medium text-blue-900 text-xs sm:text-sm">${activeLoan.monthlyInstallment} USDT</span>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-blue-700">All installments paid!</p>
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-blue-300">
-                  <span className="text-xs sm:text-sm text-blue-700">Days Until:</span>
-                  <Badge className="bg-blue-600 text-white text-xs sm:text-sm">
-                    {activeLoan.daysUntil} days
-                  </Badge>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Auto Repayment Toggle */}
@@ -213,14 +336,8 @@ export function LoanRepaymentPage() {
                 <Switch
                   id="auto-repayment"
                   checked={autoRepayment}
-                  onCheckedChange={(checked) => {
-                    setAutoRepayment(checked);
-                    toast.success(
-                      checked 
-                        ? 'Auto-repayment enabled' 
-                        : 'Auto-repayment disabled'
-                    );
-                  }}
+                  onCheckedChange={handleToggleAutoRepayment}
+                  disabled={isTogglingAuto}
                 />
               </div>
               {autoRepayment && (
@@ -237,12 +354,22 @@ export function LoanRepaymentPage() {
             <Button 
               className="w-full bg-primary hover:bg-primary/90 h-12 sm:h-12 text-sm sm:text-base px-4 sm:px-6"
               onClick={handlePayInstallment}
-              disabled={isPayingInstallment}
+              disabled={isPayingInstallment || !activeLoan.currentInstallment?.canPayNow || activeLoan.status === 'completed'}
             >
               {isPayingInstallment ? (
                 <>
-                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
                   <span className="truncate">Processing...</span>
+                </>
+              ) : activeLoan.status === 'completed' ? (
+                <>
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                  <span className="truncate">Loan Fully Paid</span>
+                </>
+              ) : !activeLoan.currentInstallment?.canPayNow ? (
+                <>
+                  <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                  <span className="truncate">Payment Window Not Open</span>
                 </>
               ) : (
                 <>
@@ -274,41 +401,60 @@ export function LoanRepaymentPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {repaymentHistory.map((record) => (
-                    <tr key={record.id} className="border-b border-border hover:bg-muted/50">
-                      <td className="py-4 px-2">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
-                          <span className="text-xs sm:text-sm">{record.date}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-2 text-right">
-                        <span className={`font-medium text-xs sm:text-sm ${record.status === 'Paid' ? 'text-green-600' : 'text-orange-600'}`}>
-                          ${record.amount.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="py-4 px-2 text-right">
-                        <span className="font-medium text-muted-foreground text-xs sm:text-sm">
-                          ${record.remainingBalance.toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="py-4 px-2">
-                        <div className="flex items-center justify-center">
-                          {record.status === 'Paid' ? (
-                            <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Paid
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-200 text-xs">
-                              <Clock className="w-3 h-3 mr-1" />
-                              Pending
-                            </Badge>
-                          )}
-                        </div>
+                  {repaymentHistory.length > 0 ? (
+                    repaymentHistory.map((record) => (
+                      <tr key={record.id} className="border-b border-border hover:bg-muted/50">
+                        <td className="py-4 px-2">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-3 h-3 sm:w-4 sm:h-4 text-muted-foreground" />
+                            <span className="text-xs sm:text-sm">
+                              {new Date(record.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-2 text-right">
+                          <span className={`font-medium text-xs sm:text-sm ${
+                            record.status === 'paid' ? 'text-green-600' : 
+                            record.status === 'overdue' ? 'text-red-600' :
+                            'text-orange-600'
+                          }`}>
+                            ${record.amount.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-4 px-2 text-right">
+                          <span className="font-medium text-muted-foreground text-xs sm:text-sm">
+                            ${record.remainingBalance.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-4 px-2">
+                          <div className="flex items-center justify-center">
+                            {record.status === 'paid' ? (
+                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Paid
+                              </Badge>
+                            ) : record.status === 'overdue' ? (
+                              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-xs">
+                                <AlertCircle className="w-3 h-3 mr-1" />
+                                Overdue
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-200 text-xs">
+                                <Clock className="w-3 h-3 mr-1" />
+                                Pending
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">
+                        No repayment history available
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

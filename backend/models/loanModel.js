@@ -50,6 +50,39 @@ const loanSchema = new mongoose.Schema({
   nextPaymentDate: { type: Date },
   paymentsCompleted: { type: Number, default: 0 },
   
+  // Repayment Schedule
+  repaymentSchedule: [{
+    installmentNumber: { type: Number, required: true },
+    dueDate: { type: Date, required: true },
+    amount: { type: Number, required: true },
+    principalAmount: { type: Number, required: true },
+    interestAmount: { type: Number, required: true },
+    status: { 
+      type: String, 
+      enum: ['pending', 'paid', 'overdue', 'defaulted'],
+      default: 'pending'
+    },
+    paidAt: { type: Date },
+    paidAmount: { type: Number, default: 0 }
+  }],
+  
+  // Auto-Payment Settings
+  autoRepaymentEnabled: { type: Boolean, default: false },
+  autoRepaymentLastAttempt: { type: Date },
+  autoRepaymentLastStatus: { 
+    type: String, 
+    enum: ['success', 'insufficient_funds', 'error'],
+  },
+  
+  // Payment History
+  payments: [{
+    amount: { type: Number, required: true },
+    paidAt: { type: Date, default: Date.now },
+    installmentNumber: { type: Number },
+    balanceAfter: { type: Number },
+    notes: { type: String }
+  }],
+  
   // Smart Contract
   loanContractAddress: { type: String },
   
@@ -62,6 +95,101 @@ const loanSchema = new mongoose.Schema({
 // Index for efficient queries
 loanSchema.index({ borrower: 1, status: 1 });
 loanSchema.index({ pool: 1, status: 1 });
+
+// Helper method to generate repayment schedule
+loanSchema.methods.generateRepaymentSchedule = function() {
+  const schedule = [];
+  const startDate = this.disbursementDate || new Date();
+  const monthlyPayment = this.monthlyRepayment;
+  const totalAmount = this.loanAmount;
+  const annualRate = this.lockedAPR / 100;
+  const monthlyRate = annualRate / 12;
+  
+  let remainingPrincipal = totalAmount;
+  
+  for (let i = 1; i <= this.duration; i++) {
+    const dueDate = new Date(startDate);
+    dueDate.setMonth(dueDate.getMonth() + i);
+    
+    // Calculate interest and principal portions
+    const interestAmount = remainingPrincipal * monthlyRate;
+    const principalAmount = monthlyPayment - interestAmount;
+    remainingPrincipal -= principalAmount;
+    
+    schedule.push({
+      installmentNumber: i,
+      dueDate: dueDate,
+      amount: monthlyPayment,
+      principalAmount: Math.max(0, principalAmount),
+      interestAmount: interestAmount,
+      status: 'pending'
+    });
+  }
+  
+  this.repaymentSchedule = schedule;
+  this.nextPaymentDate = schedule[0].dueDate;
+  this.remainingBalance = this.totalRepayment;
+};
+
+// Get current installment info
+loanSchema.methods.getCurrentInstallment = function() {
+  const now = new Date();
+  
+  // Find the first unpaid installment
+  const currentInstallment = this.repaymentSchedule.find(inst => inst.status === 'pending' || inst.status === 'overdue');
+  
+  if (!currentInstallment) {
+    return null; // All paid
+  }
+  
+  const dueDate = new Date(currentInstallment.dueDate);
+  const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+  const isOverdue = daysUntilDue < 0;
+  
+  // Payment window opens 20 days before due date
+  const paymentWindowStart = new Date(dueDate);
+  paymentWindowStart.setDate(paymentWindowStart.getDate() - 20);
+  
+  const canPayNow = now >= paymentWindowStart || isOverdue;
+  const daysUntilWindowOpens = canPayNow ? 0 : Math.ceil((paymentWindowStart - now) / (1000 * 60 * 60 * 24));
+  
+  return {
+    ...currentInstallment.toObject(),
+    daysUntilDue: Math.abs(daysUntilDue),
+    isOverdue,
+    canPayNow,
+    paymentWindowStart,
+    daysUntilWindowOpens
+  };
+};
+
+// Mark installment as paid and move to next
+loanSchema.methods.markInstallmentPaidAndMoveNext = function() {
+  const currentInstallment = this.repaymentSchedule.find(inst => inst.status === 'pending' || inst.status === 'overdue');
+  
+  if (currentInstallment) {
+    currentInstallment.status = 'paid';
+    currentInstallment.paidAt = new Date();
+    currentInstallment.paidAmount = currentInstallment.amount;
+    
+    this.amountRepaid += currentInstallment.amount;
+    this.remainingBalance = this.totalRepayment - this.amountRepaid;
+    this.paymentsCompleted += 1;
+    
+    // Find next unpaid installment
+    const nextInstallment = this.repaymentSchedule.find(inst => inst.status === 'pending');
+    
+    if (nextInstallment) {
+      this.nextPaymentDate = nextInstallment.dueDate;
+      this.status = 'repaying';
+    } else {
+      // All installments paid
+      this.nextPaymentDate = null;
+      this.status = 'completed';
+      this.remainingBalance = 0;
+    }
+  }
+};
 
 const Loan = mongoose.model('Loan', loanSchema);
 

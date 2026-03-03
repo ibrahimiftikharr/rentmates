@@ -162,10 +162,8 @@ exports.confirmCollateralDeposit = async (req, res) => {
     maturityDate.setMonth(maturityDate.getMonth() + loan.duration);
     loan.maturityDate = maturityDate;
     
-    // Set next payment date (1 month from now)
-    const nextPaymentDate = new Date();
-    nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-    loan.nextPaymentDate = nextPaymentDate;
+    // Generate repayment schedule
+    loan.generateRepaymentSchedule();
     
     await loan.save();
     

@@ -21,6 +21,7 @@ const loanRouter = require('./routes/loanRoutes.js');
 const collateralRouter = require('./routes/collateralRoutes.js');
 const { initRentNotificationScheduler } = require('./services/rentNotificationScheduler.js');
 const { initializeAutoPaymentScheduler } = require('./services/autoPaymentScheduler.js');
+const { initializeLoanAutoRepaymentScheduler } = require('./services/loanAutoRepaymentScheduler.js');
 
 // Load environment variables
 dotenv.config();
@@ -104,6 +105,7 @@ mongoose.connect(MONGO_URI)
     // Initialize schedulers after DB connection
     initRentNotificationScheduler(io);
     initializeAutoPaymentScheduler(io);
+    initializeLoanAutoRepaymentScheduler(io);
   })
   .catch((err) => console.error('✗ MongoDB connection error:', err));
 
