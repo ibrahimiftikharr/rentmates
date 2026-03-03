@@ -303,17 +303,29 @@ exports.getRepaymentHistory = async (req, res) => {
     }
 
     // Format repayment schedule with payment status
-    const repaymentHistory = loan.repaymentSchedule.map(installment => ({
-      id: installment._id,
-      installmentNumber: installment.installmentNumber,
-      dueDate: installment.dueDate,
-      amount: installment.amount,
-      principalAmount: installment.principalAmount,
-      interestAmount: installment.interestAmount,
-      status: installment.status,
-      paidAt: installment.paidAt,
-      remainingBalance: loan.totalRepayment - (installment.amount * (installment.installmentNumber - 1)) - (installment.status === 'paid' ? installment.amount : 0)
-    }));
+    // Calculate remaining balance properly by tracking cumulative payments
+    let cumulativePaid = 0;
+    const repaymentHistory = loan.repaymentSchedule.map((installment, index) => {
+      // Calculate what the balance will be after this installment is paid
+      const balanceAfterThisPayment = loan.totalRepayment - (installment.amount * installment.installmentNumber);
+      
+      // If this installment is already paid, update cumulative
+      if (installment.status === 'paid') {
+        cumulativePaid += installment.amount;
+      }
+      
+      return {
+        id: installment._id,
+        installmentNumber: installment.installmentNumber,
+        dueDate: installment.dueDate,
+        amount: installment.amount,
+        principalAmount: installment.principalAmount,
+        interestAmount: installment.interestAmount,
+        status: installment.status,
+        paidAt: installment.paidAt,
+        remainingBalance: balanceAfterThisPayment
+      };
+    });
 
     res.json({
       hasActiveLoan: true,
