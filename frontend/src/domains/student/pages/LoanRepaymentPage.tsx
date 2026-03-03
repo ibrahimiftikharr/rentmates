@@ -88,7 +88,7 @@ export function LoanRepaymentPage() {
     }
   };
 
-  const getStatusBadge = (status: typeof activeLoan.status) => {
+  const getStatusBadge = (status: 'active' | 'repaying' | 'completed') => {
     switch (status) {
       case 'active':
       case 'repaying':
@@ -96,7 +96,7 @@ export function LoanRepaymentPage() {
       case 'completed':
         return <Badge className="bg-blue-100 text-blue-700 border-blue-200">PAID</Badge>;
       default:
-        return <Badge className="bg-gray-100 text-gray-700 border-gray-200">{status.toUpperCase()}</Badge>;
+        return <Badge className="bg-gray-100 text-gray-700 border-gray-200">{String(status).toUpperCase()}</Badge>;
     }
   };
 
