@@ -2,6 +2,7 @@ const express = require('express');
 const investorRouter = express.Router();
 const investorController = require('../controllers/investorController');
 const portfolioController = require('../controllers/investorPortfolioController');
+const investmentController = require('../controllers/investmentController');
 const authenticateToken = require('../middleware/authenticateToken');
 const { uploadProfile, uploadDocument } = require('../config/cloudinary');
 
@@ -45,5 +46,12 @@ investorRouter.get('/portfolio/pools/:poolId/schedule', portfolioController.getP
 
 // Get portfolio-wide performance graph data
 investorRouter.get('/portfolio/performance', portfolioController.getPortfolioPerformance);
+
+// ========================================
+// INVESTMENT ACTIONS
+// ========================================
+
+// Withdraw from investment pool (sell shares)
+investorRouter.post('/portfolio/withdraw', investmentController.withdrawFromPool);
 
 module.exports = investorRouter;

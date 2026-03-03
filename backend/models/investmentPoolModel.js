@@ -23,6 +23,10 @@ const investmentPoolSchema = new mongoose.Schema({
   availableBalance: { type: Number, default: 0 }, // Available capital (invested - disbursed)
   disbursedLoans: { type: Number, default: 0 }, // Total amount currently lent out
   
+  // Share-Based Accounting
+  totalShares: { type: Number, default: 0 }, // Total shares issued to all investors
+  accruedInterest: { type: Number, default: 0 }, // Interest earned but not yet included in totalInvested
+  
   // Pool Status
   isActive: { type: Boolean, default: true },
   
@@ -45,6 +49,18 @@ investmentPoolSchema.methods.calculateROI = function() {
 investmentPoolSchema.virtual('expectedROI').get(function() {
   return this.calculateROI();
 });
+
+// Method to calculate current share price
+investmentPoolSchema.methods.getSharePrice = function() {
+  if (this.totalShares === 0) return 1; // Initial share price = 1 USDT
+  const totalPoolValue = this.totalInvested + this.accruedInterest;
+  return totalPoolValue / this.totalShares;
+};
+
+// Method to calculate total pool value (including outstanding loans + interest)
+investmentPoolSchema.methods.getTotalPoolValue = function() {
+  return this.totalInvested + this.accruedInterest;
+};
 
 const InvestmentPool = mongoose.model('InvestmentPool', investmentPoolSchema);
 

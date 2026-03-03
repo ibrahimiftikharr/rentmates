@@ -5,6 +5,7 @@ const Loan = require('../models/loanModel');
 
 /**
  * Get investor's active investments with real-time performance data
+ * ✅ SHARE-BASED: Aggregates multiple investments in same pool into ONE card
  */
 exports.getActiveInvestments = async (req, res) => {
   try {
@@ -15,7 +16,7 @@ exports.getActiveInvestments = async (req, res) => {
       investor: investorId,
       status: 'active'
     })
-    .populate('pool', 'name description ltv durationMonths expectedROI')
+    .populate('pool')
     .sort({ investmentDate: -1 });
 
     if (investments.length === 0) {
@@ -26,68 +27,122 @@ exports.getActiveInvestments = async (req, res) => {
       });
     }
 
-    // Format investment data with real-time calculations
-    const formattedInvestments = investments
-      .filter(investment => investment.pool !== null) // Filter out investments with deleted pools
-      .map(investment => {
-      const pool = investment.pool;
-      const daysRemaining = investment.getDaysRemaining();
+    // ✅ SHARE-BASED: Group investments by pool and aggregate
+    const poolMap = new Map();
+    
+    for (const investment of investments) {
+      if (!investment.pool) continue; // Skip if pool deleted
+      
+      const poolId = investment.pool._id.toString();
+      
+      if (!poolMap.has(poolId)) {
+        // First investment in this pool - initialize
+        poolMap.set(poolId, {
+          poolId: investment.pool._id,
+          pool: investment.pool,
+          investments: [],
+          totalShares: 0,
+          totalAmountInvested: 0,
+          totalEarnings: 0,
+          earliestInvestmentDate: investment.investmentDate,
+          investmentCount: 0
+        });
+      }
+      
+      const poolData = poolMap.get(poolId);
+      poolData.investments.push(investment);
+      poolData.totalShares += investment.shares || 0;
+      poolData.totalAmountInvested += investment.amountInvested;
+      poolData.totalEarnings += investment.totalEarnings || 0;
+      poolData.investmentCount += 1;
+      
+      // Track earliest investment date
+      if (investment.investmentDate < poolData.earliestInvestmentDate) {
+        poolData.earliestInvestmentDate = investment.investmentDate;
+      }
+    }
+
+    // ✅ SHARE-BASED: Format aggregated data per pool
+    const aggregatedInvestments = Array.from(poolMap.values()).map(poolData => {
+      const pool = poolData.pool;
+      
+      // Calculate current share price and value
+      const currentSharePrice = pool.getSharePrice();
+      const currentValue = poolData.totalShares * currentSharePrice;
       
       // Calculate risk level based on LTV
       let riskLevel = 'Low';
       if (pool.ltv >= 0.8) riskLevel = 'High';
       else if (pool.ltv >= 0.7) riskLevel = 'Medium';
+      
+      // Calculate ROI based on share price appreciation
+      const averageEntryPrice = poolData.totalAmountInvested / poolData.totalShares;
+      const actualROI = poolData.totalShares > 0 
+        ? ((currentSharePrice - averageEntryPrice) / averageEntryPrice) * 100 
+        : 0;
+      
+      // Collect all earnings history for performance graph (sorted by date)
+      const earningsHistory = poolData.investments
+        .flatMap(inv => inv.earningsHistory || [])
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       return {
-        _id: investment._id,
         poolId: pool._id,
         poolName: pool.name,
         poolDescription: pool.description,
         riskLevel: riskLevel,
         
-        // Investment amounts
-        amountInvested: investment.amountInvested,
-        currentValue: investment.currentValue || investment.amountInvested,
-        totalEarnings: investment.totalEarnings,
-        principalReturned: investment.principalReturned,
+        // ✅ SHARE-BASED: Aggregated amounts
+        totalAmountInvested: poolData.totalAmountInvested,
+        currentValue: currentValue,
+        totalEarnings: poolData.totalEarnings,
+        
+        // ✅ SHARE-BASED: Share info
+        totalShares: poolData.totalShares,
+        currentSharePrice: currentSharePrice,
+        averageEntryPrice: averageEntryPrice,
         
         // ROI metrics
-        lockedROI: investment.lockedROI,
-        actualROI: investment.actualROI || 0,
+        expectedROI: pool.expectedROI,
+        actualROI: actualROI,
         
         // Time tracking
-        investmentDate: investment.investmentDate,
-        maturityDate: investment.maturityDate,
-        daysRemaining: daysRemaining,
+        earliestInvestmentDate: poolData.earliestInvestmentDate,
         durationMonths: pool.durationMonths,
         
         // Pool info
         ltv: pool.ltv,
+        availableBalance: pool.availableBalance, // For withdrawal liquidity check
         
-        // Distribution history count
-        distributionsReceived: investment.repaymentDistributions.length,
+        // Meta info
+        investmentCount: poolData.investmentCount, // How many times invested in this pool
+        investmentIds: poolData.investments.map(inv => inv._id), // For fetching details
         
-        status: investment.status
+        // ✅ SHARE-BASED: Performance history for graph
+        earningsHistory: earningsHistory,
+        
+        status: 'active'
       };
     });
 
     // Calculate portfolio summary
-    const totalInvested = formattedInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-    const totalCurrentValue = formattedInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
-    const totalEarnings = formattedInvestments.reduce((sum, inv) => sum + inv.totalEarnings, 0);
-    const averageROI = formattedInvestments.length > 0 
-      ? formattedInvestments.reduce((sum, inv) => sum + inv.actualROI, 0) / formattedInvestments.length 
+    const totalInvested = aggregatedInvestments.reduce((sum, inv) => sum + inv.totalAmountInvested, 0);
+    const totalCurrentValue = aggregatedInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
+    const totalEarnings = aggregatedInvestments.reduce((sum, inv) => sum + inv.totalEarnings, 0);
+    const portfolioROI = totalInvested > 0 
+      ? ((totalCurrentValue - totalInvested) / totalInvested) * 100 
       : 0;
 
     res.json({
       hasInvestments: true,
-      investments: formattedInvestments,
+      investments: aggregatedInvestments,
       summary: {
         totalInvested,
         totalCurrentValue,
         totalEarnings,
-        averageROI,
-        activeInvestments: formattedInvestments.length
+        portfolioROI,
+        activePools: aggregatedInvestments.length, // Number of unique pools
+        totalInvestments: investments.length // Total number of investments
       }
     });
   } catch (error) {
@@ -98,6 +153,8 @@ exports.getActiveInvestments = async (req, res) => {
 
 /**
  * Get detailed information for a specific investment including performance data
+ * ✅ SHARE-BASED: Returns share-based investment data with earnings history
+ * NOTE: This returns a SINGLE investment, not aggregated by pool
  */
 exports.getInvestmentDetails = async (req, res) => {
   try {
@@ -108,11 +165,7 @@ exports.getInvestmentDetails = async (req, res) => {
       _id: investmentId,
       investor: investorId
     })
-    .populate('pool', 'name description ltv durationMonths expectedROI')
-    .populate({
-      path: 'repaymentDistributions.loanId',
-      select: 'poolName loanAmount borrower status'
-    });
+    .populate('pool');
 
     if (!investment) {
       return res.status(404).json({ error: 'Investment not found' });
@@ -123,34 +176,44 @@ exports.getInvestmentDetails = async (req, res) => {
       return res.status(404).json({ error: 'Investment pool no longer exists' });
     }
 
-    // Calculate performance graph data (monthly)
-    const performanceData = calculatePerformanceGraphData(investment);
+    // ✅ SHARE-BASED: Get current value and share price
+    const currentValue = await investment.getCurrentValue();
+    const currentSharePrice = investment.pool.getSharePrice();
+
+    // ✅ SHARE-BASED: Format earnings history for performance graph
+    const performanceData = investment.earningsHistory.map(earning => ({
+      date: earning.date,
+      month: new Date(earning.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      value: earning.totalValue,
+      sharePrice: earning.sharePrice,
+      earning: earning.amount,
+      source: earning.source
+    }));
 
     res.json({
       investment: {
         _id: investment._id,
         poolName: investment.pool.name,
+        poolId: investment.pool._id,
+        
+        // ✅ SHARE-BASED: Share info
+        shares: investment.shares,
+        entrySharePrice: investment.entrySharePrice,
+        currentSharePrice: currentSharePrice,
+        
+        // Investment amounts
         amountInvested: investment.amountInvested,
-        currentValue: investment.currentValue,
+        currentValue: currentValue,
         totalEarnings: investment.totalEarnings,
-        principalReturned: investment.principalReturned,
-        lockedROI: investment.lockedROI,
         actualROI: investment.actualROI,
+        
+        // Dates
         investmentDate: investment.investmentDate,
-        maturityDate: investment.maturityDate,
-        daysRemaining: investment.getDaysRemaining(),
+        
         status: investment.status
       },
       performanceData: performanceData,
-      distributionHistory: investment.repaymentDistributions.map(dist => ({
-        _id: dist._id,
-        loanId: dist.loanId?._id,
-        installmentNumber: dist.installmentNumber,
-        principalAmount: dist.principalAmount,
-        interestAmount: dist.interestAmount,
-        totalAmount: dist.principalAmount + dist.interestAmount,
-        distributionDate: dist.distributionDate
-      }))
+      earningsHistory: investment.earningsHistory
     });
   } catch (error) {
     console.error('Get investment details error:', error);
@@ -159,7 +222,9 @@ exports.getInvestmentDetails = async (req, res) => {
 };
 
 /**
- * Get repayment schedule for loans in a specific pool investment
+ * Get repayment schedule for loans in a specific pool
+ * ✅ SHARE-BASED: Shows loan info based on investor's share percentage
+ * NOTE: This is informational only - actual earnings are based on share price increases
  */
 exports.getPoolRepaymentSchedule = async (req, res) => {
   try {
@@ -167,15 +232,28 @@ exports.getPoolRepaymentSchedule = async (req, res) => {
     const { poolId } = req.params;
 
     // Verify investor has investment in this pool
-    const investment = await PoolInvestment.findOne({
+    const userInvestments = await PoolInvestment.find({
       investor: investorId,
       pool: poolId,
       status: 'active'
     });
 
-    if (!investment) {
+    if (userInvestments.length === 0) {
       return res.status(404).json({ error: 'No active investment found in this pool' });
     }
+
+    // Get pool
+    const pool = await InvestmentPool.findById(poolId);
+    if (!pool) {
+      return res.status(404).json({ error: 'Pool not found' });
+    }
+
+    // ✅ SHARE-BASED: Calculate user's share percentage
+    const userTotalShares = userInvestments.reduce((sum, inv) => sum + inv.shares, 0);
+    const userSharePercentage = pool.totalShares > 0 ? (userTotalShares / pool.totalShares) * 100 : 0;
+    const userTotalInvested = userInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+    const currentSharePrice = pool.getSharePrice();
+    const userCurrentValue = userTotalShares * currentSharePrice;
 
     // Find all active loans in this pool
     const loans = await Loan.find({
@@ -192,25 +270,12 @@ exports.getPoolRepaymentSchedule = async (req, res) => {
       }
     });
 
-    // Calculate investor's share in each loan based on pool investment
-    const poolInvestments = await PoolInvestment.find({
-      pool: poolId,
-      status: 'active'
-    });
-    
-    const totalPoolInvestment = poolInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-    const investorSharePercentage = investment.amountInvested / totalPoolInvestment;
-
-    // Format loan repayment schedules
+    // ✅ SHARE-BASED: Format loan repayment schedules
     const loanSchedules = loans.map(loan => {
-      const investorShareInLoan = loan.loanAmount * investorSharePercentage;
-      
       return {
         loanId: loan._id,
         borrowerName: loan.borrower?.user?.name || 'Unknown',
         loanAmount: loan.loanAmount,
-        investorShare: investorShareInLoan,
-        sharePercentage: (investorSharePercentage * 100).toFixed(2),
         paymentsCompleted: loan.paymentsCompleted,
         totalInstallments: loan.duration,
         status: loan.status,
@@ -218,11 +283,8 @@ exports.getPoolRepaymentSchedule = async (req, res) => {
           installmentNumber: installment.installmentNumber,
           dueDate: installment.dueDate,
           totalAmount: installment.amount,
-          investorPortion: installment.amount * investorSharePercentage,
           principalAmount: installment.principalAmount,
           interestAmount: installment.interestAmount,
-          investorPrincipal: installment.principalAmount * investorSharePercentage,
-          investorInterest: installment.interestAmount * investorSharePercentage,
           status: installment.status,
           paidAt: installment.paidAt
         }))
@@ -231,11 +293,25 @@ exports.getPoolRepaymentSchedule = async (req, res) => {
 
     res.json({
       poolId: poolId,
-      investorSharePercentage: (investorSharePercentage * 100).toFixed(2),
-      amountInvested: investment.amountInvested,
-      totalPoolInvestment: totalPoolInvestment,
+      poolName: pool.name,
+      
+      // ✅ SHARE-BASED: User's position
+      userTotalShares: Number(userTotalShares.toFixed(6)),
+      userSharePercentage: Number(userSharePercentage.toFixed(2)),
+      userTotalInvested: Number(userTotalInvested.toFixed(2)),
+      userCurrentValue: Number(userCurrentValue.toFixed(2)),
+      currentSharePrice: Number(currentSharePrice.toFixed(6)),
+      
+      // Pool info
+      totalPoolShares: Number(pool.totalShares.toFixed(6)),
+      totalPoolValue: Number(pool.getTotalPoolValue().toFixed(2)),
+      
+      // Loan info
       activeLoans: loanSchedules.length,
-      loanSchedules: loanSchedules
+      loanSchedules: loanSchedules,
+      
+      // ✅ Note
+      note: 'Your actual earnings are determined by share price increases, not individual loan repayments'
     });
   } catch (error) {
     console.error('Get pool repayment schedule error:', error);
@@ -245,16 +321,18 @@ exports.getPoolRepaymentSchedule = async (req, res) => {
 
 /**
  * Get portfolio performance graph data
+ * ✅ SHARE-BASED: Uses earningsHistory from investments
  */
 exports.getPortfolioPerformance = async (req, res) => {
   try {
     const investorId = req.user.id;
     const { timeRange = '6m' } = req.query; // 6m, 1y, all
 
-    // Get all investments (active and completed)
+    // Get all active investments
     const investments = await PoolInvestment.find({
-      investor: investorId
-    }).populate('pool', 'name');
+      investor: investorId,
+      status: 'active'
+    }).populate('pool');
 
     if (investments.length === 0) {
       return res.json({
@@ -264,16 +342,28 @@ exports.getPortfolioPerformance = async (req, res) => {
       });
     }
 
-    // Generate performance data points
+    // ✅ SHARE-BASED: Get current values
+    let totalInvested = 0;
+    let totalCurrentValue = 0;
+    
+    for (const inv of investments) {
+      totalInvested += inv.amountInvested;
+      const currentValue = await inv.getCurrentValue();
+      totalCurrentValue += currentValue;
+    }
+    
+    const totalEarnings = totalCurrentValue - totalInvested;
+
+    // ✅ SHARE-BASED: Generate performance data from earnings history
     const performanceData = generatePortfolioPerformanceData(investments, timeRange);
 
     res.json({
       hasData: true,
       performanceData: performanceData,
       summary: {
-        totalInvested: investments.reduce((sum, inv) => sum + inv.amountInvested, 0),
-        totalEarnings: investments.reduce((sum, inv) => sum + inv.totalEarnings, 0),
-        currentValue: investments.reduce((sum, inv) => sum + (inv.currentValue || inv.amountInvested), 0)
+        totalInvested: Number(totalInvested.toFixed(2)),
+        totalCurrentValue: Number(totalCurrentValue.toFixed(2)),
+        totalEarnings: Number(totalEarnings.toFixed(2))
       }
     });
   } catch (error) {
@@ -283,42 +373,8 @@ exports.getPortfolioPerformance = async (req, res) => {
 };
 
 /**
- * Helper function to calculate performance graph data
- */
-function calculatePerformanceGraphData(investment) {
-  const data = [];
-  const investmentDate = new Date(investment.investmentDate);
-  const now = new Date();
-  
-  // Generate monthly data points from investment date to now
-  let currentDate = new Date(investmentDate);
-  let cumulativeValue = investment.amountInvested;
-  
-  while (currentDate <= now) {
-    // Calculate earnings up to this date
-    const earningsUpToDate = investment.repaymentDistributions
-      .filter(dist => new Date(dist.distributionDate) <= currentDate)
-      .reduce((sum, dist) => sum + dist.interestAmount + dist.principalAmount, 0);
-    
-    data.push({
-      month: currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      date: new Date(currentDate),
-      value: Math.round(investment.amountInvested + earningsUpToDate)
-    });
-    
-    // Move to next month
-    currentDate.setMonth(currentDate.getMonth() + 1);
-  }
-  
-  return data.length > 0 ? data : [{
-    month: investmentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    date: investmentDate,
-    value: investment.amountInvested
-  }];
-}
-
-/**
  * Helper function to generate portfolio-wide performance data
+ * ✅ SHARE-BASED: Uses earningsHistory instead of repaymentDistributions
  */
 function generatePortfolioPerformanceData(investments, timeRange) {
   const data = [];
@@ -343,6 +399,36 @@ function generatePortfolioPerformanceData(investments, timeRange) {
       break;
   }
   
+  // ✅ SHARE-BASED: Collect all earnings events across portfolio
+  const allEarnings = [];
+  investments.forEach(investment => {
+    const invStartDate = new Date(investment.investmentDate);
+    
+    // Initial investment point
+    allEarnings.push({
+      date: invStartDate,
+      type: 'investment',
+      investmentId: investment._id,
+      amount: investment.amountInvested,
+      runningTotal: investment.amountInvested
+    });
+    
+    // ✅ SHARE-BASED: Add earnings from history
+    if (investment.earningsHistory && investment.earningsHistory.length > 0) {
+      investment.earningsHistory.forEach(earning => {
+        allEarnings.push({
+          date: new Date(earning.date),
+          type: 'earning',
+          investmentId: investment._id,
+          totalValue: earning.totalValue
+        });
+      });
+    }
+  });
+  
+  // Sort by date
+  allEarnings.sort((a, b) => a.date - b.date);
+  
   // Generate monthly data points
   let currentDate = new Date(startDate);
   
@@ -355,12 +441,21 @@ function generatePortfolioPerformanceData(investments, timeRange) {
       
       // Only include if investment existed at this date
       if (invStartDate <= currentDate) {
-        // Calculate earnings up to this date
-        const earningsUpToDate = investment.repaymentDistributions
-          .filter(dist => new Date(dist.distributionDate) <= currentDate)
-          .reduce((sum, dist) => sum + dist.interestAmount + dist.principalAmount, 0);
+        // Start with investment amount
+        let valueAtDate = investment.amountInvested;
         
-        totalValue += investment.amountInvested + earningsUpToDate;
+        // ✅ SHARE-BASED: Find last earning before or at this date
+        if (investment.earningsHistory && investment.earningsHistory.length > 0) {
+          const earningsUpToDate = investment.earningsHistory
+            .filter(earning => new Date(earning.date) <= currentDate)
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+          if (earningsUpToDate.length > 0) {
+            valueAtDate = earningsUpToDate[0].totalValue;
+          }
+        }
+        
+        totalValue += valueAtDate;
       }
     });
     

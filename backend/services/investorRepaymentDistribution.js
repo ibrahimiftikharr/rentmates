@@ -1,11 +1,12 @@
 const PoolInvestment = require('../models/poolInvestmentModel');
+const InvestmentPool = require('../models/investmentPoolModel');
 const Transaction = require('../models/transactionModel');
 const User = require('../models/userModel');
 const Investor = require('../models/investorModel');
 const { sendEmail } = require('./emailService');
 
 /**
- * Distribute loan repayment to all investors in the pool proportionally
+ * Distribute loan repayment to all investors in the pool proportionally based on shares
  * @param {Object} loan - The loan document
  * @param {Number} installmentNumber - The installment number being paid
  * @param {Number} principalAmount - Principal portion of the installment
@@ -14,7 +15,7 @@ const { sendEmail } = require('./emailService');
  */
 async function distributeRepaymentToInvestors(loan, installmentNumber, principalAmount, interestAmount, io) {
   try {
-    console.log('\n💰 REPAYMENT DISTRIBUTION STARTED');
+    console.log('\n💰 REPAYMENT DISTRIBUTION STARTED (Share-Based)');
     console.log('========================================');
     console.log('Loan ID:', loan._id);
     console.log('Pool ID:', loan.pool);
@@ -22,6 +23,13 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
     console.log('Principal:', principalAmount);
     console.log('Interest:', interestAmount);
     console.log('Total Payment:', principalAmount + interestAmount);
+    
+    // Get the pool
+    const pool = await InvestmentPool.findById(loan.pool);
+    if (!pool) {
+      console.log('⚠️  Pool not found');
+      return;
+    }
 
     // Find all active investments in this pool
     const investments = await PoolInvestment.find({
@@ -35,30 +43,46 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
     }
 
     console.log(`\n📊 Found ${investments.length} active investors in pool`);
+    console.log('Total Pool Shares:', pool.totalShares.toFixed(6));
+    
+    // ✅ SHARE-BASED: Update pool's accrued interest (increases share price)
+    const totalRepayment = principalAmount + interestAmount;
+    pool.accruedInterest += interestAmount; // Interest increases pool value
+    pool.availableBalance += totalRepayment; // Principal + interest return to available balance
+    await pool.save();
+    
+    const newSharePrice = pool.getSharePrice();
+    console.log('Pool Value Increased By:', interestAmount.toFixed(2));
+    console.log('New Share Price:', newSharePrice.toFixed(6));
+    console.log('📈 Returns are REINVESTED (not sent to wallets)');
 
-    // Calculate total invested amount in the pool
-    const totalPoolInvestment = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-    console.log('Total Pool Investment:', totalPoolInvestment);
+    // Track all update results
+    const updateResults = [];
 
-    // Track all distribution results
-    const distributionResults = [];
-
-    // Distribute to each investor proportionally
+    // Update all investors' investment values based on new share price (NO WALLET TRANSFERS)
     for (const investment of investments) {
       try {
-        // Calculate investor's share percentage
-        const sharePercentage = investment.amountInvested / totalPoolInvestment;
+        // ✅ SHARE-BASED: Calculate investor's proportional gain
+        const shareRatio = investment.shares / pool.totalShares;
+        const investorGain = interestAmount * shareRatio; // Their share of interest
         
-        // Calculate distributed amounts
-        const investorPrincipal = principalAmount * sharePercentage;
-        const investorInterest = interestAmount * sharePercentage;
-
+        const oldValue = await investment.getCurrentValue();
+        
         console.log(`\n👤 Processing investor: ${investment.investor.email}`);
-        console.log('   Share:', (sharePercentage * 100).toFixed(2) + '%');
-        console.log('   Principal:', investorPrincipal.toFixed(2));
-        console.log('   Interest:', investorInterest.toFixed(2));
+        console.log('   Shares:', investment.shares.toFixed(6));
+        console.log('   Share Ratio:', (shareRatio * 100).toFixed(4) + '%');
+        console.log('   Value Increase:', investorGain.toFixed(2));
+        console.log('   Old Value:', oldValue.toFixed(2));
 
-        // Get investor's user account
+        // ✅ NO WALLET TRANSACTION - Just record earning history
+        await investment.recordEarning(investorGain, 'loan_repayment');
+        await investment.save();
+        
+        const newValue = await investment.getCurrentValue();
+        console.log('   New Value:', newValue.toFixed(2));
+        console.log('   ✅ Investment value updated (compounded)');
+
+        // Get investor user for notifications only (no balance update)
         const investorUser = await User.findById(investment.investor._id);
         
         if (!investorUser) {
@@ -66,116 +90,48 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
           continue;
         }
 
-        // Create transaction records for wallet history
-        const transactions = [];
-
-        // Transaction 1: Principal Return
-        if (investorPrincipal > 0) {
-          const principalTransaction = new Transaction({
-            user: investorUser._id,
-            type: 'investment_principal_return',
-            amount: investorPrincipal,
-            balanceBefore: investorUser.offChainBalance,
-            balanceAfter: investorUser.offChainBalance + investorPrincipal,
-            status: 'completed',
-            description: `Principal return - Loan installment #${installmentNumber} (Pool: ${loan.poolName})`,
-            metadata: {
-              loanId: loan._id,
-              poolId: loan.pool,
-              installmentNumber,
-              poolName: loan.poolName
-            }
-          });
-          await principalTransaction.save();
-          transactions.push(principalTransaction._id);
-          
-          // Update investor balance
-          investorUser.offChainBalance += investorPrincipal;
-          console.log('   ✅ Principal transaction created');
-        }
-
-        // Transaction 2: Interest/Profit
-        if (investorInterest > 0) {
-          const interestTransaction = new Transaction({
-            user: investorUser._id,
-            type: 'investment_interest_earned',
-            amount: investorInterest,
-            balanceBefore: investorUser.offChainBalance,
-            balanceAfter: investorUser.offChainBalance + investorInterest,
-            status: 'completed',
-            description: `Interest earned - Loan installment #${installmentNumber} (Pool: ${loan.poolName})`,
-            metadata: {
-              loanId: loan._id,
-              poolId: loan.pool,
-              installmentNumber,
-              poolName: loan.poolName,
-              roi: investment.lockedROI
-            }
-          });
-          await interestTransaction.save();
-          transactions.push(interestTransaction._id);
-          
-          // Update investor balance
-          investorUser.offChainBalance += investorInterest;
-          console.log('   ✅ Interest transaction created');
-        }
-
-        // Save updated balance
-        await investorUser.save();
-
-        // Record distribution in investment
-        investment.recordDistribution(
-          loan._id,
-          installmentNumber,
-          investorPrincipal,
-          investorInterest,
-          transactions
-        );
-        await investment.save();
-
-        console.log('   ✅ Investment record updated');
-        console.log('   💰 New balance:', investorUser.offChainBalance.toFixed(2));
-
-        // Send email notification
+        // Send email notification about value increase
         try {
-          await sendRepaymentNotificationEmail(
+          await sendValueIncreaseNotificationEmail(
             investment.investor,
             loan,
             installmentNumber,
-            investorPrincipal,
-            investorInterest,
-            investorUser.offChainBalance
+            oldValue,
+            newValue,
+            investorGain,
+            newSharePrice
           );
           console.log('   📧 Email notification sent');
         } catch (emailError) {
           console.log('   ⚠️  Email notification failed:', emailError.message);
         }
 
-        // Send real-time socket notification
+        // Send real-time socket notification about value increase
         if (io) {
-          io.to(investorUser._id.toString()).emit('repayment_received', {
+          io.to(investorUser._id.toString()).emit('investment_value_updated', {
             poolName: loan.poolName,
             installmentNumber,
-            principalAmount: investorPrincipal,
-            interestAmount: investorInterest,
-            totalAmount: investorPrincipal + investorInterest,
-            newBalance: investorUser.offChainBalance,
+            valueIncrease: investorGain,
+            oldValue: oldValue,
+            newValue: newValue,
+            sharePrice: newSharePrice,
+            shares: investment.shares,
             timestamp: new Date()
           });
           console.log('   🔔 Socket notification sent');
         }
 
-        distributionResults.push({
+        updateResults.push({
           investorId: investment.investor._id,
           email: investment.investor.email,
-          principal: investorPrincipal,
-          interest: investorInterest,
+          valueIncrease: investorGain,
+          newValue: newValue,
           success: true
         });
 
       } catch (investorError) {
         console.error(`   ❌ Error processing investor ${investment.investor.email}:`, investorError);
-        distributionResults.push({
+        updateResults.push({
           investorId: investment.investor._id,
           email: investment.investor.email,
           success: false,
@@ -185,16 +141,19 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
     }
 
     console.log('\n========================================');
-    console.log('✅ REPAYMENT DISTRIBUTION COMPLETED');
-    console.log('Success:', distributionResults.filter(r => r.success).length);
-    console.log('Failed:', distributionResults.filter(r => !r.success).length);
+    console.log('✅ VALUE UPDATE COMPLETED (NO WALLET TRANSFERS)');
+    console.log('Total Interest Accrued:', interestAmount.toFixed(2));
+    console.log('New Share Price:', newSharePrice.toFixed(6));
+    console.log('Success:', updateResults.filter(r => r.success).length);
+    console.log('Failed:', updateResults.filter(r => !r.success).length);
     console.log('========================================\n');
 
     return {
       success: true,
-      totalDistributed: principalAmount + interestAmount,
-      investorsProcessed: distributionResults.length,
-      results: distributionResults
+      totalInterestAccrued: interestAmount,
+      newSharePrice: newSharePrice,
+      investorsProcessed: updateResults.length,
+      results: updateResults
     };
 
   } catch (error) {
@@ -204,19 +163,22 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
 }
 
 /**
- * Send email notification to investor about repayment received
+ * Send email notification to investor about investment value increase
+ * NOTE: In share-based pools, returns are REINVESTED automatically (not sent to wallet)
  */
-async function sendRepaymentNotificationEmail(investor, loan, installmentNumber, principal, interest, newBalance) {
+async function sendValueIncreaseNotificationEmail(investor, loan, installmentNumber, oldValue, newValue, valueIncrease, newSharePrice) {
+  const percentageGain = ((valueIncrease / oldValue) * 100).toFixed(2);
+  
   const emailContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #8C57FF;">💰 Repayment Received</h2>
+      <h2 style="color: #8C57FF;">📈 Investment Value Increased</h2>
       
       <p>Dear ${investor.firstName || 'Investor'},</p>
       
-      <p>You've received a repayment distribution from your investment:</p>
+      <p>Your investment value has increased due to successful loan repayment:</p>
       
       <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <h3 style="margin-top: 0; color: #333;">Payment Details</h3>
+        <h3 style="margin-top: 0; color: #333;">Value Update</h3>
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
             <td style="padding: 8px 0;"><strong>Pool:</strong></td>
@@ -227,25 +189,31 @@ async function sendRepaymentNotificationEmail(investor, loan, installmentNumber,
             <td style="text-align: right;">#${installmentNumber}</td>
           </tr>
           <tr style="border-top: 1px solid #ddd;">
-            <td style="padding: 8px 0;"><strong>Principal Returned:</strong></td>
-            <td style="text-align: right; color: #22c55e;">$${principal.toFixed(2)}</td>
+            <td style="padding: 8px 0;"><strong>Previous Value:</strong></td>
+            <td style="text-align: right;">$${oldValue.toFixed(2)}</td>
           </tr>
           <tr>
-            <td style="padding: 8px 0;"><strong>Interest Earned:</strong></td>
-            <td style="text-align: right; color: #22c55e;">$${interest.toFixed(2)}</td>
+            <td style="padding: 8px 0;"><strong>Value Increase:</strong></td>
+            <td style="text-align: right; color: #22c55e;">+$${valueIncrease.toFixed(2)} (${percentageGain}%)</td>
           </tr>
           <tr style="border-top: 2px solid #8C57FF;">
-            <td style="padding: 8px 0;"><strong>Total Received:</strong></td>
-            <td style="text-align: right; font-size: 18px; color: #8C57FF;"><strong>$${(principal + interest).toFixed(2)}</strong></td>
+            <td style="padding: 8px 0;"><strong>New Value:</strong></td>
+            <td style="text-align: right; font-size: 18px; color: #8C57FF;"><strong>$${newValue.toFixed(2)}</strong></td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0;"><strong>Current Share Price:</strong></td>
+            <td style="text-align: right; color: #0284c7;">$${newSharePrice.toFixed(6)}</td>
           </tr>
         </table>
       </div>
       
-      <p style="background: #e0f2fe; padding: 12px; border-radius: 6px; border-left: 4px solid #0284c7;">
-        <strong>Your New Balance:</strong> $${newBalance.toFixed(2)}
+      <p style="background: #dcfce7; padding: 12px; border-radius: 6px; border-left: 4px solid #22c55e;">
+        <strong>🔄 Compound Growth:</strong> Your returns are automatically reinvested, increasing your investment value through share price appreciation.
       </p>
       
-      <p>This amount has been added to your wallet and is available for withdrawal or reinvestment.</p>
+      <p>💡 <strong>How it works:</strong> When loans are repaid, the interest earned increases the pool's total value, which increases the share price. Your shares are now worth more!</p>
+      
+      <p>You can withdraw your investment at any time by selling your shares at the current share price.</p>
       
       <p style="color: #666; font-size: 12px; margin-top: 30px;">
         This is an automated notification from RentMates Investment Platform.
@@ -255,7 +223,7 @@ async function sendRepaymentNotificationEmail(investor, loan, installmentNumber,
 
   await sendEmail(
     investor.email,
-    'Repayment Received - RentMates Investment',
+    '📈 Investment Value Increased - RentMates',
     emailContent
   );
 }

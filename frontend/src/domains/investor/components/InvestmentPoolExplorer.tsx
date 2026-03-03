@@ -189,14 +189,15 @@ export function InvestmentPoolExplorer() {
                     {showContribution === pool._id && (
                       <div className="mt-3 p-2.5 md:p-3 rounded-lg bg-primary/10 border border-primary/20">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs md:text-sm text-muted-foreground">Your Contribution Share</span>
+                          <span className="text-xs md:text-sm text-muted-foreground">Your Share Percentage</span>
                           <span className="text-base md:text-lg font-semibold text-primary">
-                            {pool.userContributionShare > 0 ? `${pool.userContributionShare.toFixed(2)}%` : "0%"}
+                            {pool.userSharePercentage > 0 ? `${pool.userSharePercentage.toFixed(2)}%` : "0%"}
                           </span>
                         </div>
-                        {pool.userInvestmentAmount && pool.userInvestmentAmount > 0 && (
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            You invested: ${pool.userInvestmentAmount.toLocaleString()}
+                        {pool.userTotalShares && pool.userTotalShares > 0 && (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            <div>Shares owned: {pool.userTotalShares.toLocaleString()}</div>
+                            <div>Current value: ${pool.userCurrentValue.toLocaleString()}</div>
                           </div>
                         )}
                       </div>
@@ -248,6 +249,8 @@ export function InvestmentPoolExplorer() {
           maxAmount={selectedPool.maxInvestment}
           minAmount={selectedPool.minInvestment}
           walletBalance={userBalance}
+          currentSharePrice={selectedPool.currentSharePrice}
+          totalShares={selectedPool.totalShares}
         />
       )}
     </>

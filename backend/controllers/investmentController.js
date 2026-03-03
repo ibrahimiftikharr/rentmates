@@ -37,16 +37,19 @@ exports.getAllPools = async (req, res) => {
       // Calculate Remaining Capacity
       const remainingCapacity = 100 - poolFilledPercentage;
       
-      // Get all user's investments in this pool
+      // ✅ SHARE-BASED: Get all user's investments in this pool
       const userInvestments = await PoolInvestment.find({
         investor: userId,
         pool: pool._id,
         status: 'active'
       });
       
-      // Calculate user's total contribution (sum of all investments)
+      // ✅ SHARE-BASED: Calculate user's shares and value
+      const userTotalShares = userInvestments.reduce((sum, inv) => sum + (inv.shares || 0), 0);
       const userTotalInvested = userInvestments.reduce((sum, inv) => sum + inv.amountInvested, 0);
-      const userContributionShare = poolSize > 0 ? (userTotalInvested / poolSize) * 100 : 0;
+      const currentSharePrice = pool.getSharePrice();
+      const userCurrentValue = userTotalShares * currentSharePrice;
+      const userSharePercentage = pool.totalShares > 0 ? (userTotalShares / pool.totalShares) * 100 : 0;
       
       // Calculate Expected ROI
       const expectedROI = pool.calculateROI();
@@ -61,6 +64,8 @@ exports.getAllPools = async (req, res) => {
         ltv: pool.ltv,
         durationMonths: pool.durationMonths,
         expectedROI: Number(expectedROI.toFixed(2)),
+        
+        // Pool totals
         poolSize: Number(poolSize.toFixed(2)),
         availableBalance: Number(pool.availableBalance.toFixed(2)),
         disbursedLoans: Number(pool.disbursedLoans.toFixed(2)),
@@ -70,10 +75,19 @@ exports.getAllPools = async (req, res) => {
         maxCapital: pool.maxCapital,
         minInvestment: pool.minInvestment,
         maxInvestment: pool.maxInvestment,
+        
+        // ✅ SHARE-BASED: Pool share info
+        totalShares: Number(pool.totalShares.toFixed(6)),
+        currentSharePrice: Number(currentSharePrice.toFixed(6)),
+        
+        // ✅ SHARE-BASED: User's position in this pool
+        userTotalShares: Number(userTotalShares.toFixed(6)),
         userInvestmentAmount: Number(userTotalInvested.toFixed(2)),
-        userContributionShare: Number(userContributionShare.toFixed(2)),
+        userCurrentValue: Number(userCurrentValue.toFixed(2)),
+        userSharePercentage: Number(userSharePercentage.toFixed(2)),
+        
         isFull: isFull,
-        canInvest: !isFull // Can invest if pool is not full (multiple investments allowed)
+        canInvest: !isFull
       };
     }));
 
@@ -90,6 +104,7 @@ exports.getAllPools = async (req, res) => {
 
 /**
  * Get user's investments across all pools
+ * ✅ SHARE-BASED: Returns share-based investment data
  */
 exports.getUserInvestments = async (req, res) => {
   try {
@@ -98,26 +113,48 @@ exports.getUserInvestments = async (req, res) => {
     const investments = await PoolInvestment.find({
       investor: userId,
       status: 'active'
-    }).populate('pool', 'name ltv durationMonths');
+    }).populate('pool');
 
-    const investmentsWithDetails = investments.map(inv => ({
-      id: inv._id,
-      poolName: inv.pool.name,
-      poolId: inv.pool._id,
-      amountInvested: inv.amountInvested,
-      lockedROI: inv.lockedROI,
-      investmentDate: inv.investmentDate,
-      maturityDate: inv.maturityDate,
-      status: inv.status,
-      expectedEarnings: (inv.amountInvested * inv.lockedROI) / 100
+    // ✅ SHARE-BASED: Map investments with share info
+    const investmentsWithDetails = await Promise.all(investments.map(async (inv) => {
+      const currentValue = await inv.getCurrentValue();
+      const pool = inv.pool;
+      
+      return {
+        id: inv._id,
+        poolName: pool.name,
+        poolId: pool._id,
+        
+        // ✅ SHARE-BASED: Share info
+        shares: inv.shares,
+        entrySharePrice: inv.entrySharePrice,
+        currentSharePrice: pool.getSharePrice(),
+        
+        // Investment amounts
+        amountInvested: inv.amountInvested,
+        currentValue: currentValue,
+        totalEarnings: inv.totalEarnings,
+        actualROI: inv.actualROI,
+        
+        // Dates (investment date still relevant)
+        investmentDate: inv.investmentDate,
+        
+        status: inv.status
+      };
     }));
 
-    // Calculate total invested
+    // ✅ SHARE-BASED: Calculate totals
     const totalInvested = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+    const totalShares = investments.reduce((sum, inv) => sum + inv.shares, 0);
+    const totalCurrentValue = investmentsWithDetails.reduce((sum, inv) => sum + inv.currentValue, 0);
+    const totalEarnings = totalCurrentValue - totalInvested;
 
     res.json({
       success: true,
       totalInvested,
+      totalShares: Number(totalShares.toFixed(6)),
+      totalCurrentValue: Number(totalCurrentValue.toFixed(2)),
+      totalEarnings: Number(totalEarnings.toFixed(2)),
       investments: investmentsWithDetails
     });
   } catch (error) {
@@ -180,14 +217,22 @@ exports.investInPool = async (req, res) => {
       });
     }
 
-    // Calculate ROI at time of investment (locked in)
+    // Calculate ROI at time of investment (for reference)
     const lockedROI = pool.calculateROI();
+    
+    // ✅ SHARE-BASED ACCOUNTING: Calculate share price and shares to mint
+    const currentSharePrice = pool.getSharePrice(); // Returns 1 if totalShares = 0
+    const sharesToMint = amount / currentSharePrice;
+    
+    console.log(`💰 Share calculation: Price=${currentSharePrice.toFixed(6)}, Amount=${amount}, Shares to mint=${sharesToMint.toFixed(6)}`);
 
-    // Create investment record
+    // Create investment record with shares
     const investment = new PoolInvestment({
       investor: userId,
       pool: poolId,
       amountInvested: amount,
+      shares: sharesToMint,
+      entrySharePrice: currentSharePrice,
       lockedROI: lockedROI,
       investmentDate: new Date(),
       status: 'active'
@@ -195,10 +240,12 @@ exports.investInPool = async (req, res) => {
 
     await investment.save();
 
-    // Update pool balances
+    // Update pool balances and shares
     pool.totalInvested += amount;
     pool.availableBalance += amount;
+    pool.totalShares += sharesToMint; // ✅ Update total shares
     await pool.save();
+    console.log(`📊 Pool ${pool.name}: Total shares increased by ${sharesToMint.toFixed(6)} → ${pool.totalShares.toFixed(6)} shares`);
     console.log(`📊 Pool ${pool.name}: Available balance increased by ${amount} USDT → ${pool.availableBalance} USDT`);
 
     // Deduct from user's off-chain balance
@@ -229,9 +276,14 @@ exports.investInPool = async (req, res) => {
         id: investment._id,
         poolName: pool.name,
         amountInvested: investment.amountInvested,
+        shares: investment.shares,
+        sharePrice: investment.entrySharePrice,
         lockedROI: investment.lockedROI,
-        maturityDate: investment.maturityDate,
         expectedEarnings: (investment.amountInvested * investment.lockedROI) / 100
+      },
+      pool: {
+        totalShares: pool.totalShares,
+        currentSharePrice: currentSharePrice
       },
       newBalance: user.offChainBalance
     });
@@ -243,6 +295,7 @@ exports.investInPool = async (req, res) => {
 
 /**
  * Get investment statistics for dashboard
+ * ✅ SHARE-BASED: Uses real-time share price calculations
  */
 exports.getInvestmentStats = async (req, res) => {
   try {
@@ -254,33 +307,188 @@ exports.getInvestmentStats = async (req, res) => {
       status: 'active'
     }).populate('pool');
 
-    // Calculate total invested
+    // ✅ SHARE-BASED: Calculate current values
     const totalInvested = investments.reduce((sum, inv) => sum + inv.amountInvested, 0);
+    const totalShares = investments.reduce((sum, inv) => sum + inv.shares, 0);
+    
+    // Calculate current value based on share prices
+    let totalCurrentValue = 0;
+    for (const inv of investments) {
+      const currentValue = await inv.getCurrentValue();
+      totalCurrentValue += currentValue;
+    }
+    
+    const totalEarnings = totalCurrentValue - totalInvested;
+    const portfolioROI = totalInvested > 0 ? (totalEarnings / totalInvested) * 100 : 0;
 
-    // Calculate total expected earnings
-    const totalExpectedEarnings = investments.reduce((sum, inv) => {
-      return sum + (inv.amountInvested * inv.lockedROI) / 100;
-    }, 0);
-
-    // Calculate average ROI
-    const avgROI = investments.length > 0
-      ? investments.reduce((sum, inv) => sum + inv.lockedROI, 0) / investments.length
-      : 0;
-
-    // Count active pools
-    const activePools = investments.length;
+    // Count unique pools
+    const uniquePools = new Set(investments.map(inv => inv.pool._id.toString()));
+    const activePools = uniquePools.size;
 
     res.json({
       success: true,
       stats: {
         totalInvested: Number(totalInvested.toFixed(2)),
-        totalExpectedEarnings: Number(totalExpectedEarnings.toFixed(2)),
-        averageROI: Number(avgROI.toFixed(2)),
-        activePools: activePools
+        totalCurrentValue: Number(totalCurrentValue.toFixed(2)),
+        totalEarnings: Number(totalEarnings.toFixed(2)),
+        portfolioROI: Number(portfolioROI.toFixed(2)),
+        totalShares: Number(totalShares.toFixed(6)),
+        activePools: activePools,
+        totalInvestments: investments.length
       }
     });
   } catch (error) {
     console.error('Get investment stats error:', error);
     res.status(500).json({ error: 'Failed to fetch investment statistics' });
+  }
+};
+
+/**
+ * Withdraw from investment pool (sell shares at current price)
+ * ✅ SHARE-BASED: Investors can withdraw anytime by selling shares
+ */
+exports.withdrawFromPool = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { poolId, amount } = req.body;
+
+    console.log('\n💰 WITHDRAWAL REQUEST');
+    console.log('========================================');
+    console.log('User ID:', userId);
+    console.log('Pool ID:', poolId);
+    console.log('Withdrawal Amount:', amount);
+
+    // Validate inputs
+    if (!poolId || !amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid withdrawal request' });
+    }
+
+    // Get pool
+    const pool = await InvestmentPool.findById(poolId);
+    if (!pool) {
+      return res.status(404).json({ error: 'Investment pool not found' });
+    }
+
+    // Get user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Get all active investments for this user in this pool
+    const investments = await PoolInvestment.find({
+      investor: userId,
+      pool: poolId,
+      status: 'active'
+    });
+
+    if (investments.length === 0) {
+      return res.status(404).json({ error: 'No active investments found in this pool' });
+    }
+
+    // Calculate total shares owned in this pool
+    const totalSharesOwned = investments.reduce((sum, inv) => sum + inv.shares, 0);
+    
+    // Get current share price
+    const currentSharePrice = pool.getSharePrice();
+    const maxWithdrawalAmount = totalSharesOwned * currentSharePrice;
+
+    console.log('Total Shares Owned:', totalSharesOwned.toFixed(6));
+    console.log('Current Share Price:', currentSharePrice.toFixed(6));
+    console.log('Max Withdrawal Amount:', maxWithdrawalAmount.toFixed(2));
+
+    // Validate withdrawal amount
+    if (amount > maxWithdrawalAmount) {
+      return res.status(400).json({ 
+        error: 'Insufficient shares',
+        maxWithdrawalAmount: maxWithdrawalAmount,
+        currentSharePrice: currentSharePrice
+      });
+    }
+
+    // Check pool has sufficient liquidity
+    if (amount > pool.availableBalance) {
+      return res.status(400).json({ 
+        error: 'Insufficient pool liquidity',
+        availableBalance: pool.availableBalance
+      });
+    }
+
+    // Calculate shares to sell
+    const sharesToSell = amount / currentSharePrice;
+    console.log('Shares to Sell:', sharesToSell.toFixed(6));
+
+    // Update investments (proportionally reduce shares from each investment)
+    let remainingSharesToSell = sharesToSell;
+    const updatedInvestments = [];
+
+    for (const investment of investments) {
+      if (remainingSharesToSell <= 0) break;
+
+      const sharesToReduceFromThis = Math.min(investment.shares, remainingSharesToSell);
+      investment.shares -= sharesToReduceFromThis;
+      remainingSharesToSell -= sharesToReduceFromThis;
+
+      if (investment.shares <= 0.000001) { // Essentially zero
+        investment.status = 'withdrawn';
+        investment.shares = 0;
+      }
+
+      await investment.save();
+      updatedInvestments.push({
+        investmentId: investment._id,
+        sharesReduced: sharesToReduceFromThis,
+        remainingShares: investment.shares,
+        status: investment.status
+      });
+      
+      console.log(`  Investment ${investment._id}: Reduced ${sharesToReduceFromThis.toFixed(6)} shares → ${investment.shares.toFixed(6)} remaining`);
+    }
+
+    // Update pool
+    pool.totalShares -= sharesToSell;
+    pool.availableBalance -= amount;
+    await pool.save();
+    console.log(`📊 Pool: Total shares reduced to ${pool.totalShares.toFixed(6)}`);
+    console.log(`📊 Pool: Available balance reduced to ${pool.availableBalance.toFixed(2)}`);
+
+    // Add to user's off-chain balance
+    const oldBalance = user.offChainBalance;
+    user.offChainBalance += amount;
+    await user.save();
+    console.log(`💰 User balance: ${oldBalance.toFixed(2)} → ${user.offChainBalance.toFixed(2)} USDT`);
+
+    // Create transaction record
+    await Transaction.create({
+      user: userId,
+      type: 'withdraw',
+      amount: amount,
+      status: 'completed',
+      balanceAfter: user.offChainBalance,
+      description: `Withdrew ${amount} USDT from ${pool.name} (Sold ${sharesToSell.toFixed(6)} shares)`
+    });
+
+    console.log('✅ WITHDRAWAL SUCCESSFUL');
+    console.log('========================================\n');
+
+    res.json({
+      success: true,
+      message: 'Withdrawal successful',
+      withdrawal: {
+        amount: amount,
+        sharesSold: sharesToSell,
+        sharePrice: currentSharePrice,
+        investments: updatedInvestments
+      },
+      pool: {
+        name: pool.name,
+        remainingShares: pool.totalShares,
+        currentSharePrice: currentSharePrice
+      },
+      newBalance: user.offChainBalance
+    });
+  } catch (error) {
+    console.error('Withdraw from pool error:', error);
+    res.status(500).json({ error: 'Failed to process withdrawal' });
   }
 };

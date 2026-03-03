@@ -25,16 +25,23 @@ export interface InvestmentPool {
   minInvestment: number;
   maxInvestment: number;
   maxCapital: number;
-  maxInvestors?: number; // Deprecated, kept for backward compatibility
   expectedROI: number;
   poolSize: number;
   investorCount: number;
   poolFilledPercentage: number;
   remainingCapacity: number;
-  userContributionShare: number;
   isFull: boolean;
   canInvest: boolean;
-  userInvestmentAmount?: number;
+  
+  // ✅ SHARE-BASED: Pool share info
+  totalShares: number;
+  currentSharePrice: number;
+  
+  // ✅ SHARE-BASED: User's position
+  userTotalShares: number;
+  userInvestmentAmount: number;
+  userCurrentValue: number;
+  userSharePercentage: number;
 }
 
 export interface PoolInvestment {
@@ -46,19 +53,32 @@ export interface PoolInvestment {
     durationMonths: number;
     expectedROI: number;
   };
+  
+  // ✅ SHARE-BASED: Share info
+  shares: number;
+  entrySharePrice: number;
+  currentSharePrice: number;
+  
+  // Investment amounts
   amountInvested: number;
-  lockedROI: number;
-  maturityDate: string;
-  status: 'active' | 'completed' | 'withdrawn';
-  expectedEarnings: number;
-  createdAt: string;
+  currentValue: number;
+  totalEarnings: number;
+  actualROI: number;
+  
+  // Dates (investment date still relevant, no maturity date)
+  investmentDate: string;
+  
+  status: 'active' | 'withdrawn';
 }
 
 export interface InvestmentStats {
   totalInvested: number;
-  totalExpectedEarnings: number;
-  averageROI: number;
+  totalCurrentValue: number;
+  totalEarnings: number;
+  portfolioROI: number;
+  totalShares: number;
   activePools: number;
+  totalInvestments: number;
 }
 
 export interface InvestmentResponse {
@@ -127,9 +147,29 @@ export const getInvestmentStats = async (): Promise<InvestmentStats> => {
   }
 };
 
+// Withdraw from investment pool
+export const withdrawFromPool = async (
+  poolId: string,
+  amount: number
+): Promise<any> => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/investor/portfolio/withdraw`,
+      { poolId, amount },
+      getAuthHeaders()
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error('Error withdrawing from pool:', error);
+    const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to withdraw from pool';
+    throw new Error(errorMessage);
+  }
+};
+
 export default {
   getAllPools,
   getUserInvestments,
   investInPool,
-  getInvestmentStats
+  getInvestmentStats,
+  withdrawFromPool
 };

@@ -14,50 +14,37 @@ const poolInvestmentSchema = new mongoose.Schema({
   },
   
   // Investment Details
-  amountInvested: { type: Number, required: true }, // USDT amount
+  amountInvested: { type: Number, required: true }, // USDT amount invested
   investmentDate: { type: Date, default: Date.now },
+  
+  // Share-Based Accounting
+  shares: { type: Number, required: true }, // Number of shares owned
+  entrySharePrice: { type: Number, required: true }, // Share price at time of investment
   
   // Status
   status: {
     type: String,
-    enum: ['active', 'completed', 'withdrawn'],
+    enum: ['active', 'withdrawn'],
     default: 'active'
   },
   
-  // ROI at time of investment (locked in)
+  // ROI at time of investment (for reference only, not locked)
   lockedROI: { type: Number, required: true },
   
-  // Expected maturity date (calculated from investment date + pool duration)
-  maturityDate: { type: Date },
-  
-  // Earnings Tracking
+  // Earnings Tracking (calculated from share value appreciation)
   totalEarnings: { type: Number, default: 0 }, // Total interest earned
-  principalReturned: { type: Number, default: 0 }, // Principal repaid back
-  currentValue: { type: Number }, // Current portfolio value (invested + earnings - returned)
+  currentValue: { type: Number }, // Current portfolio value based on share price
   
   // Real-time ROI tracking
-  actualROI: { type: Number, default: 0 }, // Calculated based on actual returns
+  actualROI: { type: Number, default: 0 }, // Calculated based on current share price
   
-  // Repayment Distribution History
-  repaymentDistributions: [{
-    loanId: { type: mongoose.Schema.Types.ObjectId, ref: 'Loan' },
-    installmentNumber: { type: Number },
-    principalAmount: { type: Number }, // Portion of principal returned
-    interestAmount: { type: Number }, // Interest/profit earned
-    distributionDate: { type: Date, default: Date.now },
-    transactionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Transaction' }] // References to wallet transactions
-  }],
-  
-  // Active Loans funded by this investment
-  contributedLoans: [{
-    loanId: { type: mongoose.Schema.Types.ObjectId, ref: 'Loan' },
-    contributionAmount: { type: Number }, // How much of this investment went to this loan
-    contributionPercentage: { type: Number }, // Percentage share in that loan
-    status: { 
-      type: String, 
-      enum: ['active', 'completed', 'defaulted'],
-      default: 'active'
-    }
+  // Earnings History (for transparency and performance graph)
+  earningsHistory: [{
+    date: { type: Date, default: Date.now },
+    amount: { type: Number }, // Earnings for this entry
+    sharePrice: { type: Number }, // Share price at this time
+    totalValue: { type: Number }, // Total investment value at this time
+    source: { type: String } // 'loan_repayment', 'interest_accrual', etc.
   }],
   
   // Timestamps
@@ -65,52 +52,49 @@ const poolInvestmentSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-// Calculate maturity date before saving 
+// Initialize current value on new investment
 poolInvestmentSchema.pre('save', async function(next) {
   if (this.isNew) {
-    const pool = await mongoose.model('InvestmentPool').findById(this.pool);
-    if (pool) {
-      // Set maturity date = investment date + duration months
-      const maturityDate = new Date(this.investmentDate);
-      maturityDate.setMonth(maturityDate.getMonth() + pool.durationMonths);
-      this.maturityDate = maturityDate;
-      // Initialize current value
-      this.currentValue = this.amountInvested;
-    }
+    this.currentValue = this.amountInvested;
+    this.totalEarnings = 0;
+    this.actualROI = 0;
   }
   next();
 });
 
-// Helper method to calculate days remaining until maturity
-poolInvestmentSchema.methods.getDaysRemaining = function() {
-  if (!this.maturityDate) return 0;
-  const now = new Date();
-  const diff = this.maturityDate - now;
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+// Helper method to calculate current value based on share price
+poolInvestmentSchema.methods.getCurrentValue = async function() {
+  const pool = await mongoose.model('InvestmentPool').findById(this.pool);
+  if (!pool) return this.amountInvested;
+  const currentSharePrice = pool.getSharePrice();
+  return this.shares * currentSharePrice;
 };
 
 // Helper method to update current value and ROI
-poolInvestmentSchema.methods.updateValue = function() {
-  this.currentValue = this.amountInvested + this.totalEarnings - this.principalReturned;
+poolInvestmentSchema.methods.updateValue = async function() {
+  const currentValue = await this.getCurrentValue();
+  this.currentValue = currentValue;
+  this.totalEarnings = currentValue - this.amountInvested;
   if (this.amountInvested > 0) {
-    this.actualROI = ((this.totalEarnings + this.principalReturned) / this.amountInvested - 1) * 100;
+    this.actualROI = ((currentValue - this.amountInvested) / this.amountInvested) * 100;
   }
 };
 
-// Helper method to record a repayment distribution
-poolInvestmentSchema.methods.recordDistribution = function(loanId, installmentNumber, principalAmount, interestAmount, transactionIds) {
-  this.repaymentDistributions.push({
-    loanId,
-    installmentNumber,
-    principalAmount,
-    interestAmount,
-    distributionDate: new Date(),
-    transactionIds
+// Helper method to record earning event
+poolInvestmentSchema.methods.recordEarning = async function(amount, source = 'loan_repayment') {
+  const pool = await mongoose.model('InvestmentPool').findById(this.pool);
+  const sharePrice = pool ? pool.getSharePrice() : this.entrySharePrice;
+  const totalValue = this.shares * sharePrice;
+  
+  this.earningsHistory.push({
+    date: new Date(),
+    amount,
+    sharePrice,
+    totalValue,
+    source
   });
   
-  this.principalReturned += principalAmount;
-  this.totalEarnings += interestAmount;
-  this.updateValue();
+  await this.updateValue();
 };
 
 // Index for efficient queries (non-unique to allow multiple investments)

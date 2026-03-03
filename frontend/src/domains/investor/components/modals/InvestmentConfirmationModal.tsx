@@ -20,6 +20,8 @@ interface InvestmentConfirmationModalProps {
   minAmount: number;
   walletBalance?: number;
   isWalletConnected?: boolean;
+  currentSharePrice?: number;
+  totalShares?: number;
 }
 
 export function InvestmentConfirmationModal({
@@ -33,13 +35,16 @@ export function InvestmentConfirmationModal({
   maxAmount,
   minAmount,
   walletBalance = 0,
-  isWalletConnected = true
+  isWalletConnected = true,
+  currentSharePrice = 1.0,
+  totalShares = 0
 }: InvestmentConfirmationModalProps) {
   const [amount, setAmount] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const amountNum = amount ? parseFloat(amount) : 0;
+  const sharesToReceive = amountNum > 0 ? amountNum / currentSharePrice : 0;
   const estimatedReturn = amount ? (amountNum * parseFloat(estimatedROI) / 100).toFixed(2) : "0";
   const estimatedRevenue = amount ? (amountNum + parseFloat(estimatedReturn)).toFixed(2) : "0";
   const hasInsufficientBalance = amountNum > 0 && amountNum > walletBalance;
@@ -120,7 +125,7 @@ export function InvestmentConfirmationModal({
                 Invest in {poolName}
               </DialogTitle>
               <DialogDescription>
-                Lock your funds for {duration} months and earn returns
+                Open-ended pool • Withdraw anytime • Duration: {duration} months (loan term, not lock period)
               </DialogDescription>
             </div>
           </div>
@@ -137,11 +142,15 @@ export function InvestmentConfirmationModal({
             </div>
           </div>
 
-          {/* Wallet Balance Display */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Available Wallet Balance</span>
-              <span className="text-xl font-bold text-blue-600">${(walletBalance || 0).toFixed(2)} USDT</span>
+          {/* Wallet Balance & Share Price Display */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+              <span className="text-xs text-blue-600 font-medium">Available Balance</span>
+              <p className="text-xl font-bold text-blue-900 mt-1">${(walletBalance || 0).toFixed(2)} USDT</p>
+            </div>
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+              <span className="text-xs text-purple-600 font-medium">Current Share Price</span>
+              <p className="text-xl font-bold text-purple-900 mt-1">${currentSharePrice.toFixed(6)}</p>
             </div>
           </div>
 
@@ -186,12 +195,16 @@ export function InvestmentConfirmationModal({
                 <span className="text-muted-foreground">Investment Amount</span>
                 <span className="font-medium">{amountNum.toFixed(2)} USDT</span>
               </div>
+              <div className="flex justify-between text-sm bg-purple-50 -mx-2 px-2 py-1 rounded">
+                <span className="text-purple-700 font-medium">Shares You'll Receive</span>
+                <span className="font-bold text-purple-900">{sharesToReceive.toFixed(6)} shares</span>
+              </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Duration</span>
+                <span className="text-muted-foreground">Loan Duration</span>
                 <span className="font-medium">{duration} months</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Expected ROI</span>
+                <span className="text-muted-foreground">Expected Pool ROI</span>
                 <span className="font-medium text-primary">{estimatedROI}%</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -200,7 +213,7 @@ export function InvestmentConfirmationModal({
               </div>
               <div className="h-px bg-border my-2" />
               <div className="flex justify-between">
-                <span className="font-semibold text-lg">Estimated Revenue</span>
+                <span className="font-semibold text-lg">Estimated Final Value</span>
                 <span className="font-bold text-xl text-green-600">{estimatedRevenue} USDT</span>
               </div>
             </div>
@@ -219,8 +232,9 @@ export function InvestmentConfirmationModal({
                 htmlFor="terms" 
                 className="text-sm leading-relaxed cursor-pointer"
               >
-                I understand that my funds will be locked for {duration} months and I accept the{" "}
-                <span className="font-semibold">{riskLevel} Risk</span> associated with this investment pool. 
+                I understand this is an <span className="font-semibold">open-ended pool investment</span> where I can withdraw anytime. I accept the{" "}
+                <span className="font-semibold">{riskLevel} Risk</span> associated with this pool. 
+                Returns are automatically reinvested (compounded) to increase share value. 
                 I have read and agree to the{" "}
                 <span className="text-primary underline cursor-pointer">terms and conditions</span>.
               </Label>
