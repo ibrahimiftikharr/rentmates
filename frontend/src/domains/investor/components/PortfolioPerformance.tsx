@@ -104,7 +104,7 @@ export function PortfolioPerformance() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <Card className="border shadow-lg">
+        <Card className="border shadow-xl">
           <CardContent className="flex items-center justify-center p-12">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -119,7 +119,7 @@ export function PortfolioPerformance() {
   if (investments.length === 0) {
     return (
       <div className="space-y-6">
-        <Card className="border shadow-lg">
+        <Card className="border shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-primary" />
@@ -143,7 +143,12 @@ export function PortfolioPerformance() {
   return (
     <div className="space-y-6">
       {/* Portfolio Summary Card */}
-      <Card className="border-0 shadow-lg hover:shadow-xl transition-shadow duration-300">
+      <Card 
+        className="border transition-shadow duration-300"
+        style={{ boxShadow: '0 6px 25px rgba(0, 0, 0, 0.15)' }}
+        onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 10px 35px rgba(0, 0, 0, 0.25)'}
+        onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.15)'}
+      >
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-primary" />
@@ -152,19 +157,31 @@ export function PortfolioPerformance() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100/30">
+            <div 
+              className="text-center p-4 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100/30"
+              style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+            >
               <p className="text-xs text-blue-600 mb-1 font-medium">Total Invested</p>
               <p className="text-xl font-bold text-blue-900">${summary.totalInvested.toLocaleString()}</p>
             </div>
-            <div className="text-center p-4 rounded-lg bg-gradient-to-br from-green-50 to-green-100/30">
+            <div 
+              className="text-center p-4 rounded-lg bg-gradient-to-br from-green-50 to-green-100/30"
+              style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+            >
               <p className="text-xs text-green-600 mb-1 font-medium">Total Earnings</p>
               <p className="text-xl font-bold text-green-900">${summary.totalEarnings.toLocaleString()}</p>
             </div>
-            <div className="text-center p-4 rounded-lg bg-gradient-to-br from-purple-50 to-purple-100/30">
+            <div 
+              className="text-center p-4 rounded-lg bg-gradient-to-br from-purple-50 to-purple-100/30"
+              style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+            >
               <p className="text-xs text-purple-600 mb-1 font-medium">Average ROI</p>
               <p className="text-xl font-bold text-purple-900">{summary.averageROI.toFixed(1)}%</p>
             </div>
-            <div className="text-center p-4 rounded-lg bg-gradient-to-br from-orange-50 to-orange-100/30">
+            <div 
+              className="text-center p-4 rounded-lg bg-gradient-to-br from-orange-50 to-orange-100/30"
+              style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+            >
               <p className="text-xs text-orange-600 mb-1 font-medium">Repaid %</p>
               <p className="text-xl font-bold text-orange-900">{calculateRepaidPercentage()}%</p>
             </div>
@@ -184,7 +201,10 @@ export function PortfolioPerformance() {
       {investments.map((investment) => (
         <Card 
           key={investment.poolId}
-          className="border shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden"
+          className="border transition-all duration-300 overflow-hidden"
+          style={{ boxShadow: '0 8px 30px rgba(0, 0, 0, 0.25)' }}
+          onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.35)'}
+          onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.25)'}
         >
           {/* Card Header - Investment Summary */}
           <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
@@ -231,25 +251,37 @@ export function PortfolioPerformance() {
                 Investment Metrics
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-4 border border-blue-200 shadow-sm">
+                <div 
+                  className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-4 border border-blue-200"
+                  style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                >
                   <p className="text-xs text-blue-600 mb-2 font-medium">Amount Invested</p>
                   <p className="text-2xl font-bold text-blue-900">
                     ${getInvestmentData(investment).amountInvested.toLocaleString()}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl p-4 border border-green-200 shadow-sm">
+                <div 
+                  className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl p-4 border border-green-200"
+                  style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                >
                   <p className="text-xs text-green-600 mb-2 font-medium">Current Value</p>
                   <p className="text-2xl font-bold text-green-900">
                     ${getInvestmentData(investment).currentValue.toLocaleString()}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-4 border border-purple-200 shadow-sm">
+                <div 
+                  className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-4 border border-purple-200"
+                  style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                >
                   <p className="text-xs text-purple-600 mb-2 font-medium">Total Earnings</p>
                   <p className="text-2xl font-bold text-purple-900">
                     ${investment.totalEarnings.toLocaleString()}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-200 shadow-sm">
+                <div 
+                  className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-200"
+                  style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                >
                   <p className="text-xs text-orange-600 mb-2 font-medium">Days Remaining</p>
                   <p className="text-2xl font-bold text-orange-900">
                     {getInvestmentData(investment).daysRemaining}
@@ -268,7 +300,10 @@ export function PortfolioPerformance() {
                   <h4 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wide">
                     Performance Over Time
                   </h4>
-                  <div className="bg-gradient-to-br from-gray-50 to-gray-100/30 rounded-xl p-6 border shadow-sm">
+                  <div 
+                    className="bg-gradient-to-br from-gray-50 to-gray-100/30 rounded-xl p-6 border"
+                    style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)' }}
+                  >
                     {getPerformanceData(investment.poolId).length > 0 ? (
                       <ResponsiveContainer width="100%" height={220}>
                         <LineChart data={getPerformanceData(investment.poolId)}>
@@ -316,7 +351,10 @@ export function PortfolioPerformance() {
                   <h4 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wide">
                     Loan Repayment Schedule & History
                   </h4>
-                  <div className="bg-gradient-to-br from-indigo-50/30 to-purple-50/30 rounded-xl p-6 border shadow-sm">
+                  <div 
+                    className="bg-gradient-to-br from-indigo-50/30 to-purple-50/30 rounded-xl p-6 border"
+                    style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)' }}
+                  >
                     <RepaymentScheduleTable poolId={investment.poolId} />
                   </div>
                 </div>
