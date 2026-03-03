@@ -4,6 +4,7 @@ const User = require('../models/userModel');
 const Transaction = require('../models/transactionModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const { sendEmail } = require('../services/emailService');
+const { distributeRepaymentToInvestors } = require('../services/investorRepaymentDistribution');
 
 /**
  * Get active loan details for the student
@@ -158,6 +159,22 @@ exports.payInstallment = async (req, res) => {
     await loan.save();
     
     console.log('✓ Loan installment payment completed');
+
+    // Distribute repayment to investors proportionally
+    try {
+      const io = req.app.get('io');
+      await distributeRepaymentToInvestors(
+        loan,
+        installmentInfo.installmentNumber,
+        installmentInfo.principalAmount,
+        installmentInfo.interestAmount,
+        io
+      );
+      console.log('✓ Repayment distributed to investors');
+    } catch (distributionError) {
+      console.error('❌ Error distributing repayment to investors:', distributionError);
+      // Don't fail the payment if distribution fails - log and continue
+    }
 
     // Emit Socket.IO event for real-time update
     const io = req.app.get('io');

@@ -1,6 +1,7 @@
 const express = require('express');
 const investorRouter = express.Router();
 const investorController = require('../controllers/investorController');
+const portfolioController = require('../controllers/investorPortfolioController');
 const authenticateToken = require('../middleware/authenticateToken');
 const { uploadProfile, uploadDocument } = require('../config/cloudinary');
 
@@ -28,5 +29,21 @@ investorRouter.delete('/profile/image', investorController.deleteProfileImage);
 
 // Delete government ID document
 investorRouter.delete('/profile/document', investorController.deleteGovIdDocument);
+
+// ========================================
+// PORTFOLIO & INVESTMENT ROUTES
+// ========================================
+
+// Get all active investments with performance data
+investorRouter.get('/portfolio/investments', portfolioController.getActiveInvestments);
+
+// Get detailed information for a specific investment
+investorRouter.get('/portfolio/investments/:investmentId', portfolioController.getInvestmentDetails);
+
+// Get repayment schedule for loans in a specific pool
+investorRouter.get('/portfolio/pools/:poolId/schedule', portfolioController.getPoolRepaymentSchedule);
+
+// Get portfolio-wide performance graph data
+investorRouter.get('/portfolio/performance', portfolioController.getPortfolioPerformance);
 
 module.exports = investorRouter;

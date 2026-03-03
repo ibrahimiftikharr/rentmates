@@ -11,7 +11,18 @@ const transactionSchema = new mongoose.Schema({
   // Transaction type
   type: {
     type: String,
-    enum: ['deposit', 'withdraw', 'rent_payment', 'rent_received', 'pool_investment', 'investment_income', 'loan_disbursement', 'loan_repayment'],
+    enum: [
+      'deposit', 
+      'withdraw', 
+      'rent_payment', 
+      'rent_received', 
+      'pool_investment', 
+      'investment_income', 
+      'loan_disbursement', 
+      'loan_repayment',
+      'investment_principal_return',
+      'investment_interest_earned'
+    ],
     required: true
   },
 
