@@ -3,7 +3,7 @@ import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
 import { DollarSign, TrendingUp, Calendar, Bell, Lock, AlertTriangle, CheckCircle, XCircle, Unlock, Clock, ArrowRight, ClipboardList, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getMyLoans } from '../services/loanService';
+import { getMyLoans, getLoanStats, LoanStats } from '../services/loanService';
 import { getMyQueuedRequests, cancelQueuedRequest, QueuedLoanRequest } from '../services/queueService';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from 'sonner';
@@ -32,13 +32,40 @@ interface LoanCenterPageProps {
 }
 
 export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData }: LoanCenterPageProps) {
-  const hasActiveLoan = true; // Set to false to enable "Apply for New Loan" button
   const [countdown, setCountdown] = useState(0);
   const [pendingLoan, setPendingLoan] = useState<any>(null);
   const [collateralData, setCollateralData] = useState(propsCollateralData);
   const [isLoading, setIsLoading] = useState(true);
   const [queuedRequests, setQueuedRequests] = useState<QueuedLoanRequest[]>([]);
   const [isLoadingQueue, setIsLoadingQueue] = useState(false);
+  const [loanStats, setLoanStats] = useState<LoanStats>({
+    totalLoanAmount: 0,
+    totalRepaid: 0,
+    totalInterest: 0,
+    nextInstallment: { date: 'N/A', amount: 0 },
+    hasActiveLoan: false
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // Fetch loan stats on mount
+  useEffect(() => {
+    fetchLoanStats();
+  }, []);
+
+  const fetchLoanStats = async () => {
+    try {
+      setStatsLoading(true);
+      const response = await getLoanStats();
+      if (response.success && response.stats) {
+        setLoanStats(response.stats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch loan stats:', error);
+      toast.error('Failed to load loan statistics');
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   // Fetch loans on mount to check for pending collateral deposits
   useEffect(() => {
@@ -180,16 +207,6 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const loanStats = {
-    totalLoanAmount: 10000,
-    totalRepaid: 3000,
-    totalInterest: 1200,
-    nextInstallment: {
-      date: 'Dec 15, 2025',
-      amount: 1150
-    }
   };
 
   const notifications: LoanNotification[] = [
@@ -404,13 +421,13 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
           <CardContent className="space-y-4">
             <Button 
               className="w-full bg-primary hover:bg-primary/90 h-12"
-              disabled={hasActiveLoan}
+              disabled={loanStats.hasActiveLoan}
               onClick={() => onNavigate('apply-loan')}
             >
               <DollarSign className="w-5 h-5 mr-2" />
               Apply for New Loan
             </Button>
-            {hasActiveLoan && (
+            {loanStats.hasActiveLoan && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
                   You currently have an active loan. Please repay or complete it before applying for a new loan.

@@ -148,6 +148,41 @@ export const getMyLoans = async () => {
 };
 
 /**
+ * Get loan statistics for the authenticated student
+ */
+export interface LoanStats {
+  totalLoanAmount: number;
+  totalRepaid: number;
+  totalInterest: number;
+  nextInstallment: {
+    date: string;
+    amount: number;
+  };
+  hasActiveLoan: boolean;
+}
+
+export interface LoanStatsResponse {
+  success: boolean;
+  stats: LoanStats;
+}
+
+export const getLoanStats = async (): Promise<LoanStatsResponse> => {
+  try {
+    const response = await axios.get(
+      `${API_URL}/api/loans/stats`,
+      getAuthHeaders()
+    );
+
+    return response.data;
+  } catch (error: any) {
+    console.error('Get loan stats error:', error);
+    throw new Error(
+      error.response?.data?.error || 'Failed to fetch loan statistics'
+    );
+  }
+};
+
+/**
  * Get specific loan details
  */
 export const getLoanById = async (loanId: string) => {

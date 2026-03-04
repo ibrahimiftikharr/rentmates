@@ -35,6 +35,13 @@ router.post('/apply', loanController.applyForLoan);
 router.get('/my-loans', loanController.getMyLoans);
 
 /**
+ * GET /api/loans/stats
+ * Get loan statistics for the authenticated student
+ * Returns: totalLoanAmount, totalRepaid, totalInterest, nextInstallment, hasActiveLoan
+ */
+router.get('/stats', loanController.getLoanStats);
+
+/**
  * GET /api/loans/:loanId
  * Get specific loan details
  */

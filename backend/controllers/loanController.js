@@ -401,6 +401,92 @@ exports.getLoanById = async (req, res) => {
 };
 
 /**
+ * Get loan statistics for student
+ */
+exports.getLoanStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Get all loans for the student - only fetch active/repaying loans
+    const loans = await Loan.find({ 
+      borrower: student._id,
+      status: { $in: ['active', 'repaying'] }
+    });
+
+    // Initialize stats
+    let totalLoanAmount = 0;
+    let totalRepaid = 0;
+    let totalInterest = 0;
+    let nextInstallment = null;
+    let hasActiveLoan = loans.length > 0;
+
+    // Only calculate stats if there are active loans
+    if (hasActiveLoan) {
+      // Calculate stats from active loans only
+      for (const loan of loans) {
+        totalLoanAmount += loan.loanAmount || 0;
+        totalRepaid += loan.amountRepaid || 0;
+        
+        // Calculate total interest as (totalRepayment - loanAmount)
+        const loanInterest = (loan.totalRepayment || 0) - (loan.loanAmount || 0);
+        totalInterest += loanInterest;
+
+        // Find next unpaid installment
+        if (loan.repaymentSchedule && loan.repaymentSchedule.length > 0) {
+          const upcomingInstallment = loan.repaymentSchedule.find(
+            inst => ['pending', 'overdue'].includes(inst.status)
+          );
+
+          if (upcomingInstallment) {
+            // If we don't have nextInstallment yet, or this one is sooner
+            if (!nextInstallment || new Date(upcomingInstallment.dueDate) < new Date(nextInstallment.date)) {
+              nextInstallment = {
+                date: new Date(upcomingInstallment.dueDate).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                }),
+                amount: upcomingInstallment.amount,
+                loanId: loan._id
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Default values if no active loans
+    if (!nextInstallment) {
+      nextInstallment = {
+        date: 'N/A',
+        amount: 0
+      };
+    }
+
+    res.json({
+      success: true,
+      stats: {
+        totalLoanAmount: Math.round(totalLoanAmount * 100) / 100,
+        totalRepaid: Math.round(totalRepaid * 100) / 100,
+        totalInterest: Math.round(totalInterest * 100) / 100,
+        nextInstallment,
+        hasActiveLoan
+      }
+    });
+
+  } catch (error) {
+    console.error('Get loan stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch loan statistics' });
+  }
+};
+
+/**
  * Cancel loan application (only if collateral not deposited)
  */
 exports.cancelLoan = async (req, res) => {
