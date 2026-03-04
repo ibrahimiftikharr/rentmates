@@ -418,39 +418,68 @@ exports.withdrawFromPool = async (req, res) => {
     const sharesToSell = amount / currentSharePrice;
     console.log('Shares to Sell:', sharesToSell.toFixed(6));
 
-    // Update investments (proportionally reduce shares from each investment)
+    // Update investments (proportionally reduce shares AND amountInvested)
     let remainingSharesToSell = sharesToSell;
+    let remainingAmountToWithdraw = amount;
     const updatedInvestments = [];
 
     for (const investment of investments) {
       if (remainingSharesToSell <= 0) break;
 
       const sharesToReduceFromThis = Math.min(investment.shares, remainingSharesToSell);
+      
+      // ✅ FIX: Proportionally reduce amountInvested to maintain correct totalEarnings
+      const proportionReduced = sharesToReduceFromThis / investment.shares;
+      const amountInvestedToReduce = investment.amountInvested * proportionReduced;
+      
       investment.shares -= sharesToReduceFromThis;
+      investment.amountInvested -= amountInvestedToReduce;
       remainingSharesToSell -= sharesToReduceFromThis;
+      remainingAmountToWithdraw -= amountInvestedToReduce;
 
       if (investment.shares <= 0.000001) { // Essentially zero
         investment.status = 'withdrawn';
         investment.shares = 0;
+        investment.amountInvested = 0;
       }
 
+      // ✅ FIX: Update current value and total earnings after withdrawal
+      await investment.updateValue();
       await investment.save();
+      
       updatedInvestments.push({
         investmentId: investment._id,
         sharesReduced: sharesToReduceFromThis,
+        amountInvestedReduced: amountInvestedToReduce,
         remainingShares: investment.shares,
+        remainingAmountInvested: investment.amountInvested,
         status: investment.status
       });
       
-      console.log(`  Investment ${investment._id}: Reduced ${sharesToReduceFromThis.toFixed(6)} shares → ${investment.shares.toFixed(6)} remaining`);
+      console.log(`  Investment ${investment._id}: Reduced ${sharesToReduceFromThis.toFixed(6)} shares & $${amountInvestedToReduce.toFixed(2)} invested → ${investment.shares.toFixed(6)} shares, $${investment.amountInvested.toFixed(2)} invested remaining`);
     }
 
-    // Update pool
-    pool.totalShares -= sharesToSell;
+    // ✅ FIX: Update pool - reduce BOTH totalInvested AND availableBalance, THEN totalShares
+    // This ensures share price calculation is correct: sharePrice = totalInvested / totalShares
+    console.log('\n📊 UPDATING POOL VALUES (maintaining invariant)');
+    console.log(`Before: totalInvested=${pool.totalInvested.toFixed(2)}, totalShares=${pool.totalShares.toFixed(6)}, availableBalance=${pool.availableBalance.toFixed(2)}`);
+    
+    // Step 1: Reduce total invested (pool value decreases)
+    pool.totalInvested -= amount;
+    
+    // Step 2: Reduce available balance (liquidity decreases)
     pool.availableBalance -= amount;
+    
+    // Step 3: Reduce total shares (shares burned)
+    pool.totalShares -= sharesToSell;
+    
+    // Save pool (will recalculate share price with new values)
     await pool.save();
-    console.log(`📊 Pool: Total shares reduced to ${pool.totalShares.toFixed(6)}`);
-    console.log(`📊 Pool: Available balance reduced to ${pool.availableBalance.toFixed(2)}`);
+    
+    const newSharePrice = pool.getSharePrice();
+    console.log(`After: totalInvested=${pool.totalInvested.toFixed(2)}, totalShares=${pool.totalShares.toFixed(6)}, availableBalance=${pool.availableBalance.toFixed(2)}`);
+    console.log(`Share Price: ${currentSharePrice.toFixed(6)} → ${newSharePrice.toFixed(6)}`);
+    console.log('✅ Pool invariant maintained: Share Price = Total Pool Value / Total Shares\n');
 
     // Add to user's off-chain balance
     const oldBalance = user.offChainBalance;
@@ -477,13 +506,15 @@ exports.withdrawFromPool = async (req, res) => {
       withdrawal: {
         amount: amount,
         sharesSold: sharesToSell,
-        sharePrice: currentSharePrice,
+        sharePriceAtWithdrawal: currentSharePrice,
         investments: updatedInvestments
       },
       pool: {
         name: pool.name,
         remainingShares: pool.totalShares,
-        currentSharePrice: currentSharePrice
+        sharePriceAfterWithdrawal: newSharePrice,
+        totalInvested: pool.totalInvested,
+        availableBalance: pool.availableBalance
       },
       newBalance: user.offChainBalance
     });
