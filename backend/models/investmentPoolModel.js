@@ -19,13 +19,13 @@ const investmentPoolSchema = new mongoose.Schema({
   maxInvestors: { type: Number, default: 50 }, // Deprecated: kept for backward compatibility
   
   // Pool Balance Tracking (Real-time)
-  totalInvested: { type: Number, default: 0 }, // Total capital invested in pool
-  availableBalance: { type: Number, default: 0 }, // Available capital (invested - disbursed)
-  disbursedLoans: { type: Number, default: 0 }, // Total amount currently lent out
+  totalInvested: { type: Number, default: 0 }, // Total capital invested in pool (historical tracking, not used in share price)
+  availableBalance: { type: Number, default: 0 }, // Available capital (can be withdrawn or lent)
+  disbursedLoans: { type: Number, default: 0 }, // Outstanding principal on active loans
   
   // Share-Based Accounting
   totalShares: { type: Number, default: 0 }, // Total shares issued to all investors
-  accruedInterest: { type: Number, default: 0 }, // Interest earned but not yet included in totalInvested
+  accruedInterest: { type: Number, default: 0 }, // Interest earned on loans (increases pool value)
   
   // Pool Status
   isActive: { type: Boolean, default: true },
@@ -50,16 +50,19 @@ investmentPoolSchema.virtual('expectedROI').get(function() {
   return this.calculateROI();
 });
 
-// Method to calculate current share price
-investmentPoolSchema.methods.getSharePrice = function() {
-  if (this.totalShares === 0) return 1; // Initial share price = 1 USDT
-  const totalPoolValue = this.totalInvested + this.accruedInterest;
-  return totalPoolValue / this.totalShares;
+// Method to calculate total pool value (FULL ECONOMIC VALUE)
+// Pool Value = Available Capital + Outstanding Principal + Accrued Interest
+investmentPoolSchema.methods.getTotalPoolValue = function() {
+  return this.availableBalance + this.disbursedLoans + this.accruedInterest;
 };
 
-// Method to calculate total pool value (including outstanding loans + interest)
-investmentPoolSchema.methods.getTotalPoolValue = function() {
-  return this.totalInvested + this.accruedInterest;
+// Method to calculate current share price using FULL POOL VALUE
+// Share Price = Total Pool Value / Total Shares
+// This ensures share price reflects ALL pool assets: cash, loans, and interest
+investmentPoolSchema.methods.getSharePrice = function() {
+  if (this.totalShares === 0) return 1; // Initial share price = 1 USDT
+  const totalPoolValue = this.getTotalPoolValue();
+  return totalPoolValue / this.totalShares;
 };
 
 const InvestmentPool = mongoose.model('InvestmentPool', investmentPoolSchema);

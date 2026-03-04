@@ -459,27 +459,41 @@ exports.withdrawFromPool = async (req, res) => {
       console.log(`  Investment ${investment._id}: Reduced ${sharesToReduceFromThis.toFixed(6)} shares & $${amountInvestedToReduce.toFixed(2)} invested → ${investment.shares.toFixed(6)} shares, $${investment.amountInvested.toFixed(2)} invested remaining`);
     }
 
-    // ✅ FIX: Update pool - reduce BOTH totalInvested AND availableBalance, THEN totalShares
-    // This ensures share price calculation is correct: sharePrice = totalInvested / totalShares
+    // ✅ FIX: Update pool using FULL ECONOMIC VALUE formula
+    // Pool Value = availableBalance + disbursedLoans + accruedInterest
+    // Share Price = Pool Value / totalShares
     console.log('\n📊 UPDATING POOL VALUES (maintaining invariant)');
-    console.log(`Before: totalInvested=${pool.totalInvested.toFixed(2)}, totalShares=${pool.totalShares.toFixed(6)}, availableBalance=${pool.availableBalance.toFixed(2)}`);
+    console.log(`Before withdrawal:`);
+    console.log(`  - availableBalance: ${pool.availableBalance.toFixed(2)}`);
+    console.log(`  - disbursedLoans: ${pool.disbursedLoans.toFixed(2)}`);
+    console.log(`  - accruedInterest: ${pool.accruedInterest.toFixed(2)}`);
+    console.log(`  - totalShares: ${pool.totalShares.toFixed(6)}`);
+    console.log(`  - poolValue: ${pool.getTotalPoolValue().toFixed(2)}`);
+    console.log(`  - sharePrice: ${currentSharePrice.toFixed(6)}`);
     
-    // Step 1: Reduce total invested (pool value decreases)
-    pool.totalInvested -= amount;
-    
-    // Step 2: Reduce available balance (liquidity decreases)
+    // Step 1: Reduce available balance (cash leaving pool)
     pool.availableBalance -= amount;
     
-    // Step 3: Reduce total shares (shares burned)
+    // Step 2: Reduce total shares (shares burned)
     pool.totalShares -= sharesToSell;
+    
+    // Step 3: Keep disbursedLoans unchanged (loans still outstanding)
+    // Step 4: Keep accruedInterest unchanged (interest still owed to pool)
+    // Step 5: Keep totalInvested unchanged (historical tracking only)
     
     // Save pool (will recalculate share price with new values)
     await pool.save();
     
     const newSharePrice = pool.getSharePrice();
-    console.log(`After: totalInvested=${pool.totalInvested.toFixed(2)}, totalShares=${pool.totalShares.toFixed(6)}, availableBalance=${pool.availableBalance.toFixed(2)}`);
-    console.log(`Share Price: ${currentSharePrice.toFixed(6)} → ${newSharePrice.toFixed(6)}`);
-    console.log('✅ Pool invariant maintained: Share Price = Total Pool Value / Total Shares\n');
+    const newPoolValue = pool.getTotalPoolValue();
+    console.log(`After withdrawal:`);
+    console.log(`  - availableBalance: ${pool.availableBalance.toFixed(2)}`);
+    console.log(`  - disbursedLoans: ${pool.disbursedLoans.toFixed(2)}`);
+    console.log(`  - accruedInterest: ${pool.accruedInterest.toFixed(2)}`);
+    console.log(`  - totalShares: ${pool.totalShares.toFixed(6)}`);
+    console.log(`  - poolValue: ${newPoolValue.toFixed(2)}`);
+    console.log(`  - sharePrice: ${newSharePrice.toFixed(6)}`);
+    console.log('✅ Share price stable! Invariant maintained: Share Price = Pool Value / Total Shares\n');
 
     // Add to user's off-chain balance
     const oldBalance = user.offChainBalance;

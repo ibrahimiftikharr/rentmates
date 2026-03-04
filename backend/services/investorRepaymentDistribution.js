@@ -45,15 +45,27 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
     console.log(`\n📊 Found ${investments.length} active investors in pool`);
     console.log('Total Pool Shares:', pool.totalShares.toFixed(6));
     
-    // ✅ SHARE-BASED: Update pool's accrued interest (increases share price)
+    // ✅ SHARE-BASED: Update pool values to reflect repayment
     const totalRepayment = principalAmount + interestAmount;
-    pool.accruedInterest += interestAmount; // Interest increases pool value
-    pool.availableBalance += totalRepayment; // Principal + interest return to available balance
+    const oldPoolValue = pool.getTotalPoolValue();
+    const oldSharePrice = pool.getSharePrice();
+    
+    // Step 1: Reduce outstanding principal (loan is being repaid)
+    pool.disbursedLoans -= principalAmount;
+    
+    // Step 2: Add interest to accrued interest (increases pool value)
+    pool.accruedInterest += interestAmount;
+    
+    // Step 3: Add cash back to available balance (can be withdrawn or lent again)
+    pool.availableBalance += totalRepayment;
+    
     await pool.save();
     
+    const newPoolValue = pool.getTotalPoolValue();
     const newSharePrice = pool.getSharePrice();
-    console.log('Pool Value Increased By:', interestAmount.toFixed(2));
-    console.log('New Share Price:', newSharePrice.toFixed(6));
+    console.log('Pool Value Change:', oldPoolValue.toFixed(2), '→', newPoolValue.toFixed(2));
+    console.log('Share Price Change:', oldSharePrice.toFixed(6), '→', newSharePrice.toFixed(6));
+    console.log('✅ Pool economic value increased by interest:', interestAmount.toFixed(2));
     console.log('📈 Returns are REINVESTED (not sent to wallets)');
 
     // Track all update results
