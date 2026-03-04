@@ -10,6 +10,7 @@ import { Input } from '@/shared/ui/input';
 import { Label } from '@/shared/ui/label';
 import { Textarea } from '@/shared/ui/textarea';
 import { toast } from '@/shared/utils/toast';
+import { PropertyReviewSection } from './PropertyReviewSection';
 import { studentService } from '../../services/studentService';
 import { visitRequestService } from '@/shared/services/visitRequestService';
 import { 
@@ -631,6 +632,9 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 <TabsTrigger value="flatmates" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
                   Flatmates
                 </TabsTrigger>
+                <TabsTrigger value="reviews" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">
+                  Reviews
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6 mt-6">
@@ -909,6 +913,10 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                     <p className="text-gray-500">This property doesn't have any current tenants yet. Be the first to move in!</p>
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="reviews" className="mt-6">
+                <PropertyReviewSection propertyId={property.id} />
               </TabsContent>
             </Tabs>
 

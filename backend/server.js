@@ -16,6 +16,7 @@ const messageRouter = require('./routes/messageRoutes.js');
 const walletRouter = require('./routes/walletRoutes.js');
 const joinRequestRouter = require('./routes/joinRequestRoutes.js');
 const studentDashboardRouter = require('./routes/studentDashboardRoutes.js');
+const reviewRouter = require('./routes/reviewRoutes.js');
 const investmentRouter = require('./routes/investmentRoutes.js');
 const loanRouter = require('./routes/loanRoutes.js');
 const collateralRouter = require('./routes/collateralRoutes.js');
@@ -162,6 +163,9 @@ app.use('/api/join-requests', joinRequestRouter);
 
 // Student dashboard routes (metrics, activity, notifications)
 app.use('/api/student-dashboard', studentDashboardRouter);
+
+// Review routes (property reviews, ratings)
+app.use('/api/reviews', reviewRouter);
 
 // Log all registered routes for debugging
 console.log('\n📋 Registered routes:');
