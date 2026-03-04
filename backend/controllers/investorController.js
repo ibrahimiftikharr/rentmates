@@ -1,6 +1,7 @@
 const Investor = require('../models/investorModel');
 const User = require('../models/userModel');
 const { cloudinary } = require('../config/cloudinary');
+const { getDashboardMetrics, getPoolRiskMetrics } = require('../services/investorDashboardService');
 
 // ========================================
 // GET INVESTOR PROFILE
@@ -265,11 +266,60 @@ const deleteGovIdDocument = async (req, res) => {
   }
 };
 
+// ========================================
+// GET DASHBOARD METRICS
+// ========================================
+const getDashboard = async (req, res) => {
+  try {
+    const investorId = req.user.id;
+    
+    // Get dashboard metrics
+    const metrics = await getDashboardMetrics(investorId);
+    
+    // Get pool risk metrics
+    const riskMetrics = await getPoolRiskMetrics();
+    
+    res.json({
+      success: true,
+      metrics: metrics,
+      poolRisks: riskMetrics
+    });
+  } catch (error) {
+    console.error('Get dashboard metrics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch dashboard metrics' 
+    });
+  }
+};
+
+// ========================================
+// GET POOL RISK ANALYTICS
+// ========================================
+const getPoolRiskAnalytics = async (req, res) => {
+  try {
+    const riskMetrics = await getPoolRiskMetrics();
+    
+    res.json({
+      success: true,
+      poolRisks: riskMetrics
+    });
+  } catch (error) {
+    console.error('Get pool risk analytics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch risk analytics' 
+    });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   uploadProfileImage,
   uploadGovIdDocument,
   deleteProfileImage,
-  deleteGovIdDocument
+  deleteGovIdDocument,
+  getDashboard,
+  getPoolRiskAnalytics
 };

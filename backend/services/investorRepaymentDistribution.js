@@ -200,8 +200,15 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
         interestAccrued: interestAmount,
         timestamp: new Date()
       });
-      console.log('📡 Broadcast pool share price update to all investors');
-    }
+      console.log('📡 Broadcast pool share price update to all investors');      
+      // Emit dashboard metrics update event to all investors
+      io.emit('dashboard_metrics_updated', {
+        poolId: pool._id.toString(),
+        poolName: loan.poolName,
+        trigger: 'loan_repayment',
+        timestamp: new Date()
+      });
+      console.log('📡 Broadcast dashboard metrics update event');    }
     console.log('\n========================================');
     console.log('✅ VALUE UPDATE COMPLETED (NO WALLET TRANSFERS)');
     console.log('Total Interest Accrued:', interestAmount.toFixed(2));

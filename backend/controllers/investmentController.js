@@ -289,6 +289,20 @@ exports.investInPool = async (req, res) => {
         totalInvested: pool.totalInvested,
         availableBalance: pool.availableBalance,
         timestamp: new Date()
+      });      
+      // Emit dashboard metrics update to investor
+      io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
+        trigger: 'investment_created',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
+      });      
+      // Emit dashboard metrics update to investor
+      io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
+        trigger: 'investment_created',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
       });
     }
 
@@ -557,6 +571,14 @@ exports.withdrawFromPool = async (req, res) => {
         availableBalance: pool.availableBalance,
         totalShares: pool.totalShares,
         sharePrice: newSharePrice,
+        timestamp: new Date()
+      });
+      
+      // Emit dashboard metrics update to investor
+      io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
+        trigger: 'withdrawal_completed',
+        poolId: pool._id,
+        poolName: pool.name,
         timestamp: new Date()
       });
     }

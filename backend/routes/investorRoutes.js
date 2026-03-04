@@ -10,6 +10,16 @@ const { uploadProfile, uploadDocument } = require('../config/cloudinary');
 investorRouter.use(authenticateToken);
 
 // ========================================
+// DASHBOARD ROUTES
+// ========================================
+
+// Get dashboard metrics and analytics
+investorRouter.get('/dashboard/metrics', investorController.getDashboard);
+
+// Get pool risk analytics
+investorRouter.get('/dashboard/risk-analytics', investorController.getPoolRiskAnalytics);
+
+// ========================================
 // PROFILE ROUTES
 // ========================================
 

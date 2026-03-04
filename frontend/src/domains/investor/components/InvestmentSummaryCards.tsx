@@ -1,42 +1,91 @@
-import { TrendingUp, DollarSign, Target, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { TrendingUp, DollarSign, Target, Calendar, Loader2 } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
-
-const summaryData = [
-  {
-    title: "Total Invested",
-    value: "$124,580",
-    change: "+12.5%",
-    trend: "up",
-    icon: DollarSign,
-    gradient: "from-[#8C57FF] to-[#7367F0]",
-  },
-  {
-    title: "Earnings Generated",
-    value: "$28,450",
-    change: "+3 new",
-    trend: "up",
-    icon: Target,
-    gradient: "from-[#00CFE8] to-[#0099CC]",
-  },
-  {
-    title: "Annual ROI",
-    value: "18.2%",
-    change: "+2.1%",
-    trend: "up",
-    icon: TrendingUp,
-    gradient: "from-[#FF6B9D] to-[#FF4081]",
-  },
-  {
-    title: "Pool Utilization Rate",
-    value: "76.8%",
-    change: "In 7 days",
-    trend: "neutral",
-    icon: Calendar,
-    gradient: "from-[#FFA726] to-[#FB8C00]",
-  },
-];
+import { getDashboardMetrics, type DashboardMetrics } from "../services/dashboardService";
+import { socketService } from "@/shared/services/socketService";
+import { toast } from "sonner";
 
 export function InvestmentSummaryCards() {
+  const [loading, setLoading] = useState(true);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+
+  useEffect(() => {
+    loadMetrics();
+
+    // Connect to Socket.IO and listen for dashboard updates
+    const socket = socketService.connect();
+    socketService.on('dashboard_metrics_updated', handleDashboardUpdate);
+    socketService.on('investment_value_updated', handleDashboardUpdate);
+    socketService.on('pool_share_price_updated', handleDashboardUpdate);
+
+    return () => {
+      socketService.off('dashboard_metrics_updated', handleDashboardUpdate);
+      socketService.off('investment_value_updated', handleDashboardUpdate);
+      socketService.off('pool_share_price_updated', handleDashboardUpdate);
+    };
+  }, []);
+
+  const loadMetrics = async () => {
+    try {
+      const data = await getDashboardMetrics();
+      setMetrics(data.metrics);
+    } catch (error: any) {
+      console.error('Load dashboard metrics error:', error);
+      toast.error(error.message || 'Failed to load dashboard metrics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDashboardUpdate = (data: any) => {
+    console.log('Dashboard update event:', data);
+    // Silently refresh metrics
+    loadMetrics();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const summaryData = [
+    {
+      title: "Total Invested",
+      value: `$${metrics?.totalInvested?.toLocaleString() || '0'}`,
+      change: metrics && metrics.activePools > 0 ? `${metrics.activePools} pools` : "No investments",
+      trend: metrics && metrics.activePools > 0 ? "up" : "neutral",
+      icon: DollarSign,
+      gradient: "from-[#8C57FF] to-[#7367F0]",
+    },
+    {
+      title: "Earnings Generated",
+      value: `$${metrics?.earningsGenerated?.toLocaleString() || '0'}`,
+      change: metrics && metrics.earningsGenerated > 0 ? "+from interest" : "No earnings yet",
+      trend: metrics && metrics.earningsGenerated > 0 ? "up" : "neutral",
+      icon: Target,
+      gradient: "from-[#00CFE8] to-[#0099CC]",
+    },
+    {
+      title: "Annual ROI",
+      value: `${metrics?.annualROI?.toFixed(1) || '0.0'}%`,
+      change: metrics && metrics.annualROI > 0 ? `+${((metrics.currentValue - metrics.totalInvested) || 0).toFixed(2)}` : "$0.00",
+      trend: metrics && metrics.annualROI > 0 ? "up" : "neutral",
+      icon: TrendingUp,
+      gradient: "from-[#FF6B9D] to-[#FF4081]",
+    },
+    {
+      title: "Pool Utilization Rate",
+      value: `${metrics?.poolUtilizationRate?.toFixed(1) || '0.0'}%`,
+      change: "System-wide",
+      trend: "neutral",
+      icon: Calendar,
+      gradient: "from-[#FFA726] to-[#FB8C00]",
+    },
+  ];
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
       {summaryData.map((item) => (
