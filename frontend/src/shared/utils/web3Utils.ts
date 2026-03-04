@@ -137,8 +137,11 @@ export const approvePAXG = async (
     
     console.log(`Approving ${amount} PAXG for spending...`);
     
-    // Send approval transaction
-    const tx = await paxgContract.approve(collateralHolderAddress, amountWei);
+    // Send approval transaction with proper gas parameters
+    const tx = await paxgContract.approve(collateralHolderAddress, amountWei, {
+      maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'),
+      maxFeePerGas: ethers.parseUnits('50', 'gwei')
+    });
     
     // Wait for confirmation
     await tx.wait();
@@ -179,8 +182,11 @@ export const depositCollateral = async (
     
     const amountWei = ethers.parseEther(amount);
     
-    // Send deposit transaction
-    const tx = await collateralContract.depositCollateral(amountWei);
+    // Send deposit transaction with proper gas parameters
+    const tx = await collateralContract.depositCollateral(amountWei, {
+      maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'),
+      maxFeePerGas: ethers.parseUnits('50', 'gwei')
+    });
     
     // Wait for confirmation
     const receipt = await tx.wait();
@@ -244,8 +250,11 @@ export const withdrawCollateral = async (
     
     const amountWei = ethers.parseEther(amount);
     
-    // Send withdraw transaction
-    const tx = await collateralContract.withdrawCollateral(amountWei);
+    // Send withdraw transaction with proper gas parameters
+    const tx = await collateralContract.withdrawCollateral(amountWei, {
+      maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'),
+      maxFeePerGas: ethers.parseUnits('50', 'gwei')
+    });
     
     // Wait for confirmation
     const receipt = await tx.wait();
