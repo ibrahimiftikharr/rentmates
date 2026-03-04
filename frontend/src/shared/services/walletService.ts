@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
 // Contract addresses
-export const USDT_ADDRESS = '0x93A7B3819f95Fb563ED6A042AA6268ac0fB7C083';
+export const USDT_ADDRESS = 'in ';
 export const VAULT_ADDRESS = '0x9a0070e5C9f1E1d75F105B85F93f955e2656Aa22';
 
 // Contract ABIs
