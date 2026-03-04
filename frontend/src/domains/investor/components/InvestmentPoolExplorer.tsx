@@ -33,6 +33,7 @@ export function InvestmentPoolExplorer({ onInvestmentSuccess }: InvestmentPoolEx
     socketService.on('investment_created', handleInvestmentCreated);
     socketService.on('withdrawal_completed', handleWithdrawalCompleted);
     socketService.on('pool_updated', handlePoolUpdated);
+    socketService.on('pool_share_price_updated', handlePoolSharePriceUpdated);
     socketService.on('loan_approved', handleLoanApproved);
 
     return () => {
@@ -40,6 +41,7 @@ export function InvestmentPoolExplorer({ onInvestmentSuccess }: InvestmentPoolEx
       socketService.off('investment_created', handleInvestmentCreated);
       socketService.off('withdrawal_completed', handleWithdrawalCompleted);
       socketService.off('pool_updated', handlePoolUpdated);
+      socketService.off('pool_share_price_updated', handlePoolSharePriceUpdated);
       socketService.off('loan_approved', handleLoanApproved);
     };
   }, []);
@@ -77,6 +79,13 @@ export function InvestmentPoolExplorer({ onInvestmentSuccess }: InvestmentPoolEx
   const handlePoolUpdated = (data: any) => {
     console.log('Pool updated event:', data);
     // Silently refresh pools in background
+    loadPools();
+  };
+
+  const handlePoolSharePriceUpdated = (data: any) => {
+    console.log('Pool share price updated event:', data);
+    // Silently update pools to show new share prices in real-time
+    // Don't show toast to avoid spam - investors will see toast in their portfolio
     loadPools();
   };
 

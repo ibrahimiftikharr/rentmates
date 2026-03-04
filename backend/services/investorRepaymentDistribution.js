@@ -70,6 +70,9 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
 
     // Track all update results
     const updateResults = [];
+    
+    // Group investments by investor to avoid duplicate notifications
+    const investorMap = new Map();
 
     // Update all investors' investment values based on new share price (NO WALLET TRANSFERS)
     for (const investment of investments) {
@@ -94,46 +97,40 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
         console.log('   New Value:', newValue.toFixed(2));
         console.log('   ✅ Investment value updated (compounded)');
 
-        // Get investor user for notifications only (no balance update)
-        const investorUser = await User.findById(investment.investor._id);
+        // Get investor user for notifications (aggregate per investor)
+        const investorUserId = investment.investor._id.toString();
         
-        if (!investorUser) {
-          console.log('   ❌ User not found');
-          continue;
-        }
-
-        // Send email notification about value increase
-        try {
-          await sendValueIncreaseNotificationEmail(
-            investment.investor,
-            loan,
-            installmentNumber,
-            oldValue,
-            newValue,
-            investorGain,
-            newSharePrice
-          );
-          console.log('   📧 Email notification sent');
-        } catch (emailError) {
-          console.log('   ⚠️  Email notification failed:', emailError.message);
-        }
-
-        // Send real-time socket notification about value increase to specific investor
-        if (io) {
-          // Emit to user-specific room (user_${userId})
-          io.to(`user_${investorUser._id.toString()}`).emit('investment_value_updated', {
-            poolId: pool._id.toString(),
-            poolName: loan.poolName,
-            installmentNumber,
-            valueIncrease: investorGain,
-            oldValue: oldValue,
-            newValue: newValue,
-            sharePrice: newSharePrice,
-            shares: investment.shares,
-            timestamp: new Date()
+        if (!investorMap.has(investorUserId)) {
+          const investorUser = await User.findById(investment.investor._id);
+          
+          if (!investorUser) {
+            console.log('   ❌ User not found');
+            continue;
+          }
+          
+          investorMap.set(investorUserId, {
+            user: investorUser,
+            investor: investment.investor,
+            totalGain: 0,
+            totalOldValue: 0,
+            totalNewValue: 0,
+            totalShares: 0,
+            investments: []
           });
-          console.log('   🔔 Socket notification sent to user_' + investorUser._id.toString());
         }
+        
+        // Aggregate investor data
+        const investorData = investorMap.get(investorUserId);
+        investorData.totalGain += investorGain;
+        investorData.totalOldValue += oldValue;
+        investorData.totalNewValue += newValue;
+        investorData.totalShares += investment.shares;
+        investorData.investments.push({
+          investmentId: investment._id,
+          gain: investorGain,
+          oldValue,
+          newValue
+        });
 
         updateResults.push({
           investorId: investment.investor._id,
@@ -153,7 +150,44 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
         });
       }
     }
-    // Broadcast pool share price update to all investors
+    
+    // Send ONE notification per investor (aggregated)
+    for (const [investorUserId, investorData] of investorMap) {
+      try {
+        // Send email notification about value increase (only once per investor)
+        await sendValueIncreaseNotificationEmail(
+          investorData.investor,
+          loan,
+          installmentNumber,
+          investorData.totalOldValue,
+          investorData.totalNewValue,
+          investorData.totalGain,
+          newSharePrice
+        );
+        console.log(`   📧 Email notification sent to ${investorData.investor.email}`);
+      } catch (emailError) {
+        console.log(`   ⚠️  Email notification failed for ${investorData.investor.email}:`, emailError.message);
+      }
+
+      // Send ONE real-time socket notification per investor
+      if (io) {
+        io.to(`user_${investorUserId}`).emit('investment_value_updated', {
+          poolId: pool._id.toString(),
+          poolName: loan.poolName,
+          installmentNumber,
+          valueIncrease: investorData.totalGain,
+          oldValue: investorData.totalOldValue,
+          newValue: investorData.totalNewValue,
+          sharePrice: newSharePrice,
+          shares: investorData.totalShares,
+          investmentCount: investorData.investments.length,
+          timestamp: new Date()
+        });
+        console.log(`   🔔 Socket notification sent to user_${investorUserId} (${investorData.investments.length} investments aggregated)`);
+      }
+    }
+    
+// Broadcast pool share price update to all investors
     if (io) {
       io.emit('pool_share_price_updated', {
         poolId: pool._id.toString(),

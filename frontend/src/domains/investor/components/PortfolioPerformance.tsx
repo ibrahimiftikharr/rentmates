@@ -86,12 +86,14 @@ export function PortfolioPerformance() {
     
     // Listen for investment value updates (from loan repayments)
     socketService.on('investment_value_updated', handleInvestmentValueUpdated);
+    socketService.on('pool_share_price_updated', handlePoolSharePriceUpdated);
     socketService.on('investment_created', handleInvestmentCreated);
     socketService.on('withdrawal_completed', handleWithdrawalCompleted);
 
     return () => {
       // Clean up event listeners
       socketService.off('investment_value_updated', handleInvestmentValueUpdated);
+      socketService.off('pool_share_price_updated', handlePoolSharePriceUpdated);
       socketService.off('investment_created', handleInvestmentCreated);
       socketService.off('withdrawal_completed', handleWithdrawalCompleted);
     };
@@ -123,6 +125,13 @@ export function PortfolioPerformance() {
       description: `Your investment in ${data.poolName} earned $${data.valueIncrease.toFixed(2)}`,
       duration: 5000
     });
+  };
+
+  const handlePoolSharePriceUpdated = (data: any) => {
+    console.log('Pool share price updated event:', data);
+    // Silently refresh investments to show updated share prices
+    // Don't show toast here - the investment_value_updated event will show a more specific toast
+    loadInvestments();
   };
 
   const handleInvestmentCreated = (data: any) => {
