@@ -53,11 +53,13 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
     // Step 1: Reduce outstanding principal (loan is being repaid)
     pool.disbursedLoans -= principalAmount;
     
-    // Step 2: Add interest to accrued interest (increases pool value)
-    pool.accruedInterest += interestAmount;
-    
-    // Step 3: Add cash back to available balance (can be withdrawn or lent again)
+    // Step 2: Add cash back to available balance (principal + interest)
+    // This increases pool value, which increases share price
     pool.availableBalance += totalRepayment;
+    
+    // ✅ FIX: Zero out accruedInterest to prevent double-counting
+    // Interest is already in availableBalance, don't count it twice!
+    pool.accruedInterest = 0;
     
     await pool.save();
     

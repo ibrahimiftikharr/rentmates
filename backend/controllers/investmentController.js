@@ -53,8 +53,10 @@ exports.getAllPools = async (req, res) => {
       const userCurrentValue = userTotalShares * currentSharePrice;
       const userSharePercentage = pool.totalShares > 0 ? (userTotalShares / pool.totalShares) * 100 : 0;
       
-      // Calculate Expected ROI
-      const expectedROI = pool.calculateROI();
+      // Calculate APR and effective ROI for the duration
+      const apr = pool.calculateAPR();
+      // Calculate effective ROI based on pool's average loan size (use minInvestment as reference)
+      const effectiveROI = pool.calculateEffectiveROI(pool.minInvestment);
       
       // Check if pool is full based on capital
       const isFull = poolSize >= pool.maxCapital;
@@ -65,7 +67,9 @@ exports.getAllPools = async (req, res) => {
         description: pool.description,
         ltv: pool.ltv,
         durationMonths: pool.durationMonths,
-        expectedROI: Number(expectedROI.toFixed(2)),
+        apr: Number(apr.toFixed(2)), // Annual Percentage Rate (for loans)
+        effectiveROI: Number(effectiveROI.toFixed(2)), // Actual ROI for duration
+        expectedROI: Number(apr.toFixed(2)), // Backward compatibility (deprecated)
         
         // Pool totals
         poolSize: Number(poolSize.toFixed(2)),

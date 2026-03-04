@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
-import { TrendingUp, AlertTriangle, X, Loader2 } from "lucide-react";
+import { TrendingUp, AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { investInPool } from "../../services/investmentService";
 
@@ -22,6 +22,30 @@ interface InvestmentConfirmationModalProps {
   isWalletConnected?: boolean;
   currentSharePrice?: number;
   totalShares?: number;
+}
+
+/**
+ * Calculate actual expected return using amortized loan formula
+ * This matches how loans are calculated on the backend
+ */
+function calculateExpectedReturn(principal: number, annualAPR: number, months: number): number {
+  const monthlyRate = annualAPR / 100 / 12;
+  
+  // Handle 0% interest edge case
+  if (monthlyRate === 0) {
+    return 0;
+  }
+  
+  // Calculate monthly payment using amortization formula
+  const numerator = monthlyRate * Math.pow(1 + monthlyRate, months);
+  const denominator = Math.pow(1 + monthlyRate, months) - 1;
+  const monthlyPayment = principal * (numerator / denominator);
+  
+  // Total interest earned = Total payments - Principal
+  const totalRepayment = monthlyPayment * months;
+  const totalInterest = totalRepayment - principal;
+  
+  return totalInterest;
 }
 
 export function InvestmentConfirmationModal({
@@ -45,8 +69,18 @@ export function InvestmentConfirmationModal({
 
   const amountNum = amount ? parseFloat(amount) : 0;
   const sharesToReceive = amountNum > 0 ? amountNum / currentSharePrice : 0;
-  const estimatedReturn = amount ? (amountNum * parseFloat(estimatedROI) / 100).toFixed(2) : "0";
+  
+  // ✅ FIX: Calculate actual expected return using amortization formula
+  const estimatedReturn = amountNum > 0 
+    ? calculateExpectedReturn(amountNum, parseFloat(estimatedROI), duration).toFixed(2)
+    : "0";
   const estimatedRevenue = amount ? (amountNum + parseFloat(estimatedReturn)).toFixed(2) : "0";
+  
+  // Calculate effective ROI percentage for display
+  const effectiveROI = amountNum > 0 
+    ? ((parseFloat(estimatedReturn) / amountNum) * 100).toFixed(2)
+    : "0";
+  
   const hasInsufficientBalance = amountNum > 0 && amountNum > walletBalance;
   const isAmountValid = amountNum >= minAmount && amountNum <= maxAmount && amountNum <= walletBalance;
 
@@ -137,7 +171,10 @@ export function InvestmentConfirmationModal({
             <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium">
-                Risk: {riskLevel} | Expected ROI: {estimatedROI}
+                Risk: {riskLevel} | APR: {estimatedROI}% | Effective ROI: {effectiveROI}%
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                APR is annualized; your actual return for {duration} months will be approximately {effectiveROI}%
               </p>
             </div>
           </div>
@@ -204,8 +241,12 @@ export function InvestmentConfirmationModal({
                 <span className="font-medium">{duration} months</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Expected Pool ROI</span>
-                <span className="font-medium text-primary">{estimatedROI}%</span>
+                <span className="text-muted-foreground">Pool APR (Annual)</span>
+                <span className="font-medium text-muted-foreground">{estimatedROI}%</span>
+              </div>
+              <div className="flex justify-between text-sm bg-green-50 -mx-2 px-2 py-1 rounded">
+                <span className="text-green-700 font-medium">Effective ROI ({duration}mo)</span>
+                <span className="font-bold text-green-900">{effectiveROI}%</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Estimated Return</span>

@@ -189,7 +189,7 @@ export function InvestmentPoolExplorer({ onInvestmentSuccess }: InvestmentPoolEx
 
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-xs md:text-sm">
-                        <span className="text-muted-foreground">Expected ROI</span>
+                        <span className="text-muted-foreground">APR (Annual)</span>
                         <span className="text-primary font-medium">{pool.expectedROI.toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between text-xs md:text-sm">
