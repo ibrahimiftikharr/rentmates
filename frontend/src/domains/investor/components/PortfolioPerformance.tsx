@@ -174,13 +174,17 @@ export function PortfolioPerformance() {
       return [];
     }
 
-    // Format data for recharts
-    return investment.earningsHistory.map((earning, index) => ({
-      date: new Date(earning.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      value: earning.totalValue,
-      sharePrice: earning.sharePrice,
-      index: index
-    }));
+    // Calculate cumulative profit over time
+    let cumulativeProfit = 0;
+    return investment.earningsHistory.map((earning, index) => {
+      cumulativeProfit += earning.amount;
+      return {
+        date: new Date(earning.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        profit: cumulativeProfit,
+        sharePrice: earning.sharePrice,
+        index: index
+      };
+    });
   };
 
   if (loading) {
@@ -401,7 +405,7 @@ export function PortfolioPerformance() {
                 {/* Section 2: Performance Graph - SHARE-BASED */}
                 <div className="mb-6">
                   <h4 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wide">
-                    Value Growth Over Time
+                    Total Profit Earned Over Time
                   </h4>
                   <div 
                     className="bg-gradient-to-br from-gray-50 to-gray-100/30 rounded-xl p-6 border"
@@ -420,7 +424,7 @@ export function PortfolioPerformance() {
                             <YAxis 
                               tick={{ fontSize: 12 }}
                               stroke="#9ca3af"
-                              label={{ value: 'Value ($)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }}
+                              label={{ value: 'Profit ($)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }}
                             />
                             <Tooltip 
                               contentStyle={{
@@ -430,23 +434,23 @@ export function PortfolioPerformance() {
                                 boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                               }}
                               formatter={(value: any, name: string) => {
-                                if (name === 'value') return [`$${Number(value).toFixed(2)}`, 'Total Value'];
+                                if (name === 'profit') return [`$${Number(value).toFixed(2)}`, 'Total Profit'];
                                 return [value, name];
                               }}
                             />
                             <Line 
                               type="monotone" 
-                              dataKey="value" 
+                              dataKey="profit" 
                               stroke="#8C57FF" 
                               strokeWidth={3}
                               dot={{ fill: '#8C57FF', r: 5 }}
                               activeDot={{ r: 7 }}
-                              name="Total Value"
+                              name="Total Profit"
                             />
                           </LineChart>
                         </ResponsiveContainer>
                         <p className="text-xs text-muted-foreground text-center mt-4">
-                          📈 Your investment value increases as loan repayments are received (returns are auto-reinvested)
+                          📈 Your cumulative profit grows as loan repayments are received (returns are auto-reinvested)
                         </p>
                       </div>
                     ) : (

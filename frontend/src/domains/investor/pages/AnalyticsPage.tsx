@@ -171,10 +171,10 @@ export function AnalyticsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className="h-10 w-10 rounded-lg shadow-md flex items-center justify-center"
+                          className="h-14 w-14 rounded-lg shadow-md flex items-center justify-center"
                           style={{ backgroundColor: pool.color }}
                         >
-                          <span className="text-white font-bold">{pool.value}%</span>
+                          <span className="text-white font-bold text-sm">{pool.value}%</span>
                         </div>
                         <div>
                           <p className="font-semibold">{pool.name}</p>
