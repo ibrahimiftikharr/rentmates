@@ -118,9 +118,11 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
           console.log('   ⚠️  Email notification failed:', emailError.message);
         }
 
-        // Send real-time socket notification about value increase
+        // Send real-time socket notification about value increase to specific investor
         if (io) {
-          io.to(investorUser._id.toString()).emit('investment_value_updated', {
+          // Emit to user-specific room (user_${userId})
+          io.to(`user_${investorUser._id.toString()}`).emit('investment_value_updated', {
+            poolId: pool._id.toString(),
             poolName: loan.poolName,
             installmentNumber,
             valueIncrease: investorGain,
@@ -130,7 +132,7 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
             shares: investment.shares,
             timestamp: new Date()
           });
-          console.log('   🔔 Socket notification sent');
+          console.log('   🔔 Socket notification sent to user_' + investorUser._id.toString());
         }
 
         updateResults.push({
@@ -151,7 +153,21 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
         });
       }
     }
-
+    // Broadcast pool share price update to all investors
+    if (io) {
+      io.emit('pool_share_price_updated', {
+        poolId: pool._id.toString(),
+        poolName: loan.poolName,
+        newSharePrice: newSharePrice,
+        oldSharePrice: oldSharePrice,
+        totalPoolValue: newPoolValue,
+        availableBalance: pool.availableBalance,
+        totalShares: pool.totalShares,
+        interestAccrued: interestAmount,
+        timestamp: new Date()
+      });
+      console.log('📡 Broadcast pool share price update to all investors');
+    }
     console.log('\n========================================');
     console.log('✅ VALUE UPDATE COMPLETED (NO WALLET TRANSFERS)');
     console.log('Total Interest Accrued:', interestAmount.toFixed(2));
