@@ -363,7 +363,8 @@ const forgotPassword = async (req, res) => {
     // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
-      // Don't reveal whether email exists for security
+      // Don't reveal whether email exists for security - return success without sending email
+      console.log('⚠ Password reset requested for non-existent email:', email);
       return res.status(200).json({ message: 'If the email exists, a password reset link has been sent' });
     }
 
@@ -378,7 +379,7 @@ const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
     await user.save();
 
-    // Send email with reset token
+    // Send email with reset token - only executed if user exists
     await sendPasswordResetEmail(email, resetToken);
 
     console.log('✓ Password reset email sent to:', email);
