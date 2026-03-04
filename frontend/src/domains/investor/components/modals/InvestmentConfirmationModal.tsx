@@ -291,6 +291,13 @@ export function InvestmentConfirmationModal({
             </div>
           )}
 
+          {/* Disclaimer */}
+          <div className="text-xs text-muted-foreground text-center italic px-2">
+            <p>
+              Illustrative estimate assuming full-duration participation. Actual returns depend on entry time and pool activity.
+            </p>
+          </div>
+
           {/* Action Buttons */}
           <div className="flex gap-3 pt-2">
             <Button
