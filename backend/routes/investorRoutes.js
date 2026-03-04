@@ -20,6 +20,22 @@ investorRouter.get('/dashboard/metrics', investorController.getDashboard);
 investorRouter.get('/dashboard/risk-analytics', investorController.getPoolRiskAnalytics);
 
 // ========================================
+// ANALYTICS ROUTES
+// ========================================
+
+// Get risk pool allocation analytics
+investorRouter.get('/analytics/risk-allocation', investorController.getAnalyticsRiskAllocation);
+
+// Get pool utilization analytics
+investorRouter.get('/analytics/pool-utilization', investorController.getAnalyticsPoolUtilization);
+
+// Get investment opportunities analytics
+investorRouter.get('/analytics/opportunities', investorController.getAnalyticsOpportunities);
+
+// Get complete analytics (all sections)
+investorRouter.get('/analytics/complete', investorController.getAnalyticsComplete);
+
+// ========================================
 // PROFILE ROUTES
 // ========================================
 

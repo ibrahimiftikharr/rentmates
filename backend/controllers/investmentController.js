@@ -4,6 +4,8 @@ const Investor = require('../models/investorModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const PoolInvestment = require('../models/poolInvestmentModel');
 const Transaction = require('../models/transactionModel');
+const QueuedLoanRequest = require('../models/queuedLoanRequestModel');
+const Notification = require('../models/notificationModel');
 
 /**
  * Get all investment pools with dynamic calculations
@@ -269,8 +271,111 @@ exports.investInPool = async (req, res) => {
 
     console.log(`✓ Investment successful: ${amount} USDT in ${pool.name} by user ${userId}`);
 
-    // ✅ Emit Socket.IO event for real-time investment update
+    // Get Socket.IO instance
     const io = req.app.get('io');
+
+    // ✅ Check for matching queued loan requests and notify students
+    try {
+      const queuedRequests = await QueuedLoanRequest.find({ 
+        status: 'queued',
+        requestedAmount: { $lte: pool.availableBalance },
+        expiresAt: { $gt: new Date() }
+      }).populate({
+        path: 'student',
+        populate: { path: 'user' }
+      });
+
+      console.log(`🔍 Checking ${queuedRequests.length} queued requests for pool ${pool.name} (duration: ${pool.durationMonths} months, available: $${pool.availableBalance})`);
+
+      for (const request of queuedRequests) {
+        // Verify student is populated
+        if (!request.student || !request.student.user) {
+          console.error(`❌ Request ${request._id} has no student or user populated`);
+          continue;
+        }
+
+        // Check if request matches pool criteria
+        const isAmountSuitable = request.requestedAmount <= pool.availableBalance;
+        // Match EXACT duration: Conservative(6), Balanced(9), High Yield(12)
+        const isDurationSuitable = request.duration === pool.durationMonths;
+        
+        console.log(`  Request ${request._id}: amount=${request.requestedAmount} (suitable: ${isAmountSuitable}), duration=${request.duration} (suitable: ${isDurationSuitable}), notificationSent=${request.notificationSent}, student=${request.student._id}, userId=${request.student.user}`);
+        
+        if (isAmountSuitable && isDurationSuitable && !request.notificationSent) {
+          console.log(`🎯 MATCH FOUND! Processing request ${request._id}...`);
+          
+          // Create notification for student
+          try {
+            const notification = await Notification.create({
+              recipient: request.student._id,
+              recipientModel: 'Student',
+              type: 'pool_available',
+              title: 'Loan Pool Available',
+              message: `A suitable pool (${pool.name}) is now available for your ${request.purpose} loan request of $${request.requestedAmount} USDT.`,
+              relatedId: pool._id,
+              relatedModel: 'InvestmentPool',
+              metadata: {
+                poolId: pool._id,
+                poolName: pool.name,
+                requestId: request._id,
+                requestedAmount: request.requestedAmount,
+                duration: request.duration
+              }
+            });
+
+            console.log(`✅ Notification created: ${notification._id} for student profile ${request.student._id} (user: ${request.student.user})`);
+
+            // Update request status to matched and mark notification as sent
+            request.status = 'matched';
+            request.matchedPool = pool._id;
+            request.matchedAt = new Date();
+            request.notificationSent = true;
+            await request.save();
+
+            console.log(`✅ Request ${request._id} status updated to 'matched'`);
+
+            // Emit Socket.IO event to student
+            if (io) {
+              io.to(`user_${request.student.user}`).emit('pool_available', {
+                poolId: pool._id,
+                poolName: pool.name,
+                requestId: request._id,
+                message: `A suitable pool is now available for your loan request`
+              });
+              
+              // Also emit to trigger notification bell update
+              io.to(`user_${request.student.user}`).emit('new_notification', {
+                type: 'pool_available',
+                title: 'Loan Pool Available',
+                message: `A suitable pool (${pool.name}) is now available for your loan request`,
+                poolId: pool._id
+              });
+              
+              console.log(`✅ Socket events emitted to user_${request.student.user}`);
+            } else {
+              console.log(`⚠️ io not available for Socket.IO emission`);
+            }
+
+            console.log(`📢 Notification sent to student ${request.student.user} for queued request ${request._id}`);
+          } catch (innerError) {
+            console.error(`❌ Error processing match for request ${request._id}:`, innerError);
+            throw innerError; // Re-throw to be caught by outer try-catch
+          }
+        } else {
+          if (!isAmountSuitable || !isDurationSuitable) {
+            console.log(`  ⏭️ Request ${request._id} does not match criteria`);
+          }
+          if (request.notificationSent) {
+            console.log(`  ⏭️ Request ${request._id} already has notification sent`);
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error checking queued requests:', notificationError);
+      // Don't fail the investment if notification fails
+    }
+
+    // ✅ Emit Socket.IO event for real-time investment update
     if (io) {
       // Notify the investor
       io.to(`user_${userId}`).emit('investment_created', {
@@ -296,10 +401,11 @@ exports.investInPool = async (req, res) => {
         poolId: pool._id,
         poolName: pool.name,
         timestamp: new Date()
-      });      
-      // Emit dashboard metrics update to investor
-      io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
-        trigger: 'investment_created',
+      });
+      
+      // Emit analytics update to all investors
+      io.emit('analytics_updated', {
+        type: 'investment_created',
         poolId: pool._id,
         poolName: pool.name,
         timestamp: new Date()
@@ -577,6 +683,14 @@ exports.withdrawFromPool = async (req, res) => {
       // Emit dashboard metrics update to investor
       io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
         trigger: 'withdrawal_completed',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
+      });
+      
+      // Emit analytics update to all investors
+      io.emit('analytics_updated', {
+        type: 'withdrawal_completed',
         poolId: pool._id,
         poolName: pool.name,
         timestamp: new Date()

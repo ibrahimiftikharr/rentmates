@@ -45,11 +45,16 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
       fetchNotifications();
     });
 
+    socketService.on('pool_available', () => {
+      fetchNotifications();
+    });
+
     return () => {
       socketService.off('new_notification');
       socketService.off('visit_confirmed');
       socketService.off('visit_rescheduled');
       socketService.off('visit_rejected');
+      socketService.off('pool_available');
     };
   }, []);
 
@@ -98,6 +103,7 @@ export function NotificationsPage({ onNavigate }: NotificationsPageProps) {
 
   const getNotificationType = (type: string): 'success' | 'info' | 'warning' => {
     if (type === 'visit_confirmed') return 'success';
+    if (type === 'pool_available') return 'success';
     if (type === 'visit_rejected') return 'warning';
     return 'info';
   };

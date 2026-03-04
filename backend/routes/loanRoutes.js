@@ -46,6 +46,27 @@ router.get('/:loanId', loanController.getLoanById);
  */
 router.delete('/:loanId/cancel', loanController.cancelLoan);
 
+// ===== LOAN QUEUE ROUTES =====
+
+/**
+ * POST /api/loans/queue
+ * Queue a loan request when no matching pools available
+ * Body: { loanAmount, duration, purpose, maxAcceptableAPR?, preferredRiskLevel?, attemptedPools? }
+ */
+router.post('/queue', loanController.queueLoanRequest);
+
+/**
+ * GET /api/loans/queue/my-requests
+ * Get student's queued loan requests
+ */
+router.get('/queue/my-requests', loanController.getMyQueuedRequests);
+
+/**
+ * DELETE /api/loans/queue/:requestId
+ * Cancel a queued loan request
+ */
+router.delete('/queue/:requestId', loanController.cancelQueuedRequest);
+
 // ===== LOAN REPAYMENT ROUTES =====
 
 /**

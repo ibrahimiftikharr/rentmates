@@ -1,49 +1,17 @@
+import { useState, useEffect } from "react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { AlertCircle, TrendingDown, Users, DollarSign } from "lucide-react";
+import { AlertCircle, TrendingDown, Users, DollarSign, Loader2 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-
-// Data for pie chart - Risk pool allocation
-const riskPoolData = [
-  { name: "Low Risk", value: 45, color: "#10b981" },
-  { name: "Medium Risk", value: 35, color: "#f59e0b" },
-  { name: "High Risk", value: 20, color: "#ef4444" }
-];
-
-// Data for bar chart - Pool utilization vs liquidity
-const poolUtilizationData = [
-  { pool: "Pool A", utilization: 85, liquidity: 15, total: 100 },
-  { pool: "Pool B", utilization: 92, liquidity: 8, total: 100 },
-  { pool: "Pool C", utilization: 45, liquidity: 55, total: 100, underutilized: true },
-  { pool: "Pool D", utilization: 78, liquidity: 22, total: 100 },
-  { pool: "Pool E", utilization: 38, liquidity: 62, total: 100, underutilized: true },
-  { pool: "Pool F", utilization: 88, liquidity: 12, total: 100 }
-];
-
-// Underutilized pools with student requests
-const underutilizedPools = [
-  {
-    id: 1,
-    poolName: "Conservative Growth",
-    utilization: 45,
-    availableLiquidity: 55000,
-    queuedRequests: 12,
-    studentDemand: "High",
-    avgLoanSize: 4500,
-    riskLevel: "Low"
-  },
-  {
-    id: 2,
-    poolName: "Balanced Growth",
-    utilization: 38,
-    availableLiquidity: 78000,
-    queuedRequests: 18,
-    studentDemand: "Very High",
-    avgLoanSize: 3800,
-    riskLevel: "Medium"
-  }
-];
+import { 
+  getCompleteAnalytics, 
+  type RiskAllocation, 
+  type PoolUtilization,
+  type InvestmentOpportunity 
+} from "../services/analyticsService";
+import { socketService } from "@/shared/services/socketService";
+import { toast } from "sonner";
 
 // Custom tooltip for pie chart
 const CustomPieTooltip = ({ active, payload }: any) => {
@@ -53,6 +21,9 @@ const CustomPieTooltip = ({ active, payload }: any) => {
         <p className="font-semibold">{payload[0].name}</p>
         <p className="text-sm text-muted-foreground">
           {payload[0].value}% of total allocation
+        </p>
+        <p className="text-sm font-semibold text-primary">
+          ${payload[0].payload.amount.toLocaleString()} invested
         </p>
       </div>
     );
@@ -75,6 +46,68 @@ const CustomBarTooltip = ({ active, payload, label }: any) => {
 };
 
 export function AnalyticsPage() {
+  const [loading, setLoading] = useState(true);
+  const [riskPoolData, setRiskPoolData] = useState<RiskAllocation[]>([]);
+  const [totalInvested, setTotalInvested] = useState(0);
+  const [poolUtilizationData, setPoolUtilizationData] = useState<PoolUtilization[]>([]);
+  const [utilizationInsights, setUtilizationInsights] = useState<any>(null);
+  const [opportunities, setOpportunities] = useState<InvestmentOpportunity[]>([]);
+  const [opportunitiesSummary, setOpportunitiesSummary] = useState<any>(null);
+
+  useEffect(() => {
+    loadAnalytics();
+
+    // Listen for real-time updates
+    socketService.on('analytics_updated', handleAnalyticsUpdate);
+    socketService.on('dashboard_metrics_updated', handleAnalyticsUpdate);
+    socketService.on('pool_updated', handleAnalyticsUpdate);
+
+    return () => {
+      socketService.off('analytics_updated', handleAnalyticsUpdate);
+      socketService.off('dashboard_metrics_updated', handleAnalyticsUpdate);
+      socketService.off('pool_updated', handleAnalyticsUpdate);
+    };
+  }, []);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const data = await getCompleteAnalytics();
+      
+      // Set risk allocation data
+      setRiskPoolData(data.riskAllocation.allocations);
+      setTotalInvested(data.riskAllocation.totalInvested);
+      
+      // Set pool utilization data
+      setPoolUtilizationData(data.poolUtilization.pools);
+      setUtilizationInsights(data.poolUtilization.insights);
+      
+      // Set investment opportunities
+      setOpportunities(data.opportunities.opportunities);
+      setOpportunitiesSummary(data.opportunities.summary);
+      
+    } catch (error: any) {
+      console.error('Load analytics error:', error);
+      toast.error(error.message || 'Failed to load analytics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAnalyticsUpdate = (data: any) => {
+    console.log('Analytics update event:', data);
+    // Silently refresh analytics data
+    loadAnalytics();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 md:space-y-6">
       {/* Page Header */}
@@ -99,66 +132,74 @@ export function AnalyticsPage() {
           </p>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="flex flex-col lg:flex-row items-center gap-8">
-            {/* Pie Chart */}
-            <div className="w-full lg:w-1/2 h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={riskPoolData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}%`}
-                    outerRadius={120}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {riskPoolData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomPieTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
+          {totalInvested === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No investments yet. Start investing to see your allocation.</p>
             </div>
-
-            {/* Legend & Summary */}
-            <div className="w-full lg:w-1/2 space-y-4">
-              {riskPoolData.map((pool, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-4 rounded-xl border-2 hover:border-primary/30 transition-all bg-gradient-to-r from-white to-gray-50/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-10 w-10 rounded-lg shadow-md flex items-center justify-center"
-                      style={{ backgroundColor: pool.color }}
+          ) : (
+            <div className="flex flex-col lg:flex-row items-center gap-8">
+              {/* Pie Chart */}
+              <div className="w-full lg:w-1/2 h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={riskPoolData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => value > 0 ? `${name}: ${value}%` : ''}
+                      outerRadius={120}
+                      fill="#8884d8"
+                      dataKey="value"
                     >
-                      <span className="text-white font-bold">{pool.value}%</span>
+                      {riskPoolData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomPieTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Legend & Summary */}
+              <div className="w-full lg:w-1/2 space-y-4">
+                {riskPoolData.map((pool, index) => (
+                  pool.value > 0 && (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-4 rounded-xl border-2 hover:border-primary/30 transition-all bg-gradient-to-r from-white to-gray-50/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="h-10 w-10 rounded-lg shadow-md flex items-center justify-center"
+                          style={{ backgroundColor: pool.color }}
+                        >
+                          <span className="text-white font-bold">{pool.value}%</span>
+                        </div>
+                        <div>
+                          <p className="font-semibold">{pool.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            ${pool.amount.toLocaleString()} invested
+                          </p>
+                        </div>
+                      </div>
+                      <Badge
+                        className={
+                          pool.name === "Low Risk"
+                            ? "bg-green-100 text-green-700 border-green-200"
+                            : pool.name === "Medium Risk"
+                            ? "bg-yellow-100 text-yellow-700 border-yellow-200"
+                            : "bg-red-100 text-red-700 border-red-200"
+                        }
+                      >
+                        {pool.name.split(" ")[0]}
+                      </Badge>
                     </div>
-                    <div>
-                      <p className="font-semibold">{pool.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        ${((pool.value / 100) * 125000).toLocaleString()} invested
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    className={
-                      pool.name === "Low Risk"
-                        ? "bg-green-100 text-green-700 border-green-200"
-                        : pool.name === "Medium Risk"
-                        ? "bg-yellow-100 text-yellow-700 border-yellow-200"
-                        : "bg-red-100 text-red-700 border-red-200"
-                    }
-                  >
-                    {pool.name.split(" ")[0]}
-                  </Badge>
-                </div>
-              ))}
+                  )
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -176,135 +217,177 @@ export function AnalyticsPage() {
           </p>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={poolUtilizationData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="pool" stroke="#888" />
-                <YAxis stroke="#888" label={{ value: "Percentage (%)", angle: -90, position: "insideLeft" }} />
-                <Tooltip content={<CustomBarTooltip />} />
-                <Legend />
-                <Bar dataKey="utilization" name="Utilization" fill="#8C57FF" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="liquidity" name="Available Liquidity" fill="#00CFE8" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Key Insights */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border-2 border-green-200">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="h-8 w-8 rounded-lg bg-green-500 flex items-center justify-center">
-                  <TrendingDown className="h-4 w-4 text-white transform rotate-180" />
-                </div>
-                <p className="font-semibold text-green-900">High Utilization Pools</p>
-              </div>
-              <p className="text-sm text-green-700">Pool A, B, D & F are performing well with 78-92% utilization</p>
+          {poolUtilizationData.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No active pools available</p>
             </div>
-
-            <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="h-8 w-8 rounded-lg bg-orange-500 flex items-center justify-center">
-                  <AlertCircle className="h-4 w-4 text-white" />
-                </div>
-                <p className="font-semibold text-orange-900">Underutilized Pools</p>
+          ) : (
+            <>
+              <div className="h-96">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={poolUtilizationData.map(pool => ({
+                      pool: pool.poolName,
+                      utilization: pool.utilization,
+                      liquidity: pool.liquidity
+                    }))}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="pool" stroke="#888" />
+                    <YAxis stroke="#888" label={{ value: "Percentage (%)", angle: -90, position: "insideLeft" }} />
+                    <Tooltip content={<CustomBarTooltip />} />
+                    <Legend />
+                    <Bar dataKey="utilization" name="Utilization" fill="#8C57FF" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="liquidity" name="Available Liquidity" fill="#00CFE8" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <p className="text-sm text-orange-700">Pool C & E have high liquidity - consider rebalancing investments</p>
-            </div>
-          </div>
+
+              {/* Key Insights */}
+              {utilizationInsights && (
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border-2 border-green-200">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="h-8 w-8 rounded-lg bg-green-500 flex items-center justify-center">
+                        <TrendingDown className="h-4 w-4 text-white transform rotate-180" />
+                      </div>
+                      <p className="font-semibold text-green-900">High Utilization Pools</p>
+                    </div>
+                    <p className="text-sm text-green-700">{utilizationInsights.highUtilization.message}</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="h-8 w-8 rounded-lg bg-orange-500 flex items-center justify-center">
+                        <AlertCircle className="h-4 w-4 text-white" />
+                      </div>
+                      <p className="font-semibold text-orange-900">Underutilized Pools</p>
+                    </div>
+                    <p className="text-sm text-orange-700">{utilizationInsights.underutilized.message}</p>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Underutilized Pools with Student Demand */}
-      <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-amber-50/20">
-        <CardHeader className="border-b bg-gradient-to-r from-amber-50/50 to-orange-50/30">
-          <CardTitle className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg">
-              <Users className="h-5 w-5 text-white" />
-            </div>
-            Investment Opportunities - Underutilized Pools
-          </CardTitle>
-          <p className="text-sm text-muted-foreground mt-2">
-            These pools have available liquidity and active student loan requests waiting for funding
-          </p>
-        </CardHeader>
-        <CardContent className="pt-6 space-y-4">
-          {underutilizedPools.map((pool) => (
-            <div
-              key={pool.id}
-              className="bg-white rounded-2xl p-6 border-2 border-orange-200 hover:border-primary/50 transition-all shadow-lg"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                {/* Pool Info */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-lg font-semibold">{pool.poolName}</h3>
-                    <Badge
-                      className={
-                        pool.riskLevel === "Low"
-                          ? "bg-green-100 text-green-700 border-green-200"
-                          : "bg-yellow-100 text-yellow-700 border-yellow-200"
-                      }
+      {/* Investment Opportunities with Student Demand */}
+      {opportunities.length > 0 && (
+        <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-amber-50/20">
+          <CardHeader className="border-b bg-gradient-to-r from-amber-50/50 to-orange-50/30">
+            <CardTitle className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+              Investment Opportunities - Student Demand
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-2">
+              These pools have available capacity and queued student loan requests waiting for funding
+            </p>
+            {opportunitiesSummary && (
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Badge variant="outline" className="bg-white">
+                  {opportunitiesSummary.totalQueuedRequests} queued requests
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  ${opportunitiesSummary.totalQueuedAmount.toLocaleString()} total demand
+                </Badge>
+                <Badge variant="outline" className="bg-white">
+                  ${opportunitiesSummary.avgRequestAmount.toLocaleString()} avg request
+                </Badge>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            {opportunities.map((pool) => (
+              <div
+                key={pool.poolId}
+                className="bg-white rounded-2xl p-6 border-2 border-orange-200 hover:border-primary/50 transition-all shadow-lg"
+              >
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  {/* Pool Info */}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-3">
+                      <h3 className="text-lg font-semibold">{pool.poolName}</h3>
+                      <Badge
+                        className={
+                          pool.riskLevel === "Low"
+                            ? "bg-green-100 text-green-700 border-green-200"
+                            : pool.riskLevel === "Medium"
+                            ? "bg-yellow-100 text-yellow-700 border-yellow-200"
+                            : "bg-red-100 text-red-700 border-red-200"
+                        }
+                      >
+                        {pool.riskLevel} Risk
+                      </Badge>
+                    </div>
+
+                    {/* Metrics Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Utilization</p>
+                        <p className="font-semibold text-orange-600">{(pool.utilization ?? 0).toFixed(1)}%</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Available Liquidity</p>
+                        <p className="font-semibold text-green-600">${(pool.availableLiquidity ?? 0).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Queued Requests</p>
+                        <p className="font-semibold text-primary">{pool.queuedRequests ?? 0} students</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Total Requested</p>
+                        <p className="font-semibold">${(pool.totalRequested ?? 0).toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    {/* Student Demand Badge */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-orange-600" />
+                        <span className="text-sm">
+                          <span className="font-semibold text-orange-600">{pool.studentDemand ?? 'Low'}</span> student demand
+                        </span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        APR: <span className="font-semibold text-primary">{(pool.apr ?? 0).toFixed(2)}%</span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Monthly Return: <span className="font-semibold text-green-600">${(pool.potentialMonthlyReturn ?? 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="flex flex-col gap-2">
+                    <Button 
+                      className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90 shadow-lg whitespace-nowrap"
+                      onClick={() => window.location.href = '/investor/investments'}
                     >
-                      {pool.riskLevel} Risk
-                    </Badge>
-                  </div>
-
-                  {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Utilization</p>
-                      <p className="font-semibold text-orange-600">{pool.utilization}%</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Available Liquidity</p>
-                      <p className="font-semibold text-green-600">${pool.availableLiquidity.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Queued Requests</p>
-                      <p className="font-semibold text-primary">{pool.queuedRequests} students</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Avg Loan Size</p>
-                      <p className="font-semibold">${pool.avgLoanSize.toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  {/* Student Demand Badge */}
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-orange-600" />
-                    <span className="text-sm">
-                      <span className="font-semibold text-orange-600">{pool.studentDemand}</span> student demand
-                    </span>
+                      Invest Now
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      {pool.queuedRequests} students waiting
+                    </p>
                   </div>
                 </div>
 
-                {/* Action Button */}
-                <div className="flex flex-col gap-2">
-                  <Button className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90 shadow-lg whitespace-nowrap">
-                    Invest Now
-                  </Button>
-                  <p className="text-xs text-center text-muted-foreground">
-                    {pool.queuedRequests} students waiting
+                {/* Alert Banner */}
+                <div className="mt-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                  <p className="text-sm text-amber-800">
+                    <span className="font-semibold">High Opportunity:</span> This pool has{" "}
+                    ${pool.availableLiquidity.toLocaleString()} available capacity and active student demand. Investing here can generate immediate returns.
                   </p>
                 </div>
               </div>
-
-              {/* Alert Banner */}
-              <div className="mt-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                <p className="text-sm text-amber-800">
-                  <span className="font-semibold">High Opportunity:</span> This pool has{" "}
-                  {100 - pool.utilization}% available capital and active student demand. Investing here can generate immediate returns.
-                </p>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

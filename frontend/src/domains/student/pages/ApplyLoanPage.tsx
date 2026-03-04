@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DollarSign, TrendingUp, Lock, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { checkLoanAvailability, applyForLoan, getPAXGPrice, LoanPool, LoanApplication } from '../services/loanService';
+import { queueLoanRequest } from '../services/queueService';
 
 interface ApplyLoanPageProps {
   onNavigate: (page: string) => void;
@@ -27,10 +28,13 @@ interface ApplyLoanPageProps {
 export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoanPageProps) {
   const hasActiveLoan = false; // Change to true to show active loan message
   const [loanPurpose, setLoanPurpose] = useState<string>('');
-  const [loanAmount, setLoanAmount] = useState<number[]>([500]);
+  const [loanAmount, setLoanAmount] = useState<number[]>([5]);
   const [loanDuration, setLoanDuration] = useState<string>('');
   const [showPools, setShowPools] = useState(false);
   const [loanPools, setLoanPools] = useState<LoanPool[]>([]);
+  const [hasEligiblePools, setHasEligiblePools] = useState(false);
+  const [showQueueOption, setShowQueueOption] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
   const [selectedPool, setSelectedPool] = useState<LoanPool | null>(null);
   const [selectedLoanApplication, setSelectedLoanApplication] = useState<LoanApplication | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -87,7 +91,14 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
       
       setLoanPools(response.pools);
       setShowPools(true);
-      toast.success(`Found ${response.pools.length} loan pools`);
+      setHasEligiblePools(response.hasEligiblePools || false);
+      setShowQueueOption(!response.hasEligiblePools);
+      
+      if (response.hasEligiblePools) {
+        toast.success(`Found ${response.pools.filter((p: LoanPool) => p.isEligible).length} eligible loan pools`);
+      } else {
+        toast.warning('No eligible pools found. You can queue your request.');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to check loan availability');
       console.error('Check availability error:', error);
@@ -142,6 +153,39 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
     }
   };
 
+  const handleQueueRequest = async () => {
+    setIsQueueing(true);
+    try {
+      await queueLoanRequest(
+        loanAmount[0],
+        parseInt(loanDuration),
+        loanPurpose,
+        undefined, // maxAcceptableAPR
+        'any', // preferredRiskLevel
+        loanPools.map(pool => ({
+          poolId: pool._id,
+          poolName: pool.name,
+          reason: pool.disableReason || 'Not eligible'
+        }))
+      );
+      
+      toast.success('Your loan request has been queued! You will be notified when a suitable pool becomes available.');
+      setShowQueueOption(false);
+      
+      // Reset form
+      setLoanPurpose('');
+      setLoanAmount([5]);
+      setLoanDuration('');
+      setShowPools(false);
+      setLoanPools([]);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to queue loan request');
+      console.error('Queue request error:', error);
+    } finally {
+      setIsQueueing(false);
+    }
+  };
+
   const handleDepositCollateral = () => {
     toast.success('Connecting to wallet...');
     setTimeout(() => {
@@ -149,7 +193,7 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
       setShowCollateralDeposit(false);
       // Reset form
       setLoanPurpose('');
-      setLoanAmount([500]);
+      setLoanAmount([5]);
       setLoanDuration('');
       setShowPools(false);
       setSelectedPool(null);
@@ -233,13 +277,13 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
                 <Slider
                   value={loanAmount}
                   onValueChange={setLoanAmount}
-                  min={1}
+                  min={5}
                   max={1000}
-                  step={50}
+                  step={5}
                   className="w-full"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>1 USDT</span>
+                  <span>5 USDT</span>
                   <span>1,000 USDT</span>
                 </div>
               </div>
@@ -323,6 +367,63 @@ export function ApplyLoanPage({ onNavigate, onStartCollateralDeposit }: ApplyLoa
                     </Card>
                   ))}
                 </div>
+                
+                {/* Queue Request Option - Show only when no eligible pools */}
+                {showQueueOption && !hasEligiblePools && (
+                  <Card className="border-2 border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-orange-900">
+                        <AlertCircle className="h-5 w-5" />
+                        No Eligible Pools Available
+                      </CardTitle>
+                      <CardDescription>
+                        Unfortunately, none of the pools match your current loan criteria. However, you can queue your request and we'll notify you when a suitable pool becomes available.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="bg-white rounded-lg p-4 space-y-2">
+                        <h3 className="font-semibold text-sm">Your Loan Request:</h3>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Amount:</span>
+                            <p className="font-semibold">${loanAmount[0]} USDT</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Duration:</span>
+                            <p className="font-semibold">{loanDuration} months</p>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">Purpose:</span>
+                            <p className="font-semibold">{loanPurpose}</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                        <p className="font-semibold mb-1">What happens next?</p>
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                          <li>Your request will be queued for 30 days</li>
+                          <li>Investors can see the demand and may add funds to pools</li>
+                          <li>You'll be notified immediately when a suitable pool is available</li>
+                          <li>You can view your queued requests in the Dashboard</li>
+                        </ul>
+                      </div>
+
+                      <Button 
+                        className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:opacity-90 text-white font-semibold"
+                        style={{ 
+                          background: 'linear-gradient(to right, rgb(249, 115, 22), rgb(217, 119, 6))',
+                          color: 'white',
+                          fontWeight: '600'
+                        }}
+                        onClick={handleQueueRequest}
+                        disabled={isQueueing}
+                      >
+                        {isQueueing ? 'Queuing Request...' : 'Queue My Loan Request'}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
             </div>
           )}
 

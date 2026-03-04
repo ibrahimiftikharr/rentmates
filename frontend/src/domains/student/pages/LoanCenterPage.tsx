@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Badge } from '@/shared/ui/badge';
-import { DollarSign, TrendingUp, Calendar, Bell, Lock, AlertTriangle, CheckCircle, XCircle, Unlock, Clock, ArrowRight } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, Bell, Lock, AlertTriangle, CheckCircle, XCircle, Unlock, Clock, ArrowRight, ClipboardList, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getMyLoans } from '../services/loanService';
+import { getMyQueuedRequests, cancelQueuedRequest, QueuedLoanRequest } from '../services/queueService';
+import { socketService } from '@/shared/services/socketService';
+import { toast } from 'sonner';
 
 type NotificationType = 'approved' | 'active' | 'collateral-locked' | 'collateral-released' | 'payment-due' | 'payment-missed' | 'delinquent' | 'defaulted' | 'liquidation';
 
@@ -34,6 +37,8 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
   const [pendingLoan, setPendingLoan] = useState<any>(null);
   const [collateralData, setCollateralData] = useState(propsCollateralData);
   const [isLoading, setIsLoading] = useState(true);
+  const [queuedRequests, setQueuedRequests] = useState<QueuedLoanRequest[]>([]);
+  const [isLoadingQueue, setIsLoadingQueue] = useState(false);
 
   // Fetch loans on mount to check for pending collateral deposits
   useEffect(() => {
@@ -91,6 +96,62 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
       setCollateralData(propsCollateralData);
     }
   }, [propsCollateralData]);
+
+  // Fetch queued requests on mount
+  useEffect(() => {
+    fetchQueuedRequests();
+
+    // Listen for real-time updates
+    socketService.on('pool_available', fetchQueuedRequests);
+    socketService.on('analytics_updated', fetchQueuedRequests);
+
+    return () => {
+      socketService.off('pool_available', fetchQueuedRequests);
+      socketService.off('analytics_updated', fetchQueuedRequests);
+    };
+  }, []);
+
+  const fetchQueuedRequests = async () => {
+    try {
+      setIsLoadingQueue(true);
+      const requests = await getMyQueuedRequests();
+      setQueuedRequests(requests || []);
+    } catch (error: any) {
+      console.error('Failed to fetch queued requests:', error);
+    } finally {
+      setIsLoadingQueue(false);
+    }
+  };
+
+  const handleCancelRequest = async (requestId: string) => {
+    try {
+      await cancelQueuedRequest(requestId);
+      toast.success('Queued request cancelled');
+      fetchQueuedRequests();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel request');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'queued':
+        return { color: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Queued' };
+      case 'matched':
+        return { color: 'bg-green-100 text-green-700 border-green-200', label: 'Matched' };
+      case 'expired':
+        return { color: 'bg-gray-100 text-gray-700 border-gray-200', label: 'Expired' };
+      case 'cancelled':
+        return { color: 'bg-red-100 text-red-700 border-red-200', label: 'Cancelled' };
+      default:
+        return { color: 'bg-gray-100 text-gray-700 border-gray-200', label: status };
+    }
+  };
+
+  const formatDate = (dateString: Date) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   useEffect(() => {
     if (!collateralData) return;
@@ -404,6 +465,107 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
           </CardContent>
         </Card>
       </div>
+
+      {/* Queued Loan Requests Section */}
+      {queuedRequests.length > 0 && (
+        <Card className="shadow-xl">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-primary" />
+                  Queued Loan Requests
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Your pending loan requests waiting for pool availability
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-sm">
+                {queuedRequests.length} {queuedRequests.length === 1 ? 'Request' : 'Requests'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoadingQueue ? (
+              <div className="flex justify-center py-8">
+                <Clock className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {queuedRequests.map((request) => {
+                  const statusBadge = getStatusBadge(request.status);
+                  const daysRemaining = Math.ceil(
+                    (new Date(request.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+                  );
+                  
+                  return (
+                    <div 
+                      key={request._id}
+                      className="p-4 rounded-lg border bg-card hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge className={statusBadge.color}>
+                              {statusBadge.label}
+                            </Badge>
+                            <span className="text-sm text-muted-foreground">
+                              {request.purpose.charAt(0).toUpperCase() + request.purpose.slice(1)}
+                            </span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                              <p className="text-muted-foreground text-xs">Amount</p>
+                              <p className="font-semibold">${request.requestedAmount} USDT</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-xs">Duration</p>
+                              <p className="font-semibold">{request.duration} months</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-xs">Requested</p>
+                              <p className="font-semibold">{formatDate(request.requestedAt)}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground text-xs">Expires In</p>
+                              <p className={`font-semibold ${
+                                daysRemaining <= 7 ? 'text-orange-600' : 'text-foreground'
+                              }`}>
+                                {daysRemaining > 0 ? `${daysRemaining} days` : 'Expired'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {request.status === 'queued' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCancelRequest(request._id)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {request.status === 'matched' && (
+                        <div className="mt-3 pt-3 border-t">
+                          <div className="flex items-center gap-2 text-sm text-green-700">
+                            <CheckCircle className="w-4 h-4" />
+                            <span>A suitable pool is now available! Check your notifications.</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Additional Information */}
       <Card className="shadow-xl">

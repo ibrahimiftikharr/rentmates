@@ -2,6 +2,12 @@ const Investor = require('../models/investorModel');
 const User = require('../models/userModel');
 const { cloudinary } = require('../config/cloudinary');
 const { getDashboardMetrics, getPoolRiskMetrics } = require('../services/investorDashboardService');
+const { 
+  getRiskPoolAllocation, 
+  getPoolUtilizationAnalytics, 
+  getInvestmentOpportunities,
+  getCompleteAnalytics 
+} = require('../services/investorAnalyticsService');
 
 // ========================================
 // GET INVESTOR PROFILE
@@ -313,6 +319,88 @@ const getPoolRiskAnalytics = async (req, res) => {
   }
 };
 
+// ========================================
+// GET ANALYTICS - RISK POOL ALLOCATION
+// ========================================
+const getAnalyticsRiskAllocation = async (req, res) => {
+  try {
+    const investorId = req.user.id;
+    const data = await getRiskPoolAllocation(investorId);
+    
+    res.json({
+      success: true,
+      data: data
+    });
+  } catch (error) {
+    console.error('Get risk allocation analytics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch risk allocation analytics' 
+    });
+  }
+};
+
+// ========================================
+// GET ANALYTICS - POOL UTILIZATION
+// ========================================
+const getAnalyticsPoolUtilization = async (req, res) => {
+  try {
+    const data = await getPoolUtilizationAnalytics();
+    
+    res.json({
+      success: true,
+      data: data
+    });
+  } catch (error) {
+    console.error('Get pool utilization analytics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch pool utilization analytics' 
+    });
+  }
+};
+
+// ========================================
+// GET ANALYTICS - INVESTMENT OPPORTUNITIES
+// ========================================
+const getAnalyticsOpportunities = async (req, res) => {
+  try {
+    const data = await getInvestmentOpportunities();
+    
+    res.json({
+      success: true,
+      data: data
+    });
+  } catch (error) {
+    console.error('Get investment opportunities analytics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch investment opportunities' 
+    });
+  }
+};
+
+// ========================================
+// GET COMPLETE ANALYTICS
+// ========================================
+const getAnalyticsComplete = async (req, res) => {
+  try {
+    const investorId = req.user.id;
+    const data = await getCompleteAnalytics(investorId);
+    
+    res.json({
+      success: true,
+      data: data
+    });
+  } catch (error) {
+    console.error('Get complete analytics error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch complete analytics' 
+    });
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -321,5 +409,9 @@ module.exports = {
   deleteProfileImage,
   deleteGovIdDocument,
   getDashboard,
-  getPoolRiskAnalytics
+  getPoolRiskAnalytics,
+  getAnalyticsRiskAllocation,
+  getAnalyticsPoolUtilization,
+  getAnalyticsOpportunities,
+  getAnalyticsComplete
 };

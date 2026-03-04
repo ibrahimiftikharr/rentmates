@@ -3,6 +3,7 @@ const Loan = require('../models/loanModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const PoolInvestment = require('../models/poolInvestmentModel');
 const Student = require('../models/studentModel');
+const QueuedLoanRequest = require('../models/queuedLoanRequestModel');
 const { convertUSDTtoPAXG, getPAXGPriceWithTimestamp } = require('../services/coinMarketCapService');
 
 /**
@@ -189,7 +190,8 @@ exports.checkLoanAvailability = async (req, res) => {
       requestedAmount,
       requestedDuration,
       purpose: purpose || 'Not specified',
-      pools: poolsWithAvailability
+      pools: poolsWithAvailability,
+      hasEligiblePools: poolsWithAvailability.some(p => p.isEligible)
     });
 
   } catch (error) {
@@ -469,6 +471,171 @@ exports.getPAXGPrice = async (req, res) => {
       error: 'Failed to fetch PAXG price',
       fallbackPrice: 2000 // Provide fallback in response
     });
+  }
+};
+
+/**
+ * Queue a loan request when no matching pools are available
+ * This request will be shown in Investor Analytics as investment opportunity
+ */
+exports.queueLoanRequest = async (req, res) => {
+  try {
+    const { loanAmount, duration, purpose, maxAcceptableAPR, preferredRiskLevel, attemptedPools } = req.body;
+    const userId = req.user.id;
+
+    // Validate inputs
+    if (!loanAmount || !duration || !purpose) {
+      return res.status(400).json({ 
+        error: 'Loan amount, duration, and purpose are required' 
+      });
+    }
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Check if student already has a similar queued request (within last 7 days)
+    const recentQueuedRequest = await QueuedLoanRequest.findOne({
+      student: student._id,
+      status: 'queued',
+      requestedAmount: loanAmount,
+      duration: duration,
+      requestedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+    });
+
+    if (recentQueuedRequest) {
+      return res.status(400).json({
+        error: 'You already have a similar loan request in the queue',
+        existingRequest: {
+          id: recentQueuedRequest._id,
+          requestedAt: recentQueuedRequest.requestedAt
+        }
+      });
+    }
+
+    // Create queued loan request
+    const queuedRequest = new QueuedLoanRequest({
+      student: student._id,
+      requestedAmount: parseFloat(loanAmount),
+      duration: parseInt(duration),
+      purpose: purpose,
+      maxAcceptableAPR: maxAcceptableAPR ? parseFloat(maxAcceptableAPR) : null,
+      preferredRiskLevel: preferredRiskLevel || 'any',
+      attemptedPools: attemptedPools || [],
+      status: 'queued'
+    });
+
+    // Calculate priority score
+    queuedRequest.calculatePriorityScore();
+    
+    await queuedRequest.save();
+
+    // Emit Socket.IO event to notify investors
+    if (req.app.get('io')) {
+      const io = req.app.get('io');
+      io.emit('analytics_updated', {
+        type: 'new_queued_request',
+        data: {
+          requestId: queuedRequest._id,
+          amount: queuedRequest.requestedAmount,
+          duration: queuedRequest.duration,
+          purpose: queuedRequest.purpose
+        }
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Your loan request has been queued. You will be notified when a suitable pool becomes available.',
+      queuedRequest: {
+        id: queuedRequest._id,
+        requestedAmount: queuedRequest.requestedAmount,
+        duration: queuedRequest.duration,
+        purpose: queuedRequest.purpose,
+        requestedAt: queuedRequest.requestedAt,
+        expiresAt: queuedRequest.expiresAt
+      }
+    });
+  } catch (error) {
+    console.error('Queue loan request error:', error);
+    res.status(500).json({ error: 'Failed to queue loan request' });
+  }
+};
+
+/**
+ * Get student's queued loan requests
+ */
+exports.getMyQueuedRequests = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Get all queued requests for this student
+    const queuedRequests = await QueuedLoanRequest.find({
+      student: student._id,
+      status: { $in: ['queued', 'matched'] }
+    }).sort({ requestedAt: -1 });
+
+    res.json({
+      success: true,
+      queuedRequests: queuedRequests
+    });
+  } catch (error) {
+    console.error('Get queued requests error:', error);
+    res.status(500).json({ error: 'Failed to fetch queued requests' });
+  }
+};
+
+/**
+ * Cancel a queued loan request
+ */
+exports.cancelQueuedRequest = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user.id;
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Find and update the request
+    const queuedRequest = await QueuedLoanRequest.findOne({
+      _id: requestId,
+      student: student._id
+    });
+
+    if (!queuedRequest) {
+      return res.status(404).json({ error: 'Queued request not found' });
+    }
+
+    queuedRequest.status = 'cancelled';
+    await queuedRequest.save();
+
+    // Emit Socket.IO event
+    if (req.app.get('io')) {
+      const io = req.app.get('io');
+      io.emit('analytics_updated', {
+        type: 'queued_request_cancelled',
+        data: { requestId }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Queued loan request cancelled'
+    });
+  } catch (error) {
+    console.error('Cancel queued request error:', error);
+    res.status(500).json({ error: 'Failed to cancel queued request' });
   }
 };
 

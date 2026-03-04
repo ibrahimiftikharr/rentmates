@@ -26,7 +26,8 @@ const notificationSchema = new mongoose.Schema({
       'message',
       'property_update',
       'application_status',
-      'join_request'
+      'join_request',
+      'pool_available'
     ]
   },
 
@@ -48,7 +49,7 @@ const notificationSchema = new mongoose.Schema({
 
   relatedModel: {
     type: String,
-    enum: ['VisitRequest', 'Property', 'Message', 'Application', 'JoinRequest', 'Rental']
+    enum: ['VisitRequest', 'Property', 'Message', 'Application', 'JoinRequest', 'Rental', 'InvestmentPool']
   },
 
   // Additional data
