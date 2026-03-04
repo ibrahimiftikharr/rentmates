@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getActiveInvestments } from "@/shared/services/investorPortfolioService";
 import { PoolWithdrawalModal } from "./modals/PoolWithdrawalModal";
+import { socketService } from "@/shared/services/socketService";
 import { toast } from "sonner";
 
 // ✅ SHARE-BASED: Updated interface for aggregated investments
@@ -79,6 +80,21 @@ export function PortfolioPerformance() {
 
   useEffect(() => {
     loadInvestments();
+
+    // Connect to Socket.IO and listen for investment updates
+    const socket = socketService.connect();
+    
+    // Listen for investment value updates (from loan repayments)
+    socketService.on('investment_value_updated', handleInvestmentValueUpdated);
+    socketService.on('investment_created', handleInvestmentCreated);
+    socketService.on('withdrawal_completed', handleWithdrawalCompleted);
+
+    return () => {
+      // Clean up event listeners
+      socketService.off('investment_value_updated', handleInvestmentValueUpdated);
+      socketService.off('investment_created', handleInvestmentCreated);
+      socketService.off('withdrawal_completed', handleWithdrawalCompleted);
+    };
   }, []);
 
   const loadInvestments = async () => {
@@ -96,6 +112,33 @@ export function PortfolioPerformance() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Socket.IO event handlers
+  const handleInvestmentValueUpdated = (data: any) => {
+    console.log('Investment value updated event:', data);
+    // Refresh investments to show new values
+    loadInvestments();
+    toast.success('Investment value increased! 📈', {
+      description: `Your investment in ${data.poolName} earned $${data.valueIncrease.toFixed(2)}`,
+      duration: 5000
+    });
+  };
+
+  const handleInvestmentCreated = (data: any) => {
+    console.log('New investment created:', data);
+    // Refresh to show new investment
+    loadInvestments();
+  };
+
+  const handleWithdrawalCompleted = (data: any) => {
+    console.log('Withdrawal completed:', data);
+    // Refresh after withdrawal
+    loadInvestments();
+    toast.success('Withdrawal successful! 💰', {
+      description: `Withdrew $${data.amount.toFixed(2)} from ${data.poolName}`,
+      duration: 3000
+    });
   };
 
   const toggleInvestmentExpansion = (poolId: string) => {

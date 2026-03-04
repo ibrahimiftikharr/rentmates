@@ -70,10 +70,10 @@ exports.getActiveInvestments = async (req, res) => {
       const currentSharePrice = pool.getSharePrice();
       const currentValue = poolData.totalShares * currentSharePrice;
       
-      // Calculate risk level based on LTV
+      // Calculate risk level based on LTV (matches frontend logic)
       let riskLevel = 'Low';
-      if (pool.ltv >= 0.8) riskLevel = 'High';
-      else if (pool.ltv >= 0.7) riskLevel = 'Medium';
+      if (pool.ltv > 0.8) riskLevel = 'High';
+      else if (pool.ltv > 0.7) riskLevel = 'Medium';
       
       // Calculate ROI based on share price appreciation
       const averageEntryPrice = poolData.totalAmountInvested / poolData.totalShares;

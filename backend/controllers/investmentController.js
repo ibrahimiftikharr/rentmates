@@ -269,6 +269,29 @@ exports.investInPool = async (req, res) => {
 
     console.log(`✓ Investment successful: ${amount} USDT in ${pool.name} by user ${userId}`);
 
+    // ✅ Emit Socket.IO event for real-time investment update
+    const io = req.app.get('io');
+    if (io) {
+      // Notify the investor
+      io.to(`user_${userId}`).emit('investment_created', {
+        poolId: pool._id,
+        poolName: pool.name,
+        amount: amount,
+        shares: sharesToMint,
+        sharePrice: currentSharePrice,
+        timestamp: new Date()
+      });
+
+      // Broadcast pool update to all connected users
+      io.emit('pool_updated', {
+        poolId: pool._id,
+        poolName: pool.name,
+        totalInvested: pool.totalInvested,
+        availableBalance: pool.availableBalance,
+        timestamp: new Date()
+      });
+    }
+
     res.json({
       success: true,
       message: 'Investment successful',
@@ -513,6 +536,30 @@ exports.withdrawFromPool = async (req, res) => {
 
     console.log('✅ WITHDRAWAL SUCCESSFUL');
     console.log('========================================\n');
+
+    // ✅ Emit Socket.IO event for real-time withdrawal update
+    const io = req.app.get('io');
+    if (io) {
+      // Notify the investor
+      io.to(`user_${userId}`).emit('withdrawal_completed', {
+        poolId: pool._id,
+        poolName: pool.name,
+        amount: amount,
+        sharesSold: sharesToSell,
+        newSharePrice: newSharePrice,
+        timestamp: new Date()
+      });
+
+      // Broadcast pool update to all connected users
+      io.emit('pool_updated', {
+        poolId: pool._id,
+        poolName: pool.name,
+        availableBalance: pool.availableBalance,
+        totalShares: pool.totalShares,
+        sharePrice: newSharePrice,
+        timestamp: new Date()
+      });
+    }
 
     res.json({
       success: true,

@@ -116,11 +116,11 @@ export function InvestmentConfirmationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[550px] p-0 gap-0 max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="p-6 pb-4">
+      <DialogContent className="max-w-[95vw] sm:max-w-[500px] p-0 gap-0 max-h-[90vh] overflow-y-auto overflow-x-hidden">
+        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <DialogTitle className="flex items-center gap-2 text-2xl mb-2">
+              <DialogTitle className="flex items-center gap-2 text-lg sm:text-2xl mb-2">
                 <TrendingUp className="h-6 w-6 text-primary" />
                 Invest in {poolName}
               </DialogTitle>
@@ -131,7 +131,7 @@ export function InvestmentConfirmationModal({
           </div>
         </DialogHeader>
 
-        <div className="px-6 pb-6 space-y-5">
+        <div className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4 sm:space-y-5">
           {/* Risk Alert Banner */}
           <div className={`${getRiskColor()} border border-current/20 rounded-lg p-4 flex items-start gap-3`}>
             <AlertTriangle className="h-5 w-5 mt-0.5 flex-shrink-0" />

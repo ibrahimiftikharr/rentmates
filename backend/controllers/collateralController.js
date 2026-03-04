@@ -204,6 +204,29 @@ exports.confirmCollateralDeposit = async (req, res) => {
     
     console.log(`✅ Collateral deposited for loan ${loanId}, loan approved and activated`);
     
+    // ✅ Emit Socket.IO events for real-time loan approval update
+    const io = req.app.get('io');
+    if (io) {
+      // Notify the student/borrower
+      io.to(`user_${userId}`).emit('loan_approved', {
+        loanId: loan._id,
+        poolName: loan.poolName,
+        amount: loan.loanAmount,
+        duration: loan.duration,
+        apr: loan.lockedAPR,
+        timestamp: new Date()
+      });
+
+      // Broadcast pool update to all connected users (investors might be interested)
+      io.emit('pool_updated', {
+        poolId: loan.pool,
+        poolName: loan.poolName,
+        availableBalance: pool?.availableBalance,
+        disbursedLoans: pool?.disbursedLoans,
+        timestamp: new Date()
+      });
+    }
+    
     res.json({
       success: true,
       message: 'Collateral deposit confirmed and loan approved',
