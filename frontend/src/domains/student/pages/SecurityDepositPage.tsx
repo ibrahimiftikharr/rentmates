@@ -44,33 +44,66 @@ export function SecurityDepositPage() {
 
   useEffect(() => {
     // Ensure socket is connected
-    socketService.connect();
-    console.log('[SecurityDepositPage] Socket connection status:', socketService.isConnected());
+    const socket = socketService.connect();
+    console.log('[SecurityDepositPage] Initializing socket connection...');
     
+    // Initial data fetch
     fetchSecurityDepositStatus();
 
-    // Listen for real-time security deposit updates
-    socketService.on('security_deposit_paid', (data: any) => {
-      console.log('[SecurityDepositPage] Security deposit paid (real-time):', data);
+    // Set up socket event handlers
+    const handleDepositPaid = (data: any) => {
+      console.log('[SecurityDepositPage] 💰 Security deposit paid event received:', data);
       toast.success('Security deposit payment confirmed! 🎉');
-      fetchSecurityDepositStatus();
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchSecurityDepositStatus();
+      }, 500);
+    };
 
-    socketService.on('security_deposit_refunded', (data: any) => {
-      console.log('[SecurityDepositPage] Security deposit refunded (real-time):', data);
+    const handleDepositRefunded = (data: any) => {
+      console.log('[SecurityDepositPage] 💸 Security deposit refunded event received:', data);
       toast.success(`Security deposit refunded: $${data.amount} USDT! Contract terminated.`);
-      fetchSecurityDepositStatus();
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchSecurityDepositStatus();
+      }, 500);
+    };
 
-    socketService.on('security_deposit_status_updated', (data: any) => {
-      console.log('[SecurityDepositPage] Security deposit status updated (real-time):', data);
-      fetchSecurityDepositStatus();
-    });
+    const handleStatusUpdated = (data: any) => {
+      console.log('[SecurityDepositPage] 🔄 Security deposit status updated event received:', data);
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchSecurityDepositStatus();
+      }, 500);
+    };
 
+    // Wait for socket connection before attaching listeners
+    if (socket) {
+      socket.on('connect', () => {
+        console.log('[SecurityDepositPage] ✅ Socket connected, setting up event listeners');
+      });
+
+      socket.on('disconnect', () => {
+        console.log('[SecurityDepositPage] ⚠️ Socket disconnected');
+      });
+
+      socket.on('reconnect', () => {
+        console.log('[SecurityDepositPage] 🔄 Socket reconnected, refreshing data');
+        fetchSecurityDepositStatus();
+      });
+    }
+
+    // Attach event listeners
+    socketService.on('security_deposit_paid', handleDepositPaid);
+    socketService.on('security_deposit_refunded', handleDepositRefunded);
+    socketService.on('security_deposit_status_updated', handleStatusUpdated);
+
+    // Cleanup function
     return () => {
-      socketService.off('security_deposit_paid');
-      socketService.off('security_deposit_refunded');
-      socketService.off('security_deposit_status_updated');
+      console.log('[SecurityDepositPage] Cleaning up socket listeners');
+      socketService.off('security_deposit_paid', handleDepositPaid);
+      socketService.off('security_deposit_refunded', handleDepositRefunded);
+      socketService.off('security_deposit_status_updated', handleStatusUpdated);
     };
   }, []);
 

@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { visitRequestService, VisitRequest as VisitRequestType } from '@/shared/services/visitRequestService';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
+import { getUserTimeZone, convertUTCToLocal, convertLocalToUTC, addMinutesToTime, formatDateForAPI } from '@/shared/utils/timezone';
 
 interface VisitRequest {
   id: string;
@@ -115,14 +116,15 @@ export function VisitRequestsPage() {
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [landlordTimeZone] = useState<string>(getUserTimeZone());
 
   useEffect(() => {
     fetchVisitRequests();
 
     // Listen for real-time updates
     socketService.on('new_visit_request', () => {
+      console.log('📩 New visit request received - refreshing list');
       fetchVisitRequests();
-      toast.info('New visit request received');
     });
 
     socketService.on('visit_request_updated', () => {
@@ -143,6 +145,23 @@ export function VisitRequestsPage() {
       
       // Transform backend data to match UI structure
       const transformedRequests: VisitRequest[] = response.map((request: VisitRequestType) => {
+        // Convert UTC time to landlord's local time for display
+        let localTime = request.visitTime || '';
+        let localTimeEnd = '';
+        if (request.visitDate && request.visitTime) {
+          try {
+            localTime = convertUTCToLocal(request.visitTime, request.visitDate, landlordTimeZone);
+            if (request.visitTimeEnd) {
+              localTimeEnd = convertUTCToLocal(request.visitTimeEnd, request.visitDate, landlordTimeZone);
+            } else {
+              localTimeEnd = addMinutesToTime(localTime, 30);
+            }
+          } catch (error) {
+            console.error('Error converting time:', error);
+            localTime = request.visitTime;
+          }
+        }
+
         const transformed = {
           id: request._id,
           propertyName: request.property?.title || 'Property',
@@ -153,7 +172,7 @@ export function VisitRequestsPage() {
           studentPhoto: request.student?.profilePicture || request.student?.documents?.profileImage || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(request.student?.fullName || 'Student'),
           visitType: (request.visitType === 'virtual' ? 'virtual' : 'physical') as 'virtual' | 'physical',
           requestedDate: request.visitDate ? new Date(request.visitDate).toISOString().split('T')[0] : '',
-          requestedTime: request.visitTime || '',
+          requestedTime: localTimeEnd ? `${localTime} - ${localTimeEnd}` : localTime,
           status: request.status === 'confirmed' || request.status === 'rescheduled' ? 'confirmed' : 
                   request.status === 'rejected' ? 'disapproved' : 
                   request.status === 'completed' ? 'completed' : 'pending',
@@ -278,21 +297,28 @@ export function VisitRequestsPage() {
 
     try {
       setIsRescheduling(true);
+      
+      // Convert landlord's local time to UTC for storage
+      const utcTime = convertLocalToUTC(rescheduleTime, rescheduleDate, landlordTimeZone);
+      
+      // Format date as YYYY-MM-DD to preserve the local date without timezone conversion
+      const dateString = formatDateForAPI(rescheduleDate);
+      
       await visitRequestService.rescheduleVisitRequest(
         showRescheduleModal!,
-        rescheduleDate.toISOString(),
-        rescheduleTime,
+        dateString,
+        utcTime, // Send UTC time to backend
         landlordNotes
       );
       
-      // Optimistically update the local state immediately
+      // Optimistically update the local state immediately with local time for display
       setRequests(prevRequests => 
         prevRequests.map(req => 
           req.id === showRescheduleModal 
             ? {
                 ...req,
-                requestedDate: rescheduleDate.toISOString().split('T')[0],
-                requestedTime: rescheduleTime,
+                requestedDate: dateString,
+                requestedTime: `${rescheduleTime} - ${addMinutesToTime(rescheduleTime, 30)}`,
                 notes: landlordNotes,
                 status: 'confirmed'
               }

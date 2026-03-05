@@ -9,7 +9,7 @@ const { emitDashboardUpdate } = require('../utils/socketHelpers');
 const createVisitRequest = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { propertyId, visitType, visitDate, visitTime } = req.body;
+    const { propertyId, visitType, visitDate, visitTime, visitTimeEnd, studentTimeZone } = req.body;
 
     // Validate required fields
     if (!propertyId || !visitType || !visitDate || !visitTime) {
@@ -44,6 +44,29 @@ const createVisitRequest = async (req, res) => {
       landlordId: property.landlord._id
     });
 
+    // Check for conflicting visit requests (same property, date, and overlapping time)
+    const requestedDate = new Date(visitDate);
+    requestedDate.setHours(0, 0, 0, 0);
+    const nextDay = new Date(requestedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const conflictingRequests = await VisitRequest.find({
+      property: property._id,
+      visitDate: {
+        $gte: requestedDate,
+        $lt: nextDay
+      },
+      visitTime: visitTime, // Same time slot
+      status: { $in: ['pending', 'confirmed', 'rescheduled'] } // Only active requests
+    });
+
+    if (conflictingRequests.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'This time slot is already booked. Please select another time.'
+      });
+    }
+
     // Create visit request
     const visitRequest = new VisitRequest({
       student: student._id,
@@ -51,7 +74,9 @@ const createVisitRequest = async (req, res) => {
       landlord: property.landlord._id,
       visitType,
       visitDate: new Date(visitDate),
-      visitTime,
+      visitTime, // stored in UTC
+      visitTimeEnd, // end of 30-minute slot in UTC
+      studentTimeZone: studentTimeZone || 'UTC',
       status: 'pending'
     });
 
@@ -547,6 +572,69 @@ const completeVisitRequest = async (req, res) => {
   }
 };
 
+// Get available time slots for a property on a specific date
+const getAvailableTimeSlots = async (req, res) => {
+  try {
+    const { propertyId, date } = req.query;
+
+    if (!propertyId || !date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Property ID and date are required'
+      });
+    }
+
+    // Parse the date
+    const requestedDate = new Date(date);
+    requestedDate.setHours(0, 0, 0, 0);
+    const nextDay = new Date(requestedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    // Get all booked time slots for this property on this date
+    const bookedSlots = await VisitRequest.find({
+      property: propertyId,
+      visitDate: {
+        $gte: requestedDate,
+        $lt: nextDay
+      },
+      status: { $in: ['pending', 'confirmed', 'rescheduled'] }
+    }).select('visitTime visitTimeEnd');
+
+    // Extract booked times
+    const bookedTimes = bookedSlots.map(slot => slot.visitTime);
+
+    // Generate all possible 30-minute time slots (8:00 - 20:00 UTC)
+    const allSlots = [];
+    for (let hour = 8; hour < 20; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const startTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const endMinute = minute + 30;
+        const endHour = endMinute >= 60 ? hour + 1 : hour;
+        const adjustedEndMinute = endMinute >= 60 ? 0 : endMinute;
+        const endTime = `${String(endHour).padStart(2, '0')}:${String(adjustedEndMinute).padStart(2, '0')}`;
+        
+        allSlots.push({
+          startTime,
+          endTime,
+          available: !bookedTimes.includes(startTime)
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      date: requestedDate,
+      slots: allSlots
+    });
+  } catch (error) {
+    console.error('Get available time slots error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch available time slots'
+    });
+  }
+};
+
 module.exports = {
   createVisitRequest,
   getStudentVisitRequests,
@@ -554,5 +642,6 @@ module.exports = {
   confirmVisitRequest,
   rescheduleVisitRequest,
   rejectVisitRequest,
-  completeVisitRequest
+  completeVisitRequest,
+  getAvailableTimeSlots
 };

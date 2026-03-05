@@ -434,19 +434,13 @@ export function ViewContractPage({ contractId, onNavigate }: ViewContractPagePro
                           Either party may terminate early with <span className="font-semibold">60 days' notice</span>.
                         </p>
                         <p className="text-muted-foreground ml-4">
-                          Deposit remains in 60-day hold for dispute resolution.
+                          Deposit remains in 7-day hold for dispute resolution.
                         </p>
                       </div>
                       <div>
                         <p className="font-semibold text-foreground">• Student Withdrawal Before Move-in:</p>
                         <p className="text-muted-foreground ml-4">
-                          In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.
-                        </p>
-                        <p className="text-muted-foreground ml-4 mt-1">
-                          ◦ If rent not paid → Full refund.
-                        </p>
-                        <p className="text-muted-foreground ml-4">
-                          ◦ If rent paid → Funds held 60 days before resolution and refund.
+                          In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel and request security deposit refund before move-in. Full deposit refund will be issued in this case.
                         </p>
                       </div>
                     </div>

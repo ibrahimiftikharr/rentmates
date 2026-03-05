@@ -7,7 +7,11 @@ const authenticateToken = require('../middleware/authenticateToken');
 router.get('/students', authenticateToken, publicStudentController.getPublicStudents);
 router.get('/students/:studentId', authenticateToken, publicStudentController.getPublicStudentProfile);
 
-// Get students with compatibility scores (for Student Dashboard)
+// Get students with compatibility scores (for Student Dashboard) - LEGACY
 router.get('/students-compatibility', authenticateToken, publicStudentController.getStudentsWithCompatibility);
+
+// Progressive loading endpoints (NEW - recommended)
+router.get('/students-fast', authenticateToken, publicStudentController.getStudentsFast);
+router.post('/calculate-compatibility', authenticateToken, publicStudentController.calculateCompatibilityScores);
 
 module.exports = router;

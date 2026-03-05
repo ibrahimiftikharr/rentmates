@@ -37,40 +37,77 @@ export function LandlordSecurityDepositPage() {
 
   useEffect(() => {
     // Ensure socket is connected
-    socketService.connect();
-    console.log('[LandlordSecurityDepositPage] Socket connection status:', socketService.isConnected());
+    const socket = socketService.connect();
+    console.log('[LandlordSecurityDepositPage] Initializing socket connection...');
     
+    // Initial data fetch
     fetchRentalsWithSecurityDeposit();
 
-    // Listen for real-time security deposit updates
-    socketService.on('security_deposit_refunded', (data: any) => {
-      console.log('[LandlordSecurityDepositPage] Security deposit refunded (real-time):', data);
+    // Set up socket event handlers
+    const handleDepositRefunded = (data: any) => {
+      console.log('[LandlordSecurityDepositPage] 💸 Security deposit refunded event received:', data);
       toast.success(`Security deposit of $${data.amount} refunded successfully!`);
-      fetchRentalsWithSecurityDeposit();
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchRentalsWithSecurityDeposit();
+      }, 500);
+    };
 
-    socketService.on('security_deposit_status_updated', (data: any) => {
-      console.log('[LandlordSecurityDepositPage] Security deposit status updated (real-time):', data);
-      fetchRentalsWithSecurityDeposit();
-    });
+    const handleStatusUpdated = (data: any) => {
+      console.log('[LandlordSecurityDepositPage] 🔄 Security deposit status updated event received:', data);
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchRentalsWithSecurityDeposit();
+      }, 500);
+    };
 
-    socketService.on('contract_terminated', (data: any) => {
-      console.log('[LandlordSecurityDepositPage] Contract terminated (real-time):', data);
+    const handleContractTerminated = (data: any) => {
+      console.log('[LandlordSecurityDepositPage] ⚠️ Contract terminated event received:', data);
       toast.info(`Contract terminated for ${data.propertyTitle}`);
-      fetchRentalsWithSecurityDeposit();
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchRentalsWithSecurityDeposit();
+      }, 500);
+    };
 
-    socketService.on('security_deposit_paid', (data: any) => {
-      console.log('[LandlordSecurityDepositPage] Security deposit paid (real-time):', data);
+    const handleDepositPaid = (data: any) => {
+      console.log('[LandlordSecurityDepositPage] 💰 Security deposit paid event received:', data);
       toast.success('Student has paid the security deposit!');
-      fetchRentalsWithSecurityDeposit();
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchRentalsWithSecurityDeposit();
+      }, 500);
+    };
 
+    // Wait for socket connection before attaching listeners
+    if (socket) {
+      socket.on('connect', () => {
+        console.log('[LandlordSecurityDepositPage] ✅ Socket connected, setting up event listeners');
+      });
+
+      socket.on('disconnect', () => {
+        console.log('[LandlordSecurityDepositPage] ⚠️ Socket disconnected');
+      });
+
+      socket.on('reconnect', () => {
+        console.log('[LandlordSecurityDepositPage] 🔄 Socket reconnected, refreshing data');
+        fetchRentalsWithSecurityDeposit();
+      });
+    }
+
+    // Attach event listeners
+    socketService.on('security_deposit_refunded', handleDepositRefunded);
+    socketService.on('security_deposit_status_updated', handleStatusUpdated);
+    socketService.on('contract_terminated', handleContractTerminated);
+    socketService.on('security_deposit_paid', handleDepositPaid);
+
+    // Cleanup function
     return () => {
-      socketService.off('security_deposit_refunded');
-      socketService.off('security_deposit_status_updated');
-      socketService.off('contract_terminated');
-      socketService.off('security_deposit_paid');
+      console.log('[LandlordSecurityDepositPage] Cleaning up socket listeners');
+      socketService.off('security_deposit_refunded', handleDepositRefunded);
+      socketService.off('security_deposit_status_updated', handleStatusUpdated);
+      socketService.off('contract_terminated', handleContractTerminated);
+      socketService.off('security_deposit_paid', handleDepositPaid);
     };
   }, []);
 

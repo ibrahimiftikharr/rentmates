@@ -23,9 +23,9 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
   const [loading, setLoading] = useState(true);
   const [filteredStudents, setFilteredStudents] = useState<CompatibleStudent[]>([]);
 
-  // Fetch students on mount
+  // Fetch students on mount with progressive loading
   useEffect(() => {
-    fetchStudents();
+    fetchStudentsWithProgressiveLoading();
   }, []);
 
   // Filter students when search or filters change
@@ -33,15 +33,33 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
     applyFilters();
   }, [searchQuery, selectedUniversity, selectedNationality, students]);
 
-  const fetchStudents = async () => {
+  const fetchStudentsWithProgressiveLoading = async () => {
     try {
       setLoading(true);
-      const data = await studentSearchService.getStudentsWithCompatibility();
+      
+      // Step 1: Load students FAST without compatibility scores
+      const data = await studentSearchService.getStudentsFast();
       setStudents(data);
+      setLoading(false); // Display students immediately
+      
+      // Step 2: Calculate compatibility scores in background
+      if (data.length > 0) {
+        const studentIds = data.map(s => s.id);
+        
+        // Call backend to calculate scores
+        const scores = await studentSearchService.calculateCompatibilityScores(studentIds);
+        
+        // Update students with calculated scores
+        setStudents(prevStudents => 
+          prevStudents.map(student => ({
+            ...student,
+            compatibilityScore: scores[student.id]?.compatibilityScore ?? student.compatibilityScore
+          }))
+        );
+      }
     } catch (error: any) {
       console.error('Failed to fetch students:', error);
       toast.error(error.message || 'Failed to load students');
-    } finally {
       setLoading(false);
     }
   };
@@ -78,7 +96,8 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
   const universities = ['all', ...Array.from(new Set(students.map(s => s.university)))];
   const nationalities = ['all', ...Array.from(new Set(students.map(s => s.nationality)))];
 
-  const getCompatibilityColor = (score: number) => {
+  const getCompatibilityColor = (score: number | null) => {
+    if (score === null) return 'bg-gray-400';
     if (score >= 85) return 'bg-green-500';
     if (score >= 70) return 'bg-blue-500';
     return 'bg-orange-500';
@@ -247,16 +266,22 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
                       <div className="flex flex-col items-center">
                         <div className="relative mb-3">
                           <Avatar className="w-28 h-28 border-4 border-white shadow-[0_4px_14px_rgb(0,0,0,0.15)]">
-                            <AvatarImage src={student.photo} alt={student.name} className="object-cover" />
+                            <AvatarImage src={student.photo || undefined} alt={student.name} className="object-cover" />
                             <AvatarFallback className="text-xl bg-primary/20">
                               {student.name.split(' ').map(n => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
                           {/* Compatibility Badge */}
-                          <div className={`absolute -bottom-1 -right-1 ${getCompatibilityColor(student.compatibilityScore)} text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1`}>
-                            <Heart className="w-3.5 h-3.5 fill-white" />
-                            {student.compatibilityScore}%
-                          </div>
+                          {student.compatibilityScore !== null ? (
+                            <div className={`absolute -bottom-1 -right-1 ${getCompatibilityColor(student.compatibilityScore)} text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1`}>
+                              <Heart className="w-3.5 h-3.5 fill-white" />
+                              {student.compatibilityScore}%
+                            </div>
+                          ) : (
+                            <div className="absolute -bottom-1 -right-1 bg-gray-400 text-white px-2.5 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            </div>
+                          )}
                         </div>
 
                         <h3 className="text-center mb-0.5">{student.name}</h3>
@@ -288,13 +313,24 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-muted-foreground font-medium">Compatibility Match</span>
-                          <span className="font-semibold text-primary">{student.compatibilityScore}%</span>
+                          {student.compatibilityScore !== null ? (
+                            <span className="font-semibold text-primary">{student.compatibilityScore}%</span>
+                          ) : (
+                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Calculating...
+                            </span>
+                          )}
                         </div>
                         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${getCompatibilityColor(student.compatibilityScore)} transition-all duration-500`}
-                            style={{ width: `${student.compatibilityScore}%` }}
-                          />
+                          {student.compatibilityScore !== null ? (
+                            <div
+                              className={`h-full ${getCompatibilityColor(student.compatibilityScore)} transition-all duration-500`}
+                              style={{ width: `${student.compatibilityScore}%` }}
+                            />
+                          ) : (
+                            <div className="h-full bg-gradient-to-r from-gray-300 via-gray-400 to-gray-300 animate-pulse" style={{ width: '100%' }} />
+                          )}
                         </div>
                       </div>
 

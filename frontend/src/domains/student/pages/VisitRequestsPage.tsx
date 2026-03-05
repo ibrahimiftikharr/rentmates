@@ -7,6 +7,7 @@ import { Separator } from '@/shared/ui/separator';
 import { visitRequestService, VisitRequest as VisitRequestType } from '@/shared/services/visitRequestService';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
+import { getUserTimeZone, convertUTCToLocal, addMinutesToTime } from '@/shared/utils/timezone';
 
 interface VisitRequest {
   id: string;
@@ -27,6 +28,7 @@ export function VisitRequestsPage() {
   const [visitRequests, setVisitRequests] = useState<VisitRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState<'confirmed' | 'pending' | 'completed'>('confirmed');
+  const [studentTimeZone] = useState<string>(getUserTimeZone());
 
   useEffect(() => {
     fetchVisitRequests();
@@ -66,7 +68,24 @@ export function VisitRequestsPage() {
       
       // Transform backend data to match UI structure
       const transformedRequests: VisitRequest[] = response.map((request: VisitRequestType) => {
-        console.log('Transforming request:', { id: request._id, status: request.status });
+        
+        // Convert UTC time to student's local time for display
+        let localTime = request.visitTime || '';
+        let localTimeEnd = '';
+        if (request.visitDate && request.visitTime) {
+          try {
+            localTime = convertUTCToLocal(request.visitTime, request.visitDate, studentTimeZone);
+            if (request.visitTimeEnd) {
+              localTimeEnd = convertUTCToLocal(request.visitTimeEnd, request.visitDate, studentTimeZone);
+            } else {
+              localTimeEnd = addMinutesToTime(localTime, 30);
+            }
+          } catch (error) {
+            console.error('Error converting time:', error);
+            localTime = request.visitTime;
+          }
+        }
+        
         return {
           id: request._id,
           propertyTitle: request.property?.title || 'Property',
@@ -76,7 +95,7 @@ export function VisitRequestsPage() {
           status: request.status as any,
           requestDate: new Date(request.createdAt).toLocaleDateString(),
           scheduledDate: request.visitDate ? new Date(request.visitDate).toLocaleDateString() : undefined,
-          scheduledTime: request.visitTime,
+          scheduledTime: localTimeEnd ? `${localTime} - ${localTimeEnd}` : localTime,
           meetingLink: request.meetLink,
           rejectionReason: request.rejectionReason,
           landlordNotes: request.landlordNotes,

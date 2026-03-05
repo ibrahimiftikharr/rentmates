@@ -6,6 +6,9 @@ const authenticateToken = require('../middleware/authenticateToken');
 // All routes require authentication
 router.use(authenticateToken);
 
+// Get available time slots (Student)
+router.get('/available-slots', visitRequestController.getAvailableTimeSlots);
+
 // Student routes
 router.post('/', visitRequestController.createVisitRequest);
 router.get('/student', visitRequestController.getStudentVisitRequests);

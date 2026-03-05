@@ -1041,12 +1041,10 @@ If fraudulent or misrepresented conditions are found, the tenant may cancel befo
 
 • Early Termination:
   Either party may terminate early with 60 days' notice.
-  Deposit remains in 60-day hold for dispute resolution.
+  Deposit remains in 7-day hold for dispute resolution.
 
 • Student Withdrawal Before Move-in:
-  In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.
-  ◦ If rent not paid → Full refund.
-  ◦ If rent paid → Funds held 60 days before resolution and refund.
+  In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel and request security deposit refund before move-in. Full deposit refund will be issued in this case.
 
 7. Inspections & Utilities
 The landlord may request an inspection with 24-hour prior notice.
@@ -1094,24 +1092,51 @@ exports.getLandlordTenants = async (req, res) => {
       .populate('property', 'title address')
       .sort({ contractSignedDate: -1 });
 
-    const tenantsData = rentals.map(rental => ({
-      id: rental._id,
-      name: rental.studentInfo.name,
-      email: rental.studentInfo.email,
-      photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(rental.studentInfo.name)}`,
-      propertyTitle: rental.propertyInfo.title,
-      propertyAddress: rental.propertyInfo.address,
-      moveInDate: rental.movingDate,
-      monthlyRent: rental.monthlyRentAmount.toString(),
-      rentDueDay: rental.monthlyRentDueDate,
-      leaseDuration: rental.leaseDuration || '12',
-      leaseEndDate: rental.leaseEndDate,
-      status: rental.status,
-      securityDeposit: rental.securityDepositAmount.toString(),
-      securityDepositDueDate: rental.securityDepositDueDate,
-      contractSignedDate: rental.contractSignedDate,
-      actionHistory: rental.actionHistory || []
-    }));
+    const tenantsData = rentals.map(rental => {
+      // Calculate correct status based on dates and current status
+      let calculatedStatus = rental.status;
+      const now = new Date();
+      const moveInDate = new Date(rental.movingDate);
+      const leaseEndDate = rental.leaseEndDate ? new Date(rental.leaseEndDate) : null;
+
+      // If rental is not terminated, calculate status based on dates
+      if (rental.status !== 'terminated') {
+        if (now < moveInDate) {
+          // Before move-in date - should be 'registered'
+          calculatedStatus = 'registered';
+        } else if (leaseEndDate && now >= leaseEndDate) {
+          // After lease end date - should be 'completed'
+          calculatedStatus = 'completed';
+        } else if (now >= moveInDate && rental.securityDepositStatus === 'paid') {
+          // Between move-in and lease end, deposit paid - should be 'active'
+          calculatedStatus = 'active';
+        } else if (now >= moveInDate && rental.securityDepositStatus !== 'paid') {
+          // After move-in but deposit not paid - stays 'registered'
+          calculatedStatus = 'registered';
+        }
+      }
+
+      return {
+        id: rental._id,
+        name: rental.studentInfo.name,
+        email: rental.studentInfo.email,
+        photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(rental.studentInfo.name)}`,
+        propertyTitle: rental.propertyInfo.title,
+        propertyAddress: rental.propertyInfo.address,
+        moveInDate: rental.movingDate,
+        monthlyRent: rental.monthlyRentAmount.toString(),
+        rentDueDay: rental.monthlyRentDueDate,
+        leaseDuration: rental.leaseDuration || '12',
+        leaseEndDate: rental.leaseEndDate,
+        status: calculatedStatus,
+        securityDeposit: rental.securityDepositAmount.toString(),
+        securityDepositDueDate: rental.securityDepositDueDate,
+        contractSignedDate: rental.contractSignedDate,
+        actionHistory: rental.actionHistory || [],
+        terminationReason: rental.terminationReason,
+        terminatedAt: rental.terminatedAt
+      };
+    });
 
     res.json({
       success: true,

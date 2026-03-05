@@ -66,23 +66,25 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
   // Fetch join requests from API
   useEffect(() => {
     // Ensure socket is connected
-    socketService.connect();
-    console.log('[LandlordJoinRequestsPage] Socket connection status:', socketService.isConnected());
+    const socket = socketService.connect();
+    console.log('[LandlordJoinRequestsPage] Initializing socket connection...');
     
+    // Initial data fetch
     fetchJoinRequests();
 
-    // Listen for new join requests via Socket.IO
-    socketService.on('new_join_request', (data: any) => {
-      console.log('[LandlordJoinRequestsPage] New join request received:', data);
+    // Set up socket event handlers
+    const handleNewJoinRequest = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] 📨 New join request received:', data);
       toast.info(`New join request from ${data.student?.name || 'a student'}`);
-      fetchJoinRequests(); // Refresh the list
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchJoinRequests();
+      }, 500);
+    };
 
-    // Listen for contract signed by student
-    socketService.on('contract_student_signed', (data: any) => {
-      console.log('Student signed contract (real-time):', data);
+    const handleContractStudentSigned = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] ✍️ Student signed contract:', data);
       toast.info(`${data.studentName} has signed the rental contract for "${data.propertyTitle}". Please review and sign.`);
-      
       // Update the specific join request in the list
       setRequests(prev =>
         prev.map(req =>
@@ -90,18 +92,15 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
             ? {
                 ...req,
                 studentSigned: true,
-                // Keep status as 'approved' since we map 'waiting_completion' to 'approved'
                 status: 'approved' as const
               }
             : req
         )
       );
-    });
+    };
 
-    // Listen for status updates on our own actions
-    socketService.on('join_request_status_updated', (data: any) => {
-      console.log('[LandlordJoinRequestsPage] Join request status updated (real-time):', data);
-      
+    const handleJoinRequestStatusUpdated = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] 🔄 Join request status updated:', data);
       // Update the specific join request status
       setRequests(prev =>
         prev.map(req =>
@@ -116,12 +115,10 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
             : req
         )
       );
-    });
+    };
 
-    // Listen for contract completion updates
-    socketService.on('contract_status_updated', (data: any) => {
-      console.log('Contract status updated (real-time):', data);
-      
+    const handleContractStatusUpdated = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] 📝 Contract status updated:', data);
       // Update the specific join request with signing statuses
       setRequests(prev =>
         prev.map(req =>
@@ -137,21 +134,48 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
             : req
         )
       );
-    });
+    };
 
-    // Listen for contract termination (security deposit refund)
-    socketService.on('contract_terminated', (data: any) => {
-      console.log('[LandlordJoinRequestsPage] Contract terminated by student (real-time):', data);
+    const handleContractTerminated = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] ⚠️ Contract terminated:', data);
       toast.info(`Contract terminated for ${data.propertyTitle}. Student requested refund.`);
-      // No fetch needed - join_request_status_updated already handles the state update
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchJoinRequests();
+      }, 500);
+    };
 
+    // Wait for socket connection before attaching listeners
+    if (socket) {
+      socket.on('connect', () => {
+        console.log('[LandlordJoinRequestsPage] ✅ Socket connected, setting up event listeners');
+      });
+
+      socket.on('disconnect', () => {
+        console.log('[LandlordJoinRequestsPage] ⚠️ Socket disconnected');
+      });
+
+      socket.on('reconnect', () => {
+        console.log('[LandlordJoinRequestsPage] 🔄 Socket reconnected, refreshing data');
+        fetchJoinRequests();
+      });
+    }
+
+    // Attach event listeners
+    socketService.on('new_join_request', handleNewJoinRequest);
+    socketService.on('contract_student_signed', handleContractStudentSigned);
+    socketService.on('join_request_status_updated', handleJoinRequestStatusUpdated);
+    socketService.on('contract_status_updated', handleContractStatusUpdated);
+    socketService.on('contract_terminated', handleContractTerminated);
+
+    // Cleanup function
     return () => {
-      socketService.off('new_join_request');
-      socketService.off('contract_student_signed');
-      socketService.off('join_request_status_updated');
-      socketService.off('contract_status_updated');
-      socketService.off('contract_terminated');
+      console.log('[LandlordJoinRequestsPage] Cleaning up socket listeners');
+      socketService.off('new_join_request', handleNewJoinRequest);
+      socketService.off('contract_student_signed', handleContractStudentSigned);
+      socketService.off('join_request_status_updated', handleJoinRequestStatusUpdated);
+      socketService.off('contract_status_updated', handleContractStatusUpdated);
+      socketService.off('contract_terminated', handleContractTerminated);
     };
   }, []);
 

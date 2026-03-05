@@ -40,7 +40,7 @@ interface Tenant {
   moveInDate: string;
   monthlyRent: string;
   leaseDuration: string;
-  status: 'active' | 'terminating' | 'completed' | 'terminated';
+  status: 'registered' | 'active' | 'terminating' | 'completed' | 'terminated';
   securityDeposit: string;
   actionHistory: ActionHistory[];
   terminationReason?: string;
@@ -180,17 +180,56 @@ export function TenantsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Ensure socket is connected
+    const socket = socketService.connect();
+    console.log('[TenantsPage] Initializing socket connection...');
+    
+    // Initial data fetch
     fetchTenants();
 
-    // Listen for contract termination events
-    socketService.on('contract_terminated', (data: any) => {
-      console.log('Contract terminated event received:', data);
+    // Set up socket event handlers
+    const handleContractTerminated = (data: any) => {
+      console.log('[TenantsPage] ⚠️ Contract terminated event received:', data);
       toast.success('A rental contract has been terminated');
-      fetchTenants(); // Refresh the tenants list
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchTenants();
+      }, 500);
+    };
 
+    const handleDepositRefunded = (data: any) => {
+      console.log('[TenantsPage] 💸 Security deposit refunded event received:', data);
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchTenants();
+      }, 500);
+    };
+
+    // Wait for socket connection before attaching listeners
+    if (socket) {
+      socket.on('connect', () => {
+        console.log('[TenantsPage] ✅ Socket connected, setting up event listeners');
+      });
+
+      socket.on('disconnect', () => {
+        console.log('[TenantsPage] ⚠️ Socket disconnected');
+      });
+
+      socket.on('reconnect', () => {
+        console.log('[TenantsPage] 🔄 Socket reconnected, refreshing data');
+        fetchTenants();
+      });
+    }
+
+    // Attach event listeners
+    socketService.on('contract_terminated', handleContractTerminated);
+    socketService.on('security_deposit_refunded', handleDepositRefunded);
+
+    // Cleanup function
     return () => {
-      socketService.off('contract_terminated');
+      console.log('[TenantsPage] Cleaning up socket listeners');
+      socketService.off('contract_terminated', handleContractTerminated);
+      socketService.off('security_deposit_refunded', handleDepositRefunded);
     };
   }, []);
 
@@ -211,6 +250,8 @@ export function TenantsPage() {
     switch (status) {
       case 'active':
         return 'bg-green-500/10 text-green-700 border-green-200';
+      case 'registered':
+        return 'bg-blue-500/10 text-blue-700 border-blue-200';
       case 'terminating':
         return 'bg-orange-500/10 text-orange-700 border-orange-200';
       case 'terminated':
@@ -255,7 +296,7 @@ export function TenantsPage() {
 
   const getTerminationDate = (securityAmount: string) => {
     const date = new Date();
-    date.setDate(date.getDate() + 60);
+    date.setDate(date.getDate() + 7);
     return date.toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
@@ -303,6 +344,7 @@ export function TenantsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Tenants</SelectItem>
+              <SelectItem value="registered">Registered</SelectItem>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="terminating">Termination Pending</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
@@ -345,6 +387,7 @@ export function TenantsPage() {
                   {/* Right: Status */}
                   <Badge className={`${getStatusColor(tenant.status)} text-xs whitespace-nowrap`}>
                     {tenant.status === 'active' ? 'Active' : 
+                     tenant.status === 'registered' ? 'Registered' :
                      tenant.status === 'terminating' ? 'Termination Pending' : 
                      tenant.status === 'terminated' ? '⚠ TERMINATED' :
                      'Completed'}
@@ -443,7 +486,7 @@ export function TenantsPage() {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                  {tenant.status === 'active' && (
+                  {(tenant.status === 'active' || tenant.status === 'registered') && (
                     <Button
                       variant="outline"
                       onClick={() => setShowTerminateModal(tenant.id)}
@@ -534,7 +577,7 @@ export function TenantsPage() {
             </p>
             <div className="bg-yellow-500/10 border border-yellow-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-[#4A4A68] mb-2">
-                As per the agreement, the contract and security deposit of <strong>£{tenants.find(t => t.id === showTerminateModal)?.securityDeposit}</strong> will remain on hold for <strong>60 days</strong>.
+                As per the agreement, the contract and security deposit of <strong>£{tenants.find(t => t.id === showTerminateModal)?.securityDeposit}</strong> will remain on hold for <strong>7 days</strong>.
               </p>
               <p className="text-sm text-[#4A4A68] mb-2">
                 The contract will be officially terminated and security auto-refunded on <strong>{getTerminationDate(tenants.find(t => t.id === showTerminateModal)?.securityDeposit || '0')}</strong>.
