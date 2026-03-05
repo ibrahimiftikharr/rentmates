@@ -26,6 +26,7 @@ export interface LandlordProfile {
   id: string;
   name: string;
   email: string;
+  walletAddress?: string;
   phone: string;
   nationality: string;
   address: string;

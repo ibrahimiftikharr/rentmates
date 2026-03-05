@@ -25,11 +25,17 @@ export interface VisitRequest {
       name: string;
       email: string;
     };
+    fullName?: string;
+    profilePicture?: string;
+    documents?: {
+      profileImage?: string;
+    };
   };
   property: {
     _id: string;
     title: string;
     address: string;
+    location?: string;
     images?: string[];
     mainImage?: string;
   };
@@ -39,6 +45,7 @@ export interface VisitRequest {
       name: string;
       email: string;
     };
+    fullName?: string;
   };
   visitType: 'virtual' | 'in-person';
   visitDate: string;
@@ -142,6 +149,18 @@ export const visitRequestService = {
       return response.data.visitRequest;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to reject visit request');
+    }
+  },
+
+  /**
+   * Mark visit as completed (Landlord)
+   */
+  async completeVisitRequest(visitRequestId: string): Promise<VisitRequest> {
+    try {
+      const response = await api.put(`/visit-requests/${visitRequestId}/complete`);
+      return response.data.visitRequest;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to mark visit as completed');
     }
   },
 };

@@ -50,8 +50,8 @@ export function ReputationTracking() {
     socketService.on('reputation_updated', (data: any) => {
       console.log('Reputation updated via Socket.IO:', data);
       if (data.reputationScore !== undefined) {
-        setReputationScore(data.reputationScore);
-        updateItemsFromScore(data.reputationScore);
+        // Refetch profile to get accurate completion status for all items
+        fetchReputationData();
         toast.success('Reputation score updated!', {
           description: `Your new score is ${data.reputationScore} points`
         });
@@ -67,12 +67,16 @@ export function ReputationTracking() {
     try {
       setLoading(true);
       const profile = await landlordService.getProfile();
+      console.log('📊 Reputation Profile Data:', {
+        reputationScore: profile.reputationScore,
+        governmentId: profile.governmentId,
+        govIdDocument: profile.govIdDocument,
+        walletAddress: profile.walletAddress
+      });
       setReputationScore(profile.reputationScore || 0);
       
-      // Get user data to check wallet connection
-      const userStr = localStorage.getItem('user');
-      const user = userStr ? JSON.parse(userStr) : null;
-      const walletConnected = !!(user?.walletAddress);
+      // Check wallet connection from profile (backend now includes this)
+      const walletConnected = !!(profile.walletAddress);
       
       // Update items based on profile data
       setItems(prevItems => prevItems.map(item => {
@@ -87,10 +91,15 @@ export function ReputationTracking() {
         if (item.id === 'id-upload') {
           // Gov ID is complete if both governmentId number and document are uploaded
           const isComplete = !!(profile.governmentId && profile.govIdDocument);
+          console.log('🆔 Gov ID complete check:', {
+            governmentId: profile.governmentId,
+            govIdDocument: profile.govIdDocument,
+            isComplete
+          });
           return { ...item, completed: isComplete };
         }
         if (item.id === 'wallet') {
-          // Check if wallet is connected from user data
+          // Check if wallet is connected from profile data
           return { ...item, completed: walletConnected };
         }
         return item;

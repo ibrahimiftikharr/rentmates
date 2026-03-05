@@ -163,6 +163,9 @@ const getStudentVisitRequests = async (req, res) => {
       .populate({ path: 'landlord', populate: { path: 'user', select: 'name email' } })
       .sort({ createdAt: -1 });
 
+    console.log('Found student visit requests:', visitRequests.length);
+    console.log('Student visit request statuses:', visitRequests.map(r => ({ id: r._id, status: r.status })));
+
     // Transform data to include location field
     const transformedRequests = visitRequests.map(req => {
       const reqObj = req.toObject();
@@ -211,15 +214,22 @@ const getLandlordVisitRequests = async (req, res) => {
       .sort({ createdAt: -1 });
 
     console.log('Found visit requests:', visitRequests.length);
+    console.log('Visit request statuses:', visitRequests.map(r => ({ id: r._id, status: r.status })));
 
-    // Transform data to include location field
+    // Transform data to include location field and student profile picture
     const transformedRequests = visitRequests.map(req => {
       const reqObj = req.toObject();
       if (reqObj.property && reqObj.property.address) {
         reqObj.property.location = reqObj.property.address;
       }
-      if (reqObj.student && reqObj.student.user) {
-        reqObj.student.fullName = reqObj.student.user.name;
+      if (reqObj.student) {
+        if (reqObj.student.user) {
+          reqObj.student.fullName = reqObj.student.user.name;
+        }
+        // Include profile picture from documents.profileImage
+        if (reqObj.student.documents && reqObj.student.documents.profileImage) {
+          reqObj.student.profilePicture = reqObj.student.documents.profileImage;
+        }
       }
       return reqObj;
     });
@@ -287,8 +297,15 @@ const confirmVisitRequest = async (req, res) => {
     // Emit Socket.IO event to student
     const io = req.app.get('io');
     if (io) {
-      io.to(`student_${visitRequest.student._id}`).emit('visit_confirmed', {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_confirmed', {
         notification,
+        visitRequest
+      });
+
+      // Also emit to landlord for real-time update on their dashboard
+      const landlordUserId = req.user.id;
+      io.to(`landlord_${landlordUserId}`).emit('visit_request_updated', {
         visitRequest
       });
     }
@@ -325,8 +342,8 @@ const rescheduleVisitRequest = async (req, res) => {
     }
 
     visitRequest.status = 'rescheduled';
-    visitRequest.rescheduledDate = new Date(newDate);
-    visitRequest.rescheduledTime = newTime;
+    visitRequest.visitDate = new Date(newDate);
+    visitRequest.visitTime = newTime;
     visitRequest.landlordNotes = landlordNotes;
     visitRequest.updatedAt = new Date();
 
@@ -343,10 +360,8 @@ const rescheduleVisitRequest = async (req, res) => {
       relatedModel: 'VisitRequest',
       metadata: {
         propertyTitle: visitRequest.property.title,
-        originalDate: visitRequest.visitDate,
-        originalTime: visitRequest.visitTime,
-        newDate: visitRequest.rescheduledDate,
-        newTime: visitRequest.rescheduledTime,
+        newDate: visitRequest.visitDate,
+        newTime: visitRequest.visitTime,
         landlordNotes
       }
     });
@@ -356,8 +371,15 @@ const rescheduleVisitRequest = async (req, res) => {
     // Emit Socket.IO event to student
     const io = req.app.get('io');
     if (io) {
-      io.to(`student_${visitRequest.student._id}`).emit('visit_rescheduled', {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_rescheduled', {
         notification,
+        visitRequest
+      });
+
+      // Also emit to landlord for real-time update on their dashboard
+      const landlordUserId = req.user.id;
+      io.to(`landlord_${landlordUserId}`).emit('visit_request_updated', {
         visitRequest
       });
     }
@@ -421,7 +443,8 @@ const rejectVisitRequest = async (req, res) => {
     // Emit Socket.IO event to student
     const io = req.app.get('io');
     if (io) {
-      io.to(`student_${visitRequest.student._id}`).emit('visit_rejected', {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_rejected', {
         notification,
         visitRequest
       });
@@ -441,11 +464,95 @@ const rejectVisitRequest = async (req, res) => {
   }
 };
 
+// Mark visit as completed (Landlord)
+const completeVisitRequest = async (req, res) => {
+  try {
+    const { visitRequestId } = req.params;
+    console.log('Completing visit request:', visitRequestId);
+
+    const visitRequest = await VisitRequest.findById(visitRequestId)
+      .populate({ path: 'student', populate: { path: 'user', select: 'name email' } })
+      .populate('property', 'title address');
+
+    if (!visitRequest) {
+      console.log('Visit request not found:', visitRequestId);
+      return res.status(404).json({
+        success: false,
+        message: 'Visit request not found'
+      });
+    }
+
+    console.log('Current visit request status:', visitRequest.status);
+
+    if (visitRequest.status !== 'confirmed' && visitRequest.status !== 'rescheduled') {
+      console.log('Visit request cannot be completed. Current status:', visitRequest.status);
+      return res.status(400).json({
+        success: false,
+        message: 'Only confirmed visits can be marked as completed'
+      });
+    }
+
+    visitRequest.status = 'completed';
+    visitRequest.completedAt = new Date();
+    visitRequest.updatedAt = new Date();
+
+    await visitRequest.save();
+    console.log('Visit request saved with status:', visitRequest.status);
+
+    // Create notification for student
+    const notification = new Notification({
+      recipient: visitRequest.student._id,
+      recipientModel: 'Student',
+      type: 'visit_completed',
+      title: 'Visit Completed',
+      message: `Your visit to ${visitRequest.property.title} has been marked as completed`,
+      relatedId: visitRequest._id,
+      relatedModel: 'VisitRequest',
+      metadata: {
+        propertyTitle: visitRequest.property.title,
+        visitDate: visitRequest.visitDate,
+        visitTime: visitRequest.visitTime
+      }
+    });
+
+    await notification.save();
+
+    // Emit Socket.IO event to student
+    const io = req.app.get('io');
+    if (io) {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_completed', {
+        notification,
+        visitRequest
+      });
+
+      // Also emit to landlord for real-time update on their dashboard
+      const landlordUserId = req.user.id;
+      io.to(`landlord_${landlordUserId}`).emit('visit_request_updated', {
+        visitRequest
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Visit marked as completed',
+      visitRequest
+    });
+  } catch (error) {
+    console.error('Complete visit request error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark visit as completed'
+    });
+  }
+};
+
 module.exports = {
   createVisitRequest,
   getStudentVisitRequests,
   getLandlordVisitRequests,
   confirmVisitRequest,
   rescheduleVisitRequest,
-  rejectVisitRequest
+  rejectVisitRequest,
+  completeVisitRequest
 };

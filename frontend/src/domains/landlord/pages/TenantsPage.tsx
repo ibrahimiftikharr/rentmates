@@ -11,7 +11,8 @@ import {
   X,
   Check,
   History,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { Card } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
@@ -20,6 +21,7 @@ import { Input } from '@/shared/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/ui/select';
 import { getLandlordTenants } from '@/shared/services/joinRequestService';
 import { toast } from '@/shared/utils/toast';
+import { socketService } from '@/shared/services/socketService';
 
 interface ActionHistory {
   action: string;
@@ -38,9 +40,11 @@ interface Tenant {
   moveInDate: string;
   monthlyRent: string;
   leaseDuration: string;
-  status: 'active' | 'terminating' | 'completed';
+  status: 'active' | 'terminating' | 'completed' | 'terminated';
   securityDeposit: string;
   actionHistory: ActionHistory[];
+  terminationReason?: string;
+  terminatedAt?: string;
 }
 
 const MOCK_TENANTS: Tenant[] = [
@@ -177,6 +181,17 @@ export function TenantsPage() {
 
   useEffect(() => {
     fetchTenants();
+
+    // Listen for contract termination events
+    socketService.on('contract_terminated', (data: any) => {
+      console.log('Contract terminated event received:', data);
+      toast.success('A rental contract has been terminated');
+      fetchTenants(); // Refresh the tenants list
+    });
+
+    return () => {
+      socketService.off('contract_terminated');
+    };
   }, []);
 
   const fetchTenants = async () => {
@@ -198,6 +213,8 @@ export function TenantsPage() {
         return 'bg-green-500/10 text-green-700 border-green-200';
       case 'terminating':
         return 'bg-orange-500/10 text-orange-700 border-orange-200';
+      case 'terminated':
+        return 'bg-red-600/10 text-red-800 border-red-300';
       case 'completed':
         return 'bg-gray-500/10 text-gray-700 border-gray-200';
       default:
@@ -327,7 +344,10 @@ export function TenantsPage() {
 
                   {/* Right: Status */}
                   <Badge className={`${getStatusColor(tenant.status)} text-xs whitespace-nowrap`}>
-                    {tenant.status === 'active' ? 'Active' : tenant.status === 'terminating' ? 'Termination Pending' : 'Completed'}
+                    {tenant.status === 'active' ? 'Active' : 
+                     tenant.status === 'terminating' ? 'Termination Pending' : 
+                     tenant.status === 'terminated' ? '⚠ TERMINATED' :
+                     'Completed'}
                   </Badge>
                 </div>
 
@@ -385,6 +405,41 @@ export function TenantsPage() {
                     </p>
                   </div>
                 </div>
+
+                {/* Termination Info */}
+                {tenant.status === 'terminated' && (
+                  <div className="mt-4 p-4 rounded-lg bg-red-50 border-2 border-red-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <span className="font-medium text-red-900">Contract Terminated</span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-red-800">This rental contract has been terminated by the student.</p>
+                      {tenant.terminationReason && (
+                        <div className="mt-2 p-3 bg-white rounded border border-red-200">
+                          <div className="text-xs text-muted-foreground mb-1">Reason:</div>
+                          <div className="text-sm text-red-900 font-medium">{tenant.terminationReason}</div>
+                        </div>
+                      )}
+                      {tenant.terminatedAt && (
+                        <div className="text-xs text-red-700 mt-2">
+                          Terminated on: {new Date(tenant.terminatedAt).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      )}
+                      <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded">
+                        <p className="text-xs text-blue-800">
+                          ℹ️ The student's security deposit has been automatically refunded and the property is now available for new tenants.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">

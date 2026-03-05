@@ -140,14 +140,6 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
     // Only future dates or today are available
     if (date < today) return false;
     
-    // Debug logging
-    if (month === currentMonth && year === currentYear && property.availabilityDates) {
-      console.log(`📅 Checking day ${day}:`, {
-        availabilityDates: property.availabilityDates,
-        dateCount: property.availabilityDates.length
-      });
-    }
-    
     // If property has specific availability dates, check against them
     if (property.availabilityDates && property.availabilityDates.length > 0) {
       const isAvailable = property.availabilityDates.some((availDate: string | Date) => {
@@ -156,10 +148,6 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
         const matches = availableDate.getDate() === day &&
                availableDate.getMonth() === month &&
                availableDate.getFullYear() === year;
-        
-        if (matches && month === currentMonth && year === currentYear) {
-          console.log(`✅ Day ${day} matches availability date:`, availableDate);
-        }
         
         return matches;
       });
@@ -968,8 +956,8 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                           </div>
                           <div className="overflow-hidden flex-1">
                             <p className="text-xs text-gray-600">Email</p>
-                            {property.landlord.user.email ? (
-                              <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user.email}</p>
+                            {property.landlord.user?.email ? (
+                              <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user?.email}</p>
                             ) : (
                               <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
                             )}

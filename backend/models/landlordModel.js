@@ -105,12 +105,20 @@ landlordSchema.methods.calculateReputationScore = async function() {
   }
   
   // Government ID Uploaded: 25 pts (governmentId number AND document both uploaded)
-  console.log('Gov ID:', !!this.governmentId, 'Gov Doc:', !!this.govIdDocument);
+  console.log('Gov ID check:');
+  console.log('  - governmentId value:', this.governmentId);
+  console.log('  - governmentId exists:', !!this.governmentId);
+  console.log('  - governmentId not empty:', this.governmentId && this.governmentId.trim() !== '');
+  console.log('  - govIdDocument value:', this.govIdDocument);
+  console.log('  - govIdDocument exists:', !!this.govIdDocument);
+  console.log('  - govIdDocument not empty:', this.govIdDocument && this.govIdDocument.trim() !== '');
   
   if (this.governmentId && this.governmentId.trim() !== '' && 
       this.govIdDocument && this.govIdDocument.trim() !== '') {
     score += 25;
     console.log('✓ Government ID uploaded: +25 pts');
+  } else {
+    console.log('✗ Government ID NOT complete (need both ID number and document)');
   }
   
   // Wallet Connected: 25 pts (check user model)

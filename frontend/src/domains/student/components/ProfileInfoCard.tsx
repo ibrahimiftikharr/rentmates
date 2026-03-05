@@ -32,6 +32,15 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
     interests: profile.interests || []
   });
 
+  const isFutureDateSelected = () => {
+    if (!formData.dateOfBirth) return false;
+    const selectedDate = new Date(formData.dateOfBirth);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+    return selectedDate > today;
+  };
+
   const handleSave = async () => {
     try {
       setIsSaving(true);
@@ -213,11 +222,16 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
               type="date" 
               value={formData.dateOfBirth}
               onChange={(e) => setFormData({...formData, dateOfBirth: e.target.value})}
-              max={new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0]}
+              max={new Date().toISOString().split('T')[0]}
               disabled={!isEditing}
               className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
             />
-            <p className="text-xs text-muted-foreground">Must be a past date</p>
+            {isEditing && (
+              <p className="text-xs text-muted-foreground">Cannot select a date in the future</p>
+            )}
+            {isEditing && isFutureDateSelected() && (
+              <p className="text-xs text-red-600">⚠️ Future date selected - please choose a valid date</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -310,7 +324,7 @@ export function ProfileInfoCard({ profile, onUpdate }: ProfileInfoCardProps) {
             <>
               <Button 
                 onClick={handleSave} 
-                disabled={isSaving}
+                disabled={isSaving || isFutureDateSelected()}
                 className="flex-1 sm:flex-initial"
               >
                 {isSaving ? (

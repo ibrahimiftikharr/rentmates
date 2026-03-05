@@ -23,11 +23,17 @@ const notificationSchema = new mongoose.Schema({
       'visit_confirmed',
       'visit_rescheduled',
       'visit_rejected',
+      'visit_completed',
       'message',
       'property_update',
       'application_status',
       'join_request',
-      'pool_available'
+      'pool_available',
+      'security_deposit_due',
+      'security_deposit_paid',
+      'security_deposit_reminder',
+      'security_deposit_refunded',
+      'contract_terminated'
     ]
   },
 

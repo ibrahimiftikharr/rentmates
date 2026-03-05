@@ -301,7 +301,11 @@ const getWishlist = async (req, res) => {
         path: 'wishlist',
         populate: {
           path: 'landlord',
-          select: 'name email'
+          select: 'phone nationality profileImage reputationScore',
+          populate: {
+            path: 'user',
+            select: 'name email'
+          }
         }
       });
 

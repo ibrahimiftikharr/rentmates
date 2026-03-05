@@ -100,6 +100,37 @@ const rentalSchema = new mongoose.Schema({
     default: 'registered'
   },
 
+  // Termination details
+  terminationReason: {
+    type: String
+  },
+  terminatedAt: {
+    type: Date
+  },
+
+  // Security Deposit Tracking
+  securityDepositStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'refunded', 'overdue'],
+    default: 'pending'
+  },
+  securityDepositPaidAt: {
+    type: Date
+  },
+  securityDepositRefundedAt: {
+    type: Date
+  },
+  securityDepositRefundReason: {
+    type: String
+  },
+  
+  // Notification tracking for security deposit reminders
+  securityDepositReminders: [{
+    sentAt: { type: Date },
+    reminderType: { type: String, enum: ['3-day', 'daily'] },
+    daysRemaining: { type: Number }
+  }],
+
   // Payment tracking - updated to include month/year info
   payments: [{
     amount: { type: Number },

@@ -129,7 +129,9 @@ export function SettingsPage() {
 
     try {
       setSaving(true);
+      console.log('💾 Saving profile with data:', formData);
       const updatedProfile = await landlordService.updateProfile(formData);
+      console.log('✅ Profile updated, new reputation:', updatedProfile.reputationScore);
       setProfile(updatedProfile);
       toast.success('Profile updated successfully!');
     } catch (error: any) {
@@ -187,11 +189,18 @@ export function SettingsPage() {
 
     try {
       setUploadingDocument(true);
+      console.log('📄 Uploading government ID document...');
       const documentUrl = await landlordService.uploadGovIdDocument(file);
-      setProfile((prev) => prev ? { ...prev, govIdDocument: documentUrl } : null);
+      console.log('✅ Document uploaded:', documentUrl);
+      
+      // Refetch profile to get updated reputation score
+      await fetchProfile();
+      console.log('✅ Profile refetched after document upload');
+      
       setGovIdDocumentFile(file);
       toast.success('Government ID document uploaded!');
     } catch (error: any) {
+      console.error('❌ Document upload failed:', error);
       toast.error(error.message);
     } finally {
       setUploadingDocument(false);

@@ -70,6 +70,11 @@ const visitRequestSchema = new mongoose.Schema({
     type: String
   },
 
+  // Completion timestamp
+  completedAt: {
+    type: Date
+  },
+
   // Timestamps
   createdAt: {
     type: Date,

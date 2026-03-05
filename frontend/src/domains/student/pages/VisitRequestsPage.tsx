@@ -44,10 +44,16 @@ export function VisitRequestsPage() {
       fetchVisitRequests();
     });
 
+    socketService.on('visit_completed', () => {
+      fetchVisitRequests();
+      toast.info('A visit has been marked as completed');
+    });
+
     return () => {
       socketService.off('visit_confirmed');
       socketService.off('visit_rescheduled');
       socketService.off('visit_rejected');
+      socketService.off('visit_completed');
     };
   }, []);
 
@@ -60,7 +66,7 @@ export function VisitRequestsPage() {
       
       // Transform backend data to match UI structure
       const transformedRequests: VisitRequest[] = response.map((request: VisitRequestType) => {
-        console.log('Transforming request:', request);
+        console.log('Transforming request:', { id: request._id, status: request.status });
         return {
           id: request._id,
           propertyTitle: request.property?.title || 'Property',
@@ -78,6 +84,14 @@ export function VisitRequestsPage() {
       });
 
       console.log('Transformed requests:', transformedRequests);
+      console.log('Status breakdown:', {
+        pending: transformedRequests.filter(r => r.status === 'pending').length,
+        confirmed: transformedRequests.filter(r => r.status === 'confirmed').length,
+        rescheduled: transformedRequests.filter(r => r.status === 'rescheduled').length,
+        completed: transformedRequests.filter(r => r.status === 'completed').length,
+        rejected: transformedRequests.filter(r => r.status === 'rejected').length
+      });
+
       setVisitRequests(transformedRequests);
     } catch (error: any) {
       console.error('Error fetching visit requests:', error);

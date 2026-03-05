@@ -35,7 +35,7 @@ const joinRequestSchema = new mongoose.Schema({
   // Status tracking
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected', 'waiting_completion', 'completed'],
+    enum: ['pending', 'approved', 'rejected', 'waiting_completion', 'completed', 'terminated'],
     default: 'pending'
   },
 
@@ -74,6 +74,14 @@ const joinRequestSchema = new mongoose.Schema({
   // Rejection reason
   rejectionReason: {
     type: String
+  },
+
+  // Termination details
+  terminationReason: {
+    type: String
+  },
+  terminatedAt: {
+    type: Date
   },
 
   // Timestamps
