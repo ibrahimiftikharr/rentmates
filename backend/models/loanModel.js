@@ -27,7 +27,7 @@ const loanSchema = new mongoose.Schema({
   walletAddress: { type: String }, // Student's wallet address used for deposit
   collateralStatus: { 
     type: String, 
-    enum: ['pending', 'deposited', 'returned', 'liquidated'],
+    enum: ['pending', 'deposited', 'returned', 'liquidated', 'withdrawn'],
     default: 'pending'
   },
   

@@ -25,6 +25,7 @@ const { initRentNotificationScheduler } = require('./services/rentNotificationSc
 const { initializeAutoPaymentScheduler } = require('./services/autoPaymentScheduler.js');
 const { initializeLoanAutoRepaymentScheduler } = require('./services/loanAutoRepaymentScheduler.js');
 const { initializeScheduledJobs } = require('./services/securityDepositScheduler.js');
+const { initializeScheduledJobs: initializeLoanMonitoringJobs } = require('./jobs/loanMonitoringJob.js');
 
 // Load environment variables
 dotenv.config();
@@ -110,6 +111,7 @@ mongoose.connect(MONGO_URI)
     initializeAutoPaymentScheduler(io);
     initializeLoanAutoRepaymentScheduler(io);
     initializeScheduledJobs(); // Security deposit reminders and auto-termination
+    initializeLoanMonitoringJobs(io); // Loan overdue monitoring and collateral liquidation
   })
   .catch((err) => console.error('✗ MongoDB connection error:', err));
 

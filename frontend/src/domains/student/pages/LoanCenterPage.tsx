@@ -5,6 +5,8 @@ import { DollarSign, TrendingUp, Calendar, Bell, Lock, AlertTriangle, CheckCircl
 import { useState, useEffect } from 'react';
 import { getMyLoans, getLoanStats, LoanStats } from '../services/loanService';
 import { getMyQueuedRequests, cancelQueuedRequest, QueuedLoanRequest } from '../services/queueService';
+import { withdrawCollateral, getCollateralStatus, getContractAddresses } from '../services/collateralService';
+import { withdrawCollateral as withdrawCollateralBlockchain } from '@/shared/utils/web3Utils';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from 'sonner';
 
@@ -46,6 +48,10 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
     hasActiveLoan: false
   });
   const [statsLoading, setStatsLoading] = useState(true);
+  
+  // Collateral withdrawal state
+  const [completedLoans, setCompletedLoans] = useState<any[]>([]);
+  const [withdrawingCollateral, setWithdrawingCollateral] = useState(false);
 
   // Fetch loan stats on mount
   useEffect(() => {
@@ -107,6 +113,15 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
           // No pending loan, clear any stale data
           localStorage.removeItem('pendingCollateralData');
         }
+        
+        // Find completed loans with withdrawable collateral
+        const loansWithWithdrawableCollateral = loans.filter(
+          (loan: any) => loan.status === 'completed' && 
+                         loan.collateralStatus === 'returned' &&
+                         loan.collateralStatus !== 'withdrawn'
+        );
+        setCompletedLoans(loansWithWithdrawableCollateral);
+        
       } catch (error) {
         console.error('Failed to fetch loans:', error);
       } finally {
@@ -157,6 +172,56 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
       fetchQueuedRequests();
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel request');
+    }
+  };
+  
+  const handleWithdrawCollateral = async (loanId: string) => {
+    try {
+      setWithdrawingCollateral(true);
+      
+      // Find the loan to get collateral amount
+      const loan = completedLoans.find(l => l._id === loanId);
+      if (!loan) {
+        throw new Error('Loan not found');
+      }
+      
+      toast.info('Initiating blockchain withdrawal...', { description: 'Please confirm the transaction in MetaMask' });
+      
+      // Step 1: Get contract addresses
+      const contracts = await getContractAddresses();
+      
+      // Step 2: Execute blockchain withdrawal (transfer PAXG back to student's wallet)
+      const txHash = await withdrawCollateralBlockchain(
+        contracts.collateralHolder,
+        loan.requiredCollateral.toString()
+      );
+      
+      console.log('✅ Blockchain withdrawal successful. TxHash:', txHash);
+      toast.success('PAXG transferred to your wallet!', { description: `Transaction: ${txHash.substring(0, 10)}...` });
+      
+      // Step 3: Update backend to mark as withdrawn
+      await withdrawCollateral(loanId);
+      
+      toast.success('Collateral withdrawal complete!', { description: `${loan.requiredCollateral.toFixed(4)} PAXG returned to your wallet` });
+      
+      // Refresh loan list
+      const response = await getMyLoans();
+      const loans = response.loans || [];
+      const loansWithWithdrawableCollateral = loans.filter(
+        (loan: any) => loan.status === 'completed' && 
+                       loan.collateralStatus === 'returned' &&
+                       loan.collateralStatus !== 'withdrawn'
+      );
+      setCompletedLoans(loansWithWithdrawableCollateral);
+    } catch (error: any) {
+      console.error('Withdraw collateral error:', error);
+      if (error.message?.includes('user rejected')) {
+        toast.error('Transaction cancelled');
+      } else {
+        toast.error(error.message || 'Failed to withdraw collateral');
+      }
+    } finally {
+      setWithdrawingCollateral(false);
     }
   };
 
@@ -404,6 +469,50 @@ export function LoanCenterPage({ onNavigate, collateralData: propsCollateralData
           </CardContent>
         </Card>
       )}
+
+      {/* Withdraw Collateral Widget - Show if loan completed and collateral available */}
+      {completedLoans.length > 0 && completedLoans.map((loan) => (
+        <Card key={loan._id} className="shadow-xl border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-100">
+          <CardContent className="pt-4 sm:pt-6 pb-4 sm:pb-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
+                  <Unlock className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-sm sm:text-base text-green-900 mb-1">🎉 Collateral Available for Withdrawal</h3>
+                  <p className="text-xs sm:text-sm text-green-700 mb-2">
+                    Congratulations! You've completed your loan from <span className="font-semibold">{loan.poolName}</span>. Your collateral of <span className="font-semibold">{loan.requiredCollateral.toFixed(4)} PAXG</span> is ready for withdrawal.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-600" />
+                    <span className="text-xs sm:text-sm text-green-800">
+                      Loan completed • All payments made
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <Button 
+                className="bg-green-600 hover:bg-green-700 text-white h-10 sm:h-12 px-4 sm:px-6 whitespace-nowrap w-full sm:w-auto text-sm sm:text-base"
+                onClick={() => handleWithdrawCollateral(loan._id)}
+                disabled={withdrawingCollateral}
+              >
+                {withdrawingCollateral ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2 animate-spin" />
+                    Withdrawing...
+                  </>
+                ) : (
+                  <>
+                    Withdraw Collateral
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
 
       {/* Quick Actions & Notifications Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -109,6 +109,22 @@ exports.checkLoanAvailability = async (req, res) => {
         }
       });
     }
+    
+    // Check for unwithdrawn collateral from completed loans
+    const completedLoanWithCollateral = await Loan.findOne({
+      borrower: student._id,
+      status: 'completed',
+      collateralStatus: 'returned'
+    });
+    
+    if (completedLoanWithCollateral) {
+      return res.status(400).json({
+        error: 'You have unwithdrawn collateral from a previous loan. Please withdraw your collateral before applying for a new loan.',
+        hasUnwithdrawnCollateral: true,
+        loanId: completedLoanWithCollateral._id,
+        collateralAmount: completedLoanWithCollateral.requiredCollateral
+      });
+    }
 
     // Get all active investment pools
     const pools = await InvestmentPool.find({ isActive: true }).sort({ ltv: 1 });
@@ -247,6 +263,22 @@ exports.applyForLoan = async (req, res) => {
     if (activeLoan) {
       return res.status(400).json({
         error: 'You already have an active loan. Please complete it before applying for a new one.'
+      });
+    }
+    
+    // Check for unwithdrawn collateral from completed loans
+    const completedLoanWithCollateral = await Loan.findOne({
+      borrower: student._id,
+      status: 'completed',
+      collateralStatus: 'returned'
+    });
+    
+    if (completedLoanWithCollateral) {
+      return res.status(400).json({
+        error: 'You have unwithdrawn collateral from a previous loan. Please withdraw your collateral before applying for a new loan.',
+        hasUnwithdrawnCollateral: true,
+        loanId: completedLoanWithCollateral._id,
+        collateralAmount: completedLoanWithCollateral.requiredCollateral
       });
     }
 

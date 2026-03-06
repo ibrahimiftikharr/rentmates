@@ -38,4 +38,17 @@ router.post('/confirm-deposit', collateralController.confirmCollateralDeposit);
  */
 router.get('/my-collateral', collateralController.getMyCollateral);
 
+/**
+ * POST /api/collateral/withdraw
+ * Withdraw collateral for a completed loan
+ * Body: { loanId }
+ */
+router.post('/withdraw', collateralController.withdrawCollateral);
+
+/**
+ * GET /api/collateral/status/:loanId
+ * Get collateral status for a specific loan
+ */
+router.get('/status/:loanId', collateralController.getCollateralStatus);
+
 module.exports = router;

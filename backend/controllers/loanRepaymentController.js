@@ -5,6 +5,7 @@ const Transaction = require('../models/transactionModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const { sendEmail } = require('../services/emailService');
 const { distributeRepaymentToInvestors } = require('../services/investorRepaymentDistribution');
+const { returnCollateral } = require('../services/collateralLiquidationService');
 
 /**
  * Get active loan details for the student
@@ -159,6 +160,18 @@ exports.payInstallment = async (req, res) => {
     await loan.save();
     
     console.log('✓ Loan installment payment completed');
+    
+    // If loan is now completed, mark collateral as ready for withdrawal
+    if (loan.status === 'completed') {
+      console.log('🎉 Loan fully repaid! Marking collateral as available for withdrawal...');
+      try {
+        await returnCollateral(loan._id);
+        console.log('✓ Collateral marked as available for withdrawal');
+      } catch (collateralError) {
+        console.error('❌ Error marking collateral for return:', collateralError);
+        // Don't fail the payment - just log the error
+      }
+    }
 
     // Distribute repayment to investors proportionally
     try {

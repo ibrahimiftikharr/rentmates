@@ -11,7 +11,7 @@ const notificationSchema = new mongoose.Schema({
   recipientModel: {
     type: String,
     required: true,
-    enum: ['Student', 'Landlord']
+    enum: ['Student', 'Landlord', 'Investor']
   },
 
   // Notification type
@@ -33,7 +33,13 @@ const notificationSchema = new mongoose.Schema({
       'security_deposit_paid',
       'security_deposit_reminder',
       'security_deposit_refunded',
-      'contract_terminated'
+      'contract_terminated',
+      'loan_payment_reminder',
+      'loan_payment_overdue',
+      'loan_default_warning',
+      'collateral_liquidated',
+      'collateral_available_withdrawal',
+      'loan_completed'
     ]
   },
 
@@ -55,7 +61,7 @@ const notificationSchema = new mongoose.Schema({
 
   relatedModel: {
     type: String,
-    enum: ['VisitRequest', 'Property', 'Message', 'Application', 'JoinRequest', 'Rental', 'InvestmentPool']
+    enum: ['VisitRequest', 'Property', 'Message', 'Application', 'JoinRequest', 'Rental', 'InvestmentPool', 'Loan']
   },
 
   // Additional data

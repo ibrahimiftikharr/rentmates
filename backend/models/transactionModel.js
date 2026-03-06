@@ -21,7 +21,8 @@ const transactionSchema = new mongoose.Schema({
       'loan_disbursement', 
       'loan_repayment',
       'investment_principal_return',
-      'investment_interest_earned'
+      'investment_interest_earned',
+      'collateral_return'
     ],
     required: true
   },
