@@ -15,6 +15,7 @@ import { WalletPage } from './WalletPage';
 import { WishlistPage } from './WishlistPage';
 import { VisitRequestsPage } from './VisitRequestsPage';
 import { JoinRequestsPage } from './JoinRequestsPage';
+import { ViewContractPage } from './ViewContractPage';
 import { SecurityDepositPage } from './SecurityDepositPage';
 import { LoanCenterPage } from './LoanCenterPage';
 import { ApplyLoanPage } from './ApplyLoanPage';
@@ -144,6 +145,7 @@ export function StudentDashboard() {
             <Route path="/wishlist" element={<WishlistPage onNavigate={handleNavigate} />} />
             <Route path="/visit-requests" element={<VisitRequestsPage />} />
             <Route path="/join-requests" element={<JoinRequestsPage />} />
+            <Route path="/view-contract/:id" element={<ViewContractPage />} />
             <Route path="/security-deposit" element={<SecurityDepositPage />} />
             <Route path="/loan-center" element={<LoanCenterPage onNavigate={handleNavigate} collateralData={collateralData} />} />
             <Route path="/apply-loan" element={<ApplyLoanPage onNavigate={handleNavigate} onStartCollateralDeposit={handleStartCollateralDeposit} />} />

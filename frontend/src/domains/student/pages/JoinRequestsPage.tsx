@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserPlus, Home, DollarSign, CheckCircle2, Clock, XCircle, FileSignature, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
@@ -28,6 +29,7 @@ interface JoinRequest {
 }
 
 export function JoinRequestsPage() {
+  const navigate = useNavigate();
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [signingContract, setSigningContract] = useState<JoinRequest | null>(null);
   const [terminatingContract, setTerminatingContract] = useState<JoinRequest | null>(null);
@@ -163,7 +165,7 @@ export function JoinRequestsPage() {
         moveInDate: req.movingDate,
         leaseDuration: req.contract?.leaseDurationMonths ? `${req.contract.leaseDurationMonths} months` : undefined,
         securityDeposit: req.contract?.securityDeposit,
-        contractHash: req.contract?.studentSignature?.signature || undefined,
+        contractHash: req.contract?.blockchainVerification?.contractHash || undefined,
         isDisabled: req.isDisabled || false,
         terminationReason: req.terminationReason,
         terminatedAt: req.terminatedAt
@@ -198,6 +200,10 @@ export function JoinRequestsPage() {
 
   const handleSignContract = (request: JoinRequest) => {
     setSigningContract(request);
+  };
+
+  const handleViewContract = (request: JoinRequest) => {
+    navigate(`/student/view-contract/${request.id}`);
   };
 
   const handleContractSigned = async (contractHash: string) => {
@@ -398,24 +404,10 @@ export function JoinRequestsPage() {
                     <span className="font-medium text-blue-900">Awaiting Landlord Signature</span>
                   </div>
                   <div className="text-sm text-blue-800 space-y-2">
-                    <p>Your contract has been signed and submitted to the blockchain.</p>
+                    <p>Your contract has been signed and submitted.</p>
                     <p>Waiting for the landlord to complete their signature.</p>
-                    {request.contractHash && (
-                      <div className="mt-3 p-2 bg-white rounded border border-blue-300">
-                        <div className="text-xs text-muted-foreground mb-1">Transaction Hash:</div>
-                        <div className="font-mono text-xs break-all">{request.contractHash}</div>
-                      </div>
-                    )}
                   </div>
                 </div>
-                <Button 
-                  variant="outline"
-                  className="w-full border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800 mt-3"
-                  onClick={() => setTerminatingContract(request)}
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Terminate Contract
-                </Button>
               </>
             )}
 
@@ -433,18 +425,18 @@ export function JoinRequestsPage() {
                   </div>
                   {request.contractHash && (
                     <div className="mt-3 p-2 bg-white rounded border border-purple-300">
-                      <div className="text-xs text-muted-foreground mb-1">Contract Hash:</div>
-                      <div className="font-mono text-xs break-all">{request.contractHash}</div>
+                      <div className="text-xs text-muted-foreground mb-1">Contract Hash (SHA-256):</div>
+                      <div className="font-mono text-xs break-all text-gray-700">{request.contractHash}</div>
                     </div>
                   )}
                 </div>
                 <Button 
-                  variant="outline"
-                  className="w-full border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800 mt-3"
-                  onClick={() => setTerminatingContract(request)}
+                  variant="default"
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white mt-3"
+                  onClick={() => handleViewContract(request)}
                 >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Terminate Contract
+                  <FileSignature className="w-4 h-4 mr-2" />
+                  View Contract
                 </Button>
               </>
             )}
