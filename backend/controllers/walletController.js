@@ -456,10 +456,10 @@ exports.payRent = async (req, res) => {
 
     // Send email notification to landlord
     try {
-      await sendEmail(
-        landlord.email,
-        'Rent Payment Received',
-        `
+      await sendEmail({
+        to: landlord.email,
+        subject: 'Rent Payment Received',
+        html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #8C57FF;">Rent Payment Received</h2>
             <p>Dear ${landlord.name},</p>
@@ -483,7 +483,7 @@ exports.payRent = async (req, res) => {
             </div>
           </div>
         `
-      );
+      });
     } catch (emailError) {
       console.error('Error sending rent payment email:', emailError);
     }

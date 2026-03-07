@@ -2,6 +2,7 @@ const Loan = require('../models/loanModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const Student = require('../models/studentModel');
 const blockchainService = require('../services/blockchainService');
+const { notifyLoanDisbursed, notifyLoanIssuedFromPool } = require('../services/notificationService');
 
 /**
  * Get smart contract addresses for frontend
@@ -203,6 +204,64 @@ exports.confirmCollateralDeposit = async (req, res) => {
     }
     
     console.log(`✅ Collateral deposited for loan ${loanId}, loan approved and activated`);
+    
+    // Send notifications for loan disbursement
+    await notifyLoanDisbursed(student._id, loan._id, loan.loanAmount, loan.poolName);
+    
+    // Notify all investors in the pool about the new loan
+    try {
+      const PoolInvestment = require('../models/poolInvestmentModel');
+      const Investor = require('../models/investorModel');
+      const User = require('../models/userModel');
+      
+      // Find all active investments in this pool
+      const investments = await PoolInvestment.find({ 
+        pool: pool._id, 
+        status: 'active' 
+      });
+      
+      // Deduplicate investors - get unique investor user IDs
+      const uniqueInvestorIds = [...new Set(investments.map(inv => inv.investor.toString()))];
+      
+      console.log(`📨 Notifying ${uniqueInvestorIds.length} unique investors about loan #${loan._id}`);
+      
+      for (const investorUserId of uniqueInvestorIds) {
+        try {
+          // Get investor profile from user ID
+          const investorProfile = await Investor.findOne({ user: investorUserId });
+          
+          if (investorProfile) {
+            // Get student name for notification
+            const studentUser = await User.findById(userId);
+            const studentName = studentUser?.name || 'a student';
+            
+            await notifyLoanIssuedFromPool(
+              investorProfile._id,
+              pool._id,
+              loan.loanAmount,
+              studentName
+            );
+            console.log(`   ✓ Notified investor ${investorProfile._id}`);
+            
+            // Emit Socket.IO event for real-time notification
+            if (io) {
+              io.to(`user_${investorUserId}`).emit('new_notification', {
+                type: 'loan_issued_from_pool',
+                title: 'Loan Issued from Your Pool',
+                message: `A loan of $${loan.loanAmount} has been issued to ${studentName} from your investment pool.`,
+                timestamp: new Date()
+              });
+              console.log(`   ✓ Socket.IO notification sent to investor ${investorUserId}`);
+            }
+          }
+        } catch (notifError) {
+          console.error(`   ⚠️  Failed to notify investor:`, notifError.message);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error sending investor notifications:', error);
+      // Don't fail the entire request if notifications fail
+    }
     
     // ✅ Emit Socket.IO events for real-time loan approval update
     const io = req.app.get('io');

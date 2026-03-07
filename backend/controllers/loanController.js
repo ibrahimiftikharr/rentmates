@@ -5,6 +5,7 @@ const PoolInvestment = require('../models/poolInvestmentModel');
 const Student = require('../models/studentModel');
 const QueuedLoanRequest = require('../models/queuedLoanRequestModel');
 const { convertUSDTtoPAXG, getPAXGPriceWithTimestamp } = require('../services/coinMarketCapService');
+const { notifyLoanApplicationSubmitted } = require('../services/notificationService');
 
 /**
  * Calculate monthly repayment using amortized loan formula
@@ -335,6 +336,9 @@ exports.applyForLoan = async (req, res) => {
     });
 
     await loan.save();
+
+    // Send notification to student
+    await notifyLoanApplicationSubmitted(student._id, requestedAmount, pool.name);
 
     res.json({
       success: true,

@@ -4,6 +4,7 @@ const Transaction = require('../models/transactionModel');
 const User = require('../models/userModel');
 const Investor = require('../models/investorModel');
 const { sendEmail } = require('./emailService');
+const { notifyLoanRepaymentReceived, notifyInvestorProfitEarned } = require('./notificationService');
 
 /**
  * Distribute loan repayment to all investors in the pool proportionally based on shares
@@ -114,6 +115,7 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
             user: investorUser,
             investor: investment.investor,
             totalGain: 0,
+            cumulativeEarnings: 0,  // Track total earnings across all investments
             totalOldValue: 0,
             totalNewValue: 0,
             totalShares: 0,
@@ -124,6 +126,7 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
         // Aggregate investor data
         const investorData = investorMap.get(investorUserId);
         investorData.totalGain += investorGain;
+        investorData.cumulativeEarnings += investment.totalEarnings;  // Add cumulative earnings
         investorData.totalOldValue += oldValue;
         investorData.totalNewValue += newValue;
         investorData.totalShares += investment.shares;
@@ -156,6 +159,52 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
     // Send ONE notification per investor (aggregated)
     for (const [investorUserId, investorData] of investorMap) {
       try {
+        // Get Investor profile from User ID (notifications use Investor profile ID)
+        const investorProfile = await Investor.findOne({ user: investorUserId });
+        
+        if (!investorProfile) {
+          console.log(`   ⚠️  Investor profile not found for user ${investorUserId}`);
+          continue;
+        }
+        
+        console.log(`   📨 Sending notifications to investor profile: ${investorProfile._id}`);
+        console.log(`      - Repayment amount: $${totalRepayment.toFixed(2)}`);
+        console.log(`      - Current profit: $${investorData.totalGain.toFixed(2)}`);
+        console.log(`      - Total earnings: $${investorData.cumulativeEarnings.toFixed(2)}`);
+        
+        // Send in-app notifications
+        try {
+          const repaymentNotif = await notifyLoanRepaymentReceived(
+            investorProfile._id,
+            pool._id,
+            totalRepayment.toFixed(2),  // Total repayment for this installment
+            loan._id
+          );
+          if (repaymentNotif) {
+            console.log(`   ✅ Repayment notification created: ${repaymentNotif._id}`);
+          } else {
+            console.log(`   ⚠️  Repayment notification returned null (might be disabled in preferences)`);
+          }
+        } catch (err) {
+          console.error(`   ❌ Error creating repayment notification:`, err.message);
+        }
+        
+        try {
+          const profitNotif = await notifyInvestorProfitEarned(
+            investorProfile._id,
+            pool._id,
+            investorData.totalGain.toFixed(2),  // Current profit from this payment
+            investorData.cumulativeEarnings.toFixed(2)  // Total earnings to date
+          );
+          if (profitNotif) {
+            console.log(`   ✅ Profit notification created: ${profitNotif._id}`);
+          } else {
+            console.log(`   ⚠️  Profit notification returned null (might be disabled in preferences)`);
+          }
+        } catch (err) {
+          console.error(`   ❌ Error creating profit notification:`, err.message);
+        }
+        
         // Send email notification about value increase (only once per investor)
         await sendValueIncreaseNotificationEmail(
           investorData.investor,
@@ -173,6 +222,7 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
 
       // Send ONE real-time socket notification per investor
       if (io) {
+        // Emit investment value updated event
         io.to(`user_${investorUserId}`).emit('investment_value_updated', {
           poolId: pool._id.toString(),
           poolName: loan.poolName,
@@ -186,6 +236,15 @@ async function distributeRepaymentToInvestors(loan, installmentNumber, principal
           timestamp: new Date()
         });
         console.log(`   🔔 Socket notification sent to user_${investorUserId} (${investorData.investments.length} investments aggregated)`);
+        
+        // Also emit new_notification event so the notifications page updates in real-time
+        io.to(`user_${investorUserId}`).emit('new_notification', {
+          type: 'loan_repayment_received',
+          title: 'Loan Repayment Received',
+          message: `A repayment has been received in your investment pool. Your investment value increased by $${investorData.totalGain.toFixed(2)}.`,
+          timestamp: new Date()
+        });
+        console.log(`   🔔 New notification event sent to user_${investorUserId}`);
       }
     }
     
@@ -292,11 +351,11 @@ async function sendValueIncreaseNotificationEmail(investor, loan, installmentNum
     </div>
   `;
 
-  await sendEmail(
-    investor.email,
-    '📈 Investment Value Increased - RentMates',
-    emailContent
-  );
+  await sendEmail({
+    to: investor.email,
+    subject: '📈 Investment Value Increased - RentMates',
+    html: emailContent
+  });
 }
 
 module.exports = {

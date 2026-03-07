@@ -1,4 +1,4 @@
-import { LayoutDashboard, TrendingUp, Wallet, BarChart3, User } from "lucide-react";
+import { LayoutDashboard, TrendingUp, Wallet, Bell, User } from "lucide-react";
 import { cn } from "./ui/utils";
 
 interface MobileNavProps {
@@ -10,7 +10,7 @@ const navItems = [
   { id: "dashboard", icon: LayoutDashboard, label: "Home" },
   { id: "investments", icon: TrendingUp, label: "Invest" },
   { id: "wallet", icon: Wallet, label: "Wallet" },
-  { id: "analytics", icon: BarChart3, label: "Analytics" },
+  { id: "notifications", icon: Bell, label: "Notifications" },
   { id: "profile", icon: User, label: "Profile" },
 ];
 

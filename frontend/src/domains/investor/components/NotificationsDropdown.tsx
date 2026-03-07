@@ -1,14 +1,16 @@
-import { useState } from "react";
-import { Bell, CheckCircle, AlertCircle, Info, DollarSign, Clock, X, CheckCheck } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Bell, CheckCircle, AlertCircle, Info, DollarSign, Clock, X, CheckCheck, TrendingUp, AlertTriangle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
 import { toast } from "sonner";
+import { notificationService, Notification as NotificationType } from "@/shared/services/notificationService";
+import { socketService } from "@/shared/services/socketService";
 
 interface Notification {
   id: string;
-  type: "success" | "warning" | "info" | "payment";
+  type: "success" | "warning" | "info" | "payment" | "danger";
   title: string;
   message: string;
   time: string;
@@ -17,48 +19,111 @@ interface Notification {
 
 export function NotificationsDropdown() {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "1",
-      type: "payment",
-      title: "Payment Received",
-      message: "Received $500 repayment for LOAN-001",
-      time: "5 min ago",
-      read: false
-    },
-    {
-      id: "2",
-      type: "warning",
-      title: "Upcoming Payment",
-      message: "LOAN-002 payment due in 2 days",
-      time: "1 hour ago",
-      read: false
-    },
-    {
-      id: "3",
-      type: "success",
-      title: "Investment Confirmed",
-      message: "Your investment of $5,000 has been confirmed",
-      time: "3 hours ago",
-      read: false
-    },
-    {
-      id: "4",
-      type: "info",
-      title: "Escrow Released",
-      message: "45,800 USDT released from escrow",
-      time: "1 day ago",
-      read: true
-    },
-    {
-      id: "5",
-      type: "payment",
-      title: "Auto-Payment Executed",
-      message: "Auto-payment of $750 processed for LOAN-003",
-      time: "2 days ago",
-      read: true
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await notificationService.getNotifications();
+      
+      // Transform backend notifications to match UI structure
+      const transformedNotifications: Notification[] = response.notifications
+        .slice(0, 10) // Show only the latest 10 in dropdown
+        .map((notif: NotificationType) => ({
+          id: notif._id,
+          title: notif.title,
+          message: notif.message,
+          time: getTimeAgo(notif.createdAt),
+          read: notif.read,
+          type: getNotificationType(notif.type),
+        }));
+
+      setNotifications(transformedNotifications);
+    } catch (error: any) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setIsLoading(false);
     }
-  ]);
+  }, []);
+
+  // Fetch notifications when dropdown opens
+  useEffect(() => {
+    if (open) {
+      fetchNotifications();
+    }
+  }, [open, fetchNotifications]);
+
+  // Listen for real-time notifications
+  useEffect(() => {
+    const handleNewNotification = () => {
+      if (open) {
+        console.log('🔔 Dropdown: New notification received, refreshing...');
+        fetchNotifications();
+      }
+    };
+
+    const handleInvestmentUpdate = () => {
+      if (open) {
+        console.log('🔔 Dropdown: Investment updated, refreshing...');
+        fetchNotifications();
+      }
+    };
+
+    const handleLoanRepayment = () => {
+      if (open) {
+        console.log('🔔 Dropdown: Loan repayment, refreshing...');
+        fetchNotifications();
+      }
+    };
+
+    socketService.on('new_notification', handleNewNotification);
+    socketService.on('investment_value_updated', handleInvestmentUpdate);
+    socketService.on('loan_repayment_updated', handleLoanRepayment);
+
+    return () => {
+      socketService.off('new_notification', handleNewNotification);
+      socketService.off('investment_value_updated', handleInvestmentUpdate);
+      socketService.off('loan_repayment_updated', handleLoanRepayment);
+    };
+  }, [open, fetchNotifications]);
+
+  const getTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    return `${weeks}w ago`;
+  };
+
+  const getNotificationType = (type: string): 'success' | 'warning' | 'info' | 'payment' | 'danger' => {
+    // Success types
+    if (['loan_issued_from_pool', 'investor_profit_earned'].includes(type)) {
+      return 'success';
+    }
+    // Payment types
+    if (['loan_repayment_received'].includes(type)) {
+      return 'payment';
+    }
+    // Danger types
+    if (['pool_collateral_liquidated', 'loan_default_in_pool'].includes(type)) {
+      return 'danger';
+    }
+    // Warning types
+    if (type.includes('warning') || type.includes('overdue')) {
+      return 'warning';
+    }
+    // Default to info
+    return 'info';
+  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -66,10 +131,12 @@ export function NotificationsDropdown() {
     switch (type) {
       case "success":
         return <CheckCircle className="h-5 w-5 text-green-600" />;
+      case "danger":
+        return <AlertTriangle className="h-5 w-5 text-red-600" />;
       case "warning":
         return <AlertCircle className="h-5 w-5 text-orange-600" />;
       case "payment":
-        return <DollarSign className="h-5 w-5 text-primary" />;
+        return <TrendingUp className="h-5 w-5 text-primary" />;
       default:
         return <Info className="h-5 w-5 text-blue-600" />;
     }
@@ -79,6 +146,8 @@ export function NotificationsDropdown() {
     switch (type) {
       case "success":
         return "bg-green-50 border-green-200";
+      case "danger":
+        return "bg-red-50 border-red-200";
       case "warning":
         return "bg-orange-50 border-orange-200";
       case "payment":
@@ -88,25 +157,40 @@ export function NotificationsDropdown() {
     }
   };
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
+  const markAsRead = async (id: string) => {
+    try {
+      await notificationService.markAsRead(id);
+      setNotifications(prev =>
+        prev.map(notif =>
+          notif.id === id ? { ...notif, read: true } : notif
+        )
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev =>
-      prev.map(notif => ({ ...notif, read: true }))
-    );
-    toast.success("All notifications marked as read");
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead();
+      setNotifications(prev =>
+        prev.map(notif => ({ ...notif, read: true }))
+      );
+      toast.success("All notifications marked as read");
+    } catch (error) {
+      toast.error("Failed to mark all as read");
+    }
   };
 
-  const deleteNotification = (id: string, e: React.MouseEvent) => {
+  const deleteNotification = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
-    toast.success("Notification removed");
+    try {
+      await notificationService.deleteNotification(id);
+      setNotifications(prev => prev.filter(notif => notif.id !== id));
+      toast.success("Notification removed");
+    } catch (error) {
+      toast.error("Failed to remove notification");
+    }
   };
 
   return (

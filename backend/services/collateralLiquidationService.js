@@ -8,6 +8,7 @@ const User = require('../models/userModel');
 const Student = require('../models/studentModel');
 const Notification = require('../models/notificationModel');
 const Transaction = require('../models/transactionModel');
+const { notifyCollateralLiquidated, notifyPoolCollateralLiquidated, notifyLoanDefaultInPool } = require('./notificationService');
 const { getPAXGPrice } = require('./coinMarketCapService');
 const { sendEmail } = require('./emailService');
 const blockchainService = require('./blockchainService');
@@ -154,24 +155,8 @@ async function liquidateCollateral(loan, io) {
       console.log(`✓ Returned ${excessReturned.toFixed(2)} USDT excess collateral to borrower`);
     }
     
-    // Notify the borrower/student
-    await Notification.create({
-      recipient: student._id,
-      recipientModel: 'Student',
-      type: 'collateral_liquidated',
-      title: 'Collateral Liquidated Due to Default',
-      message: `Your loan collateral (${loan.requiredCollateral.toFixed(4)} PAXG) has been liquidated due to payment default. ${principalRecovered > 0 ? `Principal recovered: ${principalRecovered.toFixed(2)} USDT. ` : ''}${interestRecovered > 0 ? `Interest recovered: ${interestRecovered.toFixed(2)} USDT. ` : ''}${excessReturned > 0 ? `Excess collateral returned to your wallet: ${excessReturned.toFixed(2)} USDT.` : 'Your loan is now in default status.'}`,
-      relatedId: loan._id,
-      relatedModel: 'Loan',
-      metadata: {
-        loanId: loan._id,
-        collateralAmount: loan.requiredCollateral,
-        collateralValueUSDT,
-        principalRecovered,
-        interestRecovered,
-        excessReturned
-      }
-    });
+    // Notify the borrower/student using notificationService
+    await notifyCollateralLiquidated(student._id, loan._id, collateralValueUSDT);
     
     // Send email notification to student
     try {
@@ -212,32 +197,24 @@ async function liquidateCollateral(loan, io) {
       const investments = await PoolInvestment.find({ pool: pool._id, status: 'active' })
         .populate('investor');
       
-      for (const investment of investments) {
-        if (investment.investor) {
-          const investorUser = await User.findById(investment.investor);
-          if (!investorUser) continue;
-          
-          // Get investor profile
-          const investorProfile = await Investor.findOne({ user: investorUser._id });
-          if (!investorProfile) continue;
-          
-          // Create in-app notification
-          await Notification.create({
-            recipient: investorProfile._id,
-            recipientModel: 'Investor',
-            type: 'collateral_liquidated',
-            title: 'Loan Default - Collateral Liquidated',
-            message: `A loan in your investment pool "${pool.name}" has defaulted. Collateral has been liquidated and ${totalRecovered.toFixed(2)} USDT has been recovered and added back to the pool.`,
-            relatedId: loan._id,
-            relatedModel: 'Loan',
-            metadata: {
-              poolName: pool.name,
-              loanId: loan._id,
-              totalRecovered,
-              principalRecovered,
-              interestRecovered
-            }
-          });
+      // Deduplicate investors - get unique investor user IDs
+      const uniqueInvestorIds = [...new Set(investments.map(inv => inv.investor.toString()))];
+      
+      console.log(`📨 Notifying ${uniqueInvestorIds.length} unique investors about collateral liquidation`);
+      
+      for (const investorUserId of uniqueInvestorIds) {
+        const investorUser = await User.findById(investorUserId);
+        if (!investorUser) continue;
+        
+        // Get investor profile
+        const investorProfile = await Investor.findOne({ user: investorUser._id });
+        if (!investorProfile) continue;
+        
+        try {
+          // Create in-app notifications using notificationService
+          await notifyPoolCollateralLiquidated(investorProfile._id, pool._id, totalRecovered);
+          await notifyLoanDefaultInPool(investorProfile._id, pool._id, loan.loanAmount, totalOwed);
+          console.log(`   ✓ Notified investor ${investorProfile._id}`);
           
           // Emit socket event
           if (io) {
@@ -246,6 +223,7 @@ async function liquidateCollateral(loan, io) {
               message: `Loan default in pool "${pool.name}" - Collateral liquidated`,
               timestamp: new Date()
             });
+            console.log(`   ✓ Socket.IO notification sent to investor ${investorUserId}`);
           }
           
           // Send email notification
@@ -277,10 +255,12 @@ async function liquidateCollateral(loan, io) {
           } catch (emailError) {
             console.error(`Error sending liquidation email to investor ${investorUser.email}:`, emailError);
           }
+        } catch (notifError) {
+          console.error(`   ⚠️  Failed to notify investor:`, notifError.message);
         }
       }
       
-      console.log(`✓ Notified ${investments.length} investors in pool "${pool.name}"`);
+      console.log(`✓ Notified ${uniqueInvestorIds.length} unique investors in pool "${pool.name}"`);
     } catch (notifyError) {
       console.error('Error notifying investors:', notifyError);
     }
