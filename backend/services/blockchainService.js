@@ -157,11 +157,201 @@ const getContractAddresses = () => {
   };
 };
 
+/**
+ * ============================================
+ * RENTAL CONTRACT VERIFICATION FUNCTIONS
+ * ============================================
+ */
+
+// Rental Contract Verification Address
+const RENTAL_CONTRACT_VERIFICATION_ADDRESS = process.env.RENTAL_CONTRACT_VERIFICATION_ADDRESS;
+
+// Diagnostic log to verify env var is loading
+console.log('🔍 [Blockchain Service] RENTAL_CONTRACT_VERIFICATION_ADDRESS:', 
+  RENTAL_CONTRACT_VERIFICATION_ADDRESS || '❌ NOT LOADED');
+
+// Load Rental Contract Verification ABI
+let RENTAL_CONTRACT_VERIFICATION_ABI;
+try {
+  RENTAL_CONTRACT_VERIFICATION_ABI = loadContractABI('RentalContractVerification');
+  console.log('✅ [Blockchain Service] RentalContractVerification ABI loaded successfully');
+} catch (error) {
+  console.warn('⚠️  [Blockchain Service] RentalContractVerification ABI not found. Contract may not be deployed yet.');
+  RENTAL_CONTRACT_VERIFICATION_ABI = null;
+}
+
+/**
+ * Get Rental Contract Verification contract instance
+ */
+const getRentalContractVerificationContract = (signer = null) => {
+  if (!RENTAL_CONTRACT_VERIFICATION_ADDRESS) {
+    throw new Error('RENTAL_CONTRACT_VERIFICATION_ADDRESS not configured in environment');
+  }
+  
+  if (!RENTAL_CONTRACT_VERIFICATION_ABI) {
+    throw new Error('RentalContractVerification ABI not available. Please compile and deploy the contract first.');
+  }
+  
+  const provider = getProvider();
+  const signerOrProvider = signer || provider;
+  
+  return new ethers.Contract(
+    RENTAL_CONTRACT_VERIFICATION_ADDRESS,
+    RENTAL_CONTRACT_VERIFICATION_ABI,
+    signerOrProvider
+  );
+};
+
+/**
+ * Store rental contract on blockchain
+ * @param {string} contractHash - SHA-256 hash of the contract (0x prefixed bytes32)
+ * @param {string} ipfsCID - IPFS Content Identifier
+ * @param {string} landlordAddress - Landlord's wallet address
+ * @param {string} studentAddress - Student's wallet address
+ * @param {string} privateKey - Private key for signing the transaction
+ * @returns {Promise<Object>} Transaction result with contractId and transaction hash
+ */
+const storeRentalContractOnBlockchain = async (contractHash, ipfsCID, landlordAddress, studentAddress, privateKey) => {
+  try {
+    console.log('📝 Storing rental contract on blockchain...');
+    console.log('Contract Hash:', contractHash);
+    console.log('IPFS CID:', ipfsCID);
+    console.log('Landlord Address:', landlordAddress);
+    console.log('Student Address:', studentAddress);
+
+    // Create provider and wallet
+    const provider = getProvider();
+    const wallet = new ethers.Wallet(privateKey, provider);
+    
+    console.log('Transaction sender:', wallet.address);
+
+    // Get contract instance with signer
+    const contract = getRentalContractVerificationContract(wallet);
+
+    // Call storeContract function
+    console.log('Sending transaction to blockchain...');
+    const tx = await contract.storeContract(
+      contractHash,
+      ipfsCID,
+      landlordAddress,
+      studentAddress
+    );
+
+    console.log('Transaction sent. Hash:', tx.hash);
+    console.log('Waiting for confirmation...');
+
+    // Wait for transaction to be mined
+    const receipt = await tx.wait();
+    
+    console.log('✅ Transaction confirmed in block:', receipt.blockNumber);
+
+    // Parse the ContractStored event to get the contract ID
+    const event = receipt.logs.find(log => {
+      try {
+        const parsed = contract.interface.parseLog(log);
+        return parsed.name === 'ContractStored';
+      } catch {
+        return false;
+      }
+    });
+
+    let contractId;
+    if (event) {
+      const parsed = contract.interface.parseLog(event);
+      contractId = Number(parsed.args.contractId);
+      console.log('Blockchain Contract ID:', contractId);
+    }
+
+    return {
+      success: true,
+      transactionHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      contractId: contractId,
+      gasUsed: receipt.gasUsed.toString(),
+      network: 'Polygon Amoy Testnet'
+    };
+  } catch (error) {
+    console.error('❌ Error storing rental contract on blockchain:', error);
+    throw new Error(`Failed to store contract on blockchain: ${error.message}`);
+  }
+};
+
+/**
+ * Verify rental contract from blockchain
+ * @param {number} contractId - Blockchain contract ID
+ * @param {string} expectedHash - Expected contract hash to verify
+ * @returns {Promise<Object>} Verification result
+ */
+const verifyRentalContractOnBlockchain = async (contractId, expectedHash) => {
+  try {
+    console.log('🔍 Verifying rental contract on blockchain...');
+    console.log('Contract ID:', contractId);
+    console.log('Expected Hash:', expectedHash);
+
+    const contract = getRentalContractVerificationContract();
+
+    // Get contract data
+    const contractData = await contract.getContract(contractId);
+    
+    console.log('Retrieved contract data from blockchain');
+
+    // Verify hash
+    const isValid = await contract.verifyContract(contractId, expectedHash);
+
+    return {
+      success: true,
+      isValid: isValid,
+      contractHash: contractData.contractHash,
+      ipfsCID: contractData.ipfsCID,
+      landlord: contractData.landlord,
+      student: contractData.student,
+      timestamp: Number(contractData.timestamp),
+      message: isValid ? 'Contract verification successful' : 'Contract hash mismatch'
+    };
+  } catch (error) {
+    console.error('❌ Error verifying rental contract:', error);
+    throw new Error(`Failed to verify contract: ${error.message}`);
+  }
+};
+
+/**
+ * Get rental contract details from blockchain
+ * @param {number} contractId - Blockchain contract ID
+ * @returns {Promise<Object>} Contract details
+ */
+const getRentalContractFromBlockchain = async (contractId) => {
+  try {
+    console.log('📄 Fetching rental contract from blockchain...');
+    console.log('Contract ID:', contractId);
+
+    const contract = getRentalContractVerificationContract();
+    const contractData = await contract.getContract(contractId);
+
+    return {
+      success: true,
+      contractHash: contractData.contractHash,
+      ipfsCID: contractData.ipfsCID,
+      landlord: contractData.landlord,
+      student: contractData.student,
+      timestamp: Number(contractData.timestamp),
+      timestampDate: new Date(Number(contractData.timestamp) * 1000).toISOString()
+    };
+  } catch (error) {
+    console.error('❌ Error fetching rental contract:', error);
+    throw new Error(`Failed to fetch contract: ${error.message}`);
+  }
+};
+
 module.exports = {
   getPAXGBalance,
   getDepositedCollateral,
   verifyDepositTransaction,
   getContractAddresses,
   PAXG_TOKEN_ADDRESS,
-  COLLATERAL_HOLDER_ADDRESS
+  COLLATERAL_HOLDER_ADDRESS,
+  // Rental Contract Verification
+  storeRentalContractOnBlockchain,
+  verifyRentalContractOnBlockchain,
+  getRentalContractFromBlockchain,
+  RENTAL_CONTRACT_VERIFICATION_ADDRESS
 };

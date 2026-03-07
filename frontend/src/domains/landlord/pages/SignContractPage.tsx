@@ -276,13 +276,13 @@ export function SignContractPage({ requestId, onNavigate, onContractSigned }: Si
               </div>
               
               <h3 className="text-[#4A4A68] mb-2">
-                {isSigning ? 'Processing Transaction...' : 'Blockchain Signing Fee Notice'}
+                {isSigning ? 'Processing Transaction...' : 'Confirm Contract Signing'}
               </h3>
               
               <p className="text-muted-foreground mb-6">
                 {isSigning 
                   ? 'Please wait while your contract is being deployed to the blockchain...'
-                  : 'A $3 gas fee will be automatically deducted from your connected wallet to complete this on-chain signing process.'
+                  : 'Please confirm that you want to proceed with signing this contract on the blockchain.'
                 }
               </p>
 

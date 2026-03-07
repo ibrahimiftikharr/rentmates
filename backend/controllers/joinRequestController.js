@@ -8,6 +8,9 @@ const VisitRequest = require('../models/visitRequestModel');
 const Notification = require('../models/notificationModel');
 const emailService = require('../services/emailService');
 const { emitDashboardUpdate } = require('../utils/socketHelpers');
+const pdfService = require('../services/pdfService');
+const ipfsService = require('../services/ipfsService');
+const blockchainService = require('../services/blockchainService');
 
 // Check if student profile is complete
 exports.checkStudentProfileCompletion = async (req, res) => {
@@ -747,8 +750,99 @@ exports.landlordSignContract = async (req, res) => {
     };
     joinRequest.status = 'completed';
 
+    // ============================================
+    // BLOCKCHAIN VERIFICATION FLOW
+    // ============================================
+    console.log('🔗 Starting blockchain verification flow...');
+    
+    let blockchainData = null;
+    try {
+      // Step 1: Generate PDF from contract content
+      console.log('Step 1: Generating contract PDF...');
+      const contractPDFData = {
+        content: joinRequest.contract.content,
+        propertyTitle: joinRequest.contract.propertyTitle,
+        propertyAddress: joinRequest.contract.propertyAddress,
+        studentName: joinRequest.contract.studentName,
+        landlordName: joinRequest.contract.landlordName,
+        studentSignature: joinRequest.contract.studentSignature,
+        landlordSignature: joinRequest.contract.landlordSignature
+      };
+      const pdfBuffer = await pdfService.generateContractPDF(contractPDFData);
+      console.log('✅ PDF generated successfully');
+
+      // Step 2: Generate SHA-256 hash of the PDF
+      console.log('Step 2: Generating contract hash...');
+      const contractHashHex = ipfsService.generateFileHash(pdfBuffer);
+      const contractHashBytes32 = ipfsService.hexToBytes32(contractHashHex);
+      console.log('✅ Contract hash generated:', contractHashBytes32);
+
+      // Step 3: Upload PDF to IPFS
+      console.log('Step 3: Uploading contract to IPFS...');
+      const ipfsResult = await ipfsService.uploadToIPFS(
+        pdfBuffer,
+        `rental-contract-${joinRequest._id}.pdf`,
+        {
+          requestId: joinRequest._id.toString(),
+          propertyTitle: joinRequest.contract.propertyTitle,
+          studentName: joinRequest.contract.studentName,
+          landlordName: joinRequest.contract.landlordName,
+          signedDate: new Date().toISOString()
+        }
+      );
+      console.log('✅ Contract uploaded to IPFS. CID:', ipfsResult.ipfsCID);
+
+      // Step 4: Store on blockchain
+      console.log('Step 4: Storing contract verification on blockchain...');
+      
+      // Get wallet addresses from users (you'll need to add walletAddress field to your User model)
+      // For now, using placeholder addresses - UPDATE THIS BASED ON YOUR USER MODEL
+      const landlordWalletAddress = landlord.walletAddress || user.walletAddress || '0x0000000000000000000000000000000000000000';
+      const studentWalletAddress = studentDoc.walletAddress || studentUser.walletAddress || '0x0000000000000000000000000000000000000000';
+      
+      // Use backend private key for the transaction
+      const backendPrivateKey = process.env.PRIVATE_KEY;
+      
+      if (!backendPrivateKey) {
+        throw new Error('PRIVATE_KEY not configured in environment');
+      }
+
+      const blockchainResult = await blockchainService.storeRentalContractOnBlockchain(
+        contractHashBytes32,
+        ipfsResult.ipfsCID,
+        landlordWalletAddress,
+        studentWalletAddress,
+        backendPrivateKey
+      );
+      
+      console.log('✅ Contract stored on blockchain. Transaction:', blockchainResult.transactionHash);
+
+      // Store blockchain verification data
+      blockchainData = {
+        contractHash: contractHashBytes32,
+        ipfsCID: ipfsResult.ipfsCID,
+        transactionHash: blockchainResult.transactionHash,
+        blockchainContractId: blockchainResult.contractId,
+        verifiedAt: new Date(),
+        blockchainNetwork: 'amoy',
+        gatewayUrl: ipfsResult.gatewayUrl,
+        blockNumber: blockchainResult.blockNumber,
+        gasUsed: blockchainResult.gasUsed
+      };
+
+      // Update join request with blockchain verification data
+      joinRequest.contract.blockchainVerification = blockchainData;
+      
+      console.log('✅ Blockchain verification flow completed successfully');
+    } catch (blockchainError) {
+      console.error('⚠️  Blockchain verification failed:', blockchainError.message);
+      console.error('Contract will be signed but blockchain verification data will not be available');
+      // Continue with regular flow even if blockchain verification fails
+      // This ensures the contract signing process is not completely blocked
+    }
+
     await joinRequest.save();
-    console.log('Join request updated and saved');
+    console.log('Join request updated and saved with blockchain data');
 
     // Calculate due dates
     const contractSignedDate = new Date();
@@ -784,6 +878,8 @@ exports.landlordSignContract = async (req, res) => {
         landlordSignature: joinRequest.contract.landlordSignature.signature,
         generatedAt: joinRequest.contract.generatedAt
       },
+      // Include blockchain verification data if available
+      blockchainVerification: blockchainData || undefined,
       propertyInfo: {
         title: joinRequest.property.title,
         address: joinRequest.property.address,
@@ -810,8 +906,10 @@ exports.landlordSignContract = async (req, res) => {
         {
           action: 'Contract Signed',
           date: contractSignedDate,
-          notes: 'Smart contract deployed on blockchain',
-          gasFee: '0.004 ETH'
+          notes: blockchainData 
+            ? `Smart contract deployed on blockchain. TX: ${blockchainData.transactionHash}` 
+            : 'Smart contract signed (blockchain verification pending)',
+          gasFee: blockchainData ? blockchainData.gasUsed : '0.004 ETH'
         }
       ]
     });

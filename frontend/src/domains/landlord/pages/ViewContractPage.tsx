@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Home, FileSignature, Loader2, ArrowLeft, CheckCircle2, AlertCircle, Wallet } from 'lucide-react';
+import { Home, FileSignature, Loader2, ArrowLeft, CheckCircle2, AlertCircle, Wallet, Shield, ExternalLink, Copy, Check } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
 import { Checkbox } from '@/shared/ui/checkbox';
@@ -37,6 +37,15 @@ interface ContractData {
     signedAt?: Date;
     signature?: string;
   };
+  blockchainVerification?: {
+    contractHash?: string;
+    ipfsCID?: string;
+    transactionHash?: string;
+    blockchainContractId?: number;
+    verifiedAt?: Date;
+    blockchainNetwork?: string;
+    gatewayUrl?: string;
+  };
 }
 
 export function ViewContractPage({ contractId, onNavigate }: ViewContractPageProps) {
@@ -45,6 +54,7 @@ export function ViewContractPage({ contractId, onNavigate }: ViewContractPagePro
   const [showGasFeeDialog, setShowGasFeeDialog] = useState(false);
   const [contractData, setContractData] = useState<ContractData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     fetchContractData();
@@ -74,7 +84,8 @@ export function ViewContractPage({ contractId, onNavigate }: ViewContractPagePro
           moveInDate: joinRequest.contract.moveInDate,
           content: joinRequest.contract.content,
           studentSignature: joinRequest.contract.studentSignature,
-          landlordSignature: joinRequest.contract.landlordSignature
+          landlordSignature: joinRequest.contract.landlordSignature,
+          blockchainVerification: joinRequest.contract.blockchainVerification
         });
       }
     } catch (error) {
@@ -142,6 +153,28 @@ export function ViewContractPage({ contractId, onNavigate }: ViewContractPagePro
       case 3: return 'rd';
       default: return 'th';
     }
+  };
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      toast.success('Copied to clipboard');
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (error) {
+      toast.error('Failed to copy');
+    }
+  };
+
+  const getBlockchainExplorerUrl = (txHash: string, network: string = 'amoy') => {
+    if (network === 'amoy' || network === 'polygon-amoy') {
+      return `https://amoy.polygonscan.com/tx/${txHash}`;
+    }
+    return `https://polygonscan.com/tx/${txHash}`;
+  };
+
+  const getIPFSGatewayUrl = (cid: string) => {
+    return `https://gateway.pinata.cloud/ipfs/${cid}`;
   };
 
   if (loading) {
@@ -235,6 +268,179 @@ export function ViewContractPage({ contractId, onNavigate }: ViewContractPagePro
               <div>
                 <p className="font-semibold text-green-800 text-lg">Contract Successfully Signed!</p>
                 <p className="text-sm text-green-700">This contract has been deployed to the blockchain and is now active. The rental agreement is fully executed.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Blockchain Verification Section - Only show when contract is signed and blockchain data exists */}
+      {studentSigned && landlordSigned && contractData.blockchainVerification && (
+        <Card className="shadow-lg border-2 border-primary/30">
+          <CardContent className="p-0">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-6 border-b border-primary/20">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-primary rounded-full">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-primary">Blockchain Verification</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This contract is immutably recorded on the blockchain and stored on IPFS
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Verification Details */}
+            <div className="p-6 space-y-4">
+              {/* Verification Status */}
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <span className="font-semibold text-green-800">✓ Verified on Blockchain</span>
+                </div>
+                <p className="text-sm text-green-700 mt-1 ml-7">
+                  Contract authenticity confirmed on {contractData.blockchainVerification.blockchainNetwork?.toUpperCase() || 'Polygon'} Network
+                </p>
+              </div>
+
+              {/* Transaction Hash */}
+              {contractData.blockchainVerification.transactionHash && (
+                <div className="border border-gray-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-700 mb-1">Transaction Hash</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono break-all text-gray-800">
+                          {contractData.blockchainVerification.transactionHash}
+                        </code>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(contractData.blockchainVerification!.transactionHash!, 'txHash')}
+                        className="h-8 w-8 p-0"
+                      >
+                        {copiedField === 'txHash' ? (
+                          <Check className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(getBlockchainExplorerUrl(contractData.blockchainVerification!.transactionHash!, contractData.blockchainVerification!.blockchainNetwork), '_blank')}
+                        className="h-8 px-3"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        View
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* IPFS Link */}
+              {contractData.blockchainVerification.ipfsCID && (
+                <div className="border border-gray-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-700 mb-1">IPFS Document Link</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono break-all text-gray-800">
+                          {contractData.blockchainVerification.ipfsCID}
+                        </code>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Click to view or download the verified contract document from IPFS
+                      </p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyToClipboard(contractData.blockchainVerification!.ipfsCID!, 'ipfs')}
+                        className="h-8 w-8 p-0"
+                      >
+                        {copiedField === 'ipfs' ? (
+                          <Check className="w-4 h-4 text-green-600" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(getIPFSGatewayUrl(contractData.blockchainVerification!.ipfsCID!), '_blank')}
+                        className="h-8 px-3"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        View
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Contract Hash */}
+              {contractData.blockchainVerification.contractHash && (
+                <div className="border border-gray-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-700 mb-1">Contract Hash (SHA-256)</p>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono break-all text-gray-800">
+                          {contractData.blockchainVerification.contractHash}
+                        </code>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Use this hash to verify document authenticity
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(contractData.blockchainVerification!.contractHash!, 'hash')}
+                      className="h-8 w-8 p-0 flex-shrink-0"
+                    >
+                      {copiedField === 'hash' ? (
+                        <Check className="w-4 h-4 text-green-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Blockchain Contract ID */}
+              {contractData.blockchainVerification.blockchainContractId && (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Blockchain Contract ID</p>
+                      <p className="text-lg font-mono font-semibold text-primary mt-1">
+                        #{contractData.blockchainVerification.blockchainContractId}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Verification Instructions */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                <p className="text-sm font-semibold text-blue-900 mb-2">How to Verify:</p>
+                <ol className="text-xs text-blue-800 space-y-1 ml-4 list-decimal">
+                  <li>Click the IPFS link to download the contract document</li>
+                  <li>Calculate the SHA-256 hash of the downloaded file</li>
+                  <li>Compare your hash with the Contract Hash shown above</li>
+                  <li>If they match, the document is authentic and unmodified</li>
+                </ol>
               </div>
             </div>
           </CardContent>
@@ -661,15 +867,6 @@ export function ViewContractPage({ contractId, onNavigate }: ViewContractPagePro
                       <p className="font-medium mb-1">Blockchain Registration</p>
                       <p className="text-sm text-muted-foreground">
                         This contract will be recorded on the blockchain and cannot be modified after signing
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium mb-1">Gas Fee Notice</p>
-                      <p className="text-sm text-muted-foreground">
-                        A $3 gas fee will be automatically deducted from your connected wallet to complete this on-chain signing process
                       </p>
                     </div>
                   </div>

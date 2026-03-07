@@ -66,6 +66,16 @@ const rentalSchema = new mongoose.Schema({
     generatedAt: { type: Date, required: true }
   },
 
+  // Blockchain verification data
+  blockchainVerification: {
+    contractHash: { type: String },        // SHA-256 hash of the contract document
+    ipfsCID: { type: String },            // IPFS Content Identifier
+    transactionHash: { type: String },    // Blockchain transaction hash
+    blockchainContractId: { type: Number }, // Smart contract record ID
+    verifiedAt: { type: Date },          // When the contract was verified on blockchain
+    blockchainNetwork: { type: String }   // Network where contract is stored (e.g., 'amoy')
+  },
+
   // Property Information (snapshot at time of rental)
   propertyInfo: {
     title: { type: String },
