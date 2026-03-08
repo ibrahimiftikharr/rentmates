@@ -1,11 +1,63 @@
 /**
  * Compatibility Service
- * Calculates compatibility scores between students based on:
- * 1. Structured attributes (budget, housing preferences, university, etc.)
- * 2. Text similarity (bio and interests)
+ * Calculates compatibility scores between students using:
+ * 1. Python ML Service (primary) - Machine Learning model with semantic analysis
+ *    - Can be deployed locally (Flask) or on Modal.com (serverless)
+ * 2. JavaScript fallback (backup) - Rule-based scoring if ML service unavailable
+ * 
+ * The ML service provides superior accuracy through:
+ * - Sentence transformers for semantic text understanding
+ * - Gradient boosting regression trained on compatibility patterns
+ * - Advanced feature engineering (17+ features)
  */
 
-// Simple cosine similarity for text vectors
+const axios = require('axios');
+
+// Configuration
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'https://ibrahimiftikharr--rentmates-compatibility-predict-endpoint.modal.run';
+const ML_TIMEOUT = parseInt(process.env.ML_TIMEOUT) || 10000; // 10 seconds for serverless
+const USE_ML_SERVICE = process.env.USE_ML_SERVICE !== 'false'; // Default to true
+
+// Modal endpoint configuration
+const MODAL_ENDPOINTS = {
+    predict: 'https://ibrahimiftikharr--rentmates-compatibility-predict-endpoint.modal.run',
+    batchPredict: 'https://ibrahimiftikharr--rentmates-compatibility-predict-batch--ced605.modal.run',
+    health: 'https://ibrahimiftikharr--rentmates-compatibility-health-endpoint.modal.run',
+    train: 'https://ibrahimiftikharr--rentmates-compatibility-train-endpoint.modal.run'
+};
+
+// Check if using Modal.com deployment (serverless endpoints have different paths)
+const IS_MODAL = ML_SERVICE_URL.includes('modal.run');
+
+// Modal endpoint URLs are structured differently than local Flask
+// Modal: https://username--app-name-endpoint-name.modal.run
+// Flask: http://localhost:5001/endpoint-name
+const getEndpointUrl = (endpoint) => {
+  if (IS_MODAL) {
+    // Use predefined Modal endpoints
+    switch(endpoint) {
+      case 'predict-endpoint':
+      case 'predict':
+        return MODAL_ENDPOINTS.predict;
+      case 'predict-batch-endpoint':
+      case 'predict-batch':
+        return MODAL_ENDPOINTS.batchPredict;
+      case 'health-endpoint':
+      case 'health':
+        return MODAL_ENDPOINTS.health;
+      case 'train-endpoint':
+      case 'train':
+        return MODAL_ENDPOINTS.train;
+      default:
+        return `${ML_SERVICE_URL}/${endpoint}`;
+    }
+  } else {
+    // Flask local development
+    return `${ML_SERVICE_URL}/${endpoint}`;
+  }
+};
+
+// Simple cosine similarity for text vectors (fallback only)
 const cosineSimilarity = (vecA, vecB) => {
   const dotProduct = vecA.reduce((sum, val, i) => sum + val * vecB[i], 0);
   const magnitudeA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
@@ -153,41 +205,177 @@ const calculateTextSimilarity = (student1, student2) => {
 };
 
 /**
- * Calculate overall compatibility score between two students
+ * Calculate compatibility score between two students
+ * Tries ML service first, falls back to rule-based calculation
+ * 
  * @param {Object} student1 - First student object
  * @param {Object} student2 - Second student object
- * @param {Number} alpha - Weight for structured score (0-1), default 0.6
- * @returns {Number} Compatibility score (0-100)
+ * @returns {Promise<Number>} Compatibility score (0-100)
  */
-const calculateCompatibility = (student1, student2, alpha = 0.6) => {
-  // Calculate both components
+const calculateCompatibility = async (student1, student2) => {
+  // Try ML service first
+  const mlScore = await callMLService(student1, student2);
+  
+  if (mlScore !== null) {
+    return mlScore;
+  }
+
+  // Fallback to rule-based calculation
   const structuredScore = calculateStructuredSimilarity(student1, student2);
   const textScore = calculateTextSimilarity(student1, student2);
+  
+  // Weighted average (70% structured, 30% text)
+  const finalScore = (structuredScore * 0.7 + textScore * 0.3) * 100;
+  
+  return Math.round(Math.max(0, Math.min(100, finalScore)));
+};
 
-  // Weighted combination
-  const finalScore = (alpha * structuredScore) + ((1 - alpha) * textScore);
+/**
+ * Call ML Service for compatibility prediction
+ * Works with both local Flask and Modal.com deployments
+ * 
+ * @param {Object} student1 - First student object
+ * @param {Object} student2 - Second student object
+ * @returns {Promise<Number>} Compatibility score (0-100) or null if service unavailable
+ */
+const callMLService = async (student1, student2) => {
+  if (!USE_ML_SERVICE) {
+    return null;
+  }
 
-  // Convert to percentage (0-100)
-  return Math.round(finalScore * 100);
+  try {
+    const endpoint = IS_MODAL ? 'predict-endpoint' : 'predict';
+    const url = getEndpointUrl(endpoint);
+
+    const response = await axios.post(
+      url,
+      {
+        student1: student1,
+        student2: student2
+      },
+      {
+        timeout: ML_TIMEOUT,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data && response.data.success) {
+      return response.data.compatibilityScore;
+    }
+
+    return null;
+  } catch (error) {
+    // ML service unavailable - will fallback to rule-based
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('ML Service not available at', ML_SERVICE_URL);
+    } else if (error.code === 'ETIMEDOUT') {
+      console.warn('ML Service timeout at', ML_SERVICE_URL);
+    } else {
+      console.error('ML Service error:', error.message);
+    }
+    return null;
+  }
+};
+
+/**
+ * Call ML Service for batch predictions (more efficient)
+ * Works with both local Flask and Modal.com deployments
+ * 
+ * @param {Object} currentStudent - The logged-in student
+ * @param {Array} allStudents - Array of all other students
+ * @returns {Promise<Object|null>} Map of studentId -> score, or null if service unavailable
+ */
+const callMLServiceBatch = async (currentStudent, allStudents) => {
+  if (!USE_ML_SERVICE) {
+    return null;
+  }
+
+  try {
+    const endpoint = IS_MODAL ? 'predict-batch-endpoint' : 'predict-batch';
+    const url = getEndpointUrl(endpoint);
+
+    const response = await axios.post(
+      url,
+      {
+        currentStudent: currentStudent,
+        otherStudents: allStudents.map(s => s.toObject ? s.toObject() : s)
+      },
+      {
+        timeout: ML_TIMEOUT * 2, // More time for batch
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data && response.data.success) {
+      // Convert array to map for easy lookup
+      const scoreMap = {};
+      response.data.scores.forEach(item => {
+        scoreMap[item.studentId] = item.compatibilityScore;
+      });
+      return scoreMap;
+    }
+
+    return null;
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      console.warn('ML Service not available for batch prediction');
+    } else if (error.code === 'ETIMEDOUT') {
+      console.warn('ML Service batch prediction timeout');
+    } else {
+      console.error('ML Service batch error:', error.message);
+    }
+    return null;
+  }
 };
 
 /**
  * Calculate compatibility scores for a student against all other students
+ * Tries ML service batch prediction first, falls back to individual calculations
+ * 
  * @param {Object} currentStudent - The logged-in student
  * @param {Array} allStudents - Array of all other students
- * @returns {Array} Students with compatibility scores, sorted by score
+ * @returns {Promise<Array>} Students with compatibility scores, sorted by score
  */
-const calculateCompatibilityScores = (currentStudent, allStudents) => {
-  return allStudents
-    .filter(student => student._id.toString() !== currentStudent._id.toString())
-    .map(student => ({
+const calculateCompatibilityScores = async (currentStudent, allStudents) => {
+  // Filter out current student
+  const otherStudents = allStudents.filter(
+    student => student._id.toString() !== currentStudent._id.toString()
+  );
+
+  // Try batch prediction first
+  const mlScores = await callMLServiceBatch(currentStudent, otherStudents);
+
+  if (mlScores) {
+    // Use ML scores
+    return otherStudents
+      .map(student => {
+        const studentId = student._id.toString();
+        return {
+          ...student.toObject(),
+          compatibilityScore: mlScores[studentId] || 50 // Default if missing
+        };
+      })
+      .sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+  }
+
+  // Fallback: Calculate individually using rule-based
+  const studentsWithScores = await Promise.all(
+    otherStudents.map(async student => ({
       ...student.toObject(),
-      compatibilityScore: calculateCompatibility(currentStudent, student)
+      compatibilityScore: await calculateCompatibility(currentStudent, student)
     }))
-    .sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+  );
+
+  return studentsWithScores.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
 };
 
 module.exports = {
   calculateCompatibility,
-  calculateCompatibilityScores
+  calculateCompatibilityScores,
+  callMLService,
+  callMLServiceBatch
 };

@@ -1,12 +1,10 @@
-import { TrendingUp, Bell, AlertTriangle, CheckCircle2, Info, XCircle, Shield } from "lucide-react";
+import { useState, useEffect } from "react";
+import { TrendingUp, Bell, AlertTriangle, CheckCircle2, Info, XCircle, Shield, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-
-const riskChanges = [
-  { pool: "High Yield Growth", change: "Risk increased to 7.2%", trend: "up", color: "orange" },
-  { pool: "Balanced Portfolio", change: "Risk decreased to 4.1%", trend: "down", color: "green" },
-  { pool: "Conservative Growth", change: "Stable at 2.5%", trend: "stable", color: "blue" },
-];
+import { getPoolRiskAnalytics, type PoolRiskMetric } from "../services/dashboardService";
+import { socketService } from "@/shared/services/socketService";
+import { toast } from "sonner";
 
 const notifications = [
   {
@@ -36,6 +34,76 @@ const notifications = [
 ];
 
 export function BottomWidgets() {
+  const [loading, setLoading] = useState(true);
+  const [riskMetrics, setRiskMetrics] = useState<PoolRiskMetric[]>([]);
+
+  useEffect(() => {
+    loadRiskMetrics();
+
+    // Listen for risk updates
+    socketService.on('dashboard_metrics_updated', handleRiskUpdate);
+    socketService.on('pool_share_price_updated', handleRiskUpdate);
+
+    return () => {
+      socketService.off('dashboard_metrics_updated', handleRiskUpdate);
+      socketService.off('pool_share_price_updated', handleRiskUpdate);
+    };
+  }, []);
+
+  const loadRiskMetrics = async () => {
+    try {
+      const data = await getPoolRiskAnalytics();
+      setRiskMetrics(data.poolRisks);
+    } catch (error: any) {
+      console.error('Load risk metrics error:', error);
+      toast.error(error.message || 'Failed to load risk analytics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRiskUpdate = (data: any) => {
+    console.log('Risk update event:', data);
+    // Silently refresh risk metrics
+    loadRiskMetrics();
+  };
+
+  const getRiskColor = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'High':
+        return 'orange';
+      case 'Medium':
+        return 'blue';
+      case 'Low':
+      default:
+        return 'green';
+    }
+  };
+
+  const getRiskGradient = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'High':
+        return 'from-orange-400 to-orange-500';
+      case 'Medium':
+        return 'from-blue-400 to-blue-500';
+      case 'Low':
+      default:
+        return 'from-green-400 to-green-500';
+    }
+  };
+
+  const getRiskBadgeClass = (riskLevel: string) => {
+    switch (riskLevel) {
+      case 'High':
+        return 'bg-orange-50 text-orange-600 border-orange-200';
+      case 'Medium':
+        return 'bg-blue-50 text-blue-600 border-blue-200';
+      case 'Low':
+      default:
+        return 'bg-green-50 text-green-600 border-green-200';
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-4">
       {/* Risk Analytics Feed */}
@@ -47,38 +115,38 @@ export function BottomWidgets() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 md:space-y-3">
-          {riskChanges.map((item, index) => (
-            <div
-              key={index}
-              className="flex items-start gap-2 md:gap-3 p-2.5 md:p-3 rounded-lg bg-accent/50 hover:bg-accent transition-colors"
-            >
-              <div className={`mt-0.5 h-7 w-7 md:h-8 md:w-8 rounded-lg bg-gradient-to-br ${
-                item.color === "orange" 
-                  ? "from-orange-400 to-orange-500" 
-                  : item.color === "green"
-                  ? "from-green-400 to-green-500"
-                  : "from-blue-400 to-blue-500"
-              } flex items-center justify-center`}>
-                <TrendingUp className="h-3.5 w-3.5 md:h-4 md:w-4 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs md:text-sm mb-1 truncate">{item.pool}</p>
-                <p className="text-[10px] md:text-xs text-muted-foreground">{item.change}</p>
-              </div>
-              <Badge
-                variant="secondary"
-                className={`shrink-0 ${
-                  item.color === "orange"
-                    ? "bg-orange-50 text-orange-600 border-orange-200"
-                    : item.color === "green"
-                    ? "bg-green-50 text-green-600 border-green-200"
-                    : "bg-blue-50 text-blue-600 border-blue-200"
-                }`}
-              >
-                {item.trend === "up" ? "↑" : item.trend === "down" ? "↓" : "→"}
-              </Badge>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-          ))}
+          ) : riskMetrics.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">
+              No active pools to analyze
+            </div>
+          ) : (
+            riskMetrics.map((item, index) => (
+              <div
+                key={index}
+                className="flex items-start gap-2 md:gap-3 p-2.5 md:p-3 rounded-lg bg-accent/50 hover:bg-accent transition-colors"
+              >
+                <div className={`mt-0.5 h-7 w-7 md:h-8 md:w-8 rounded-lg bg-gradient-to-br ${getRiskGradient(item.riskLevel)} flex items-center justify-center`}>
+                  <TrendingUp className="h-3.5 w-3.5 md:h-4 md:w-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs md:text-sm mb-1 truncate">{item.poolName}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground">
+                    Risk: {item.riskScore.toFixed(2)}% ({item.riskLevel})
+                  </p>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className={`shrink-0 ${getRiskBadgeClass(item.riskLevel)}`}
+                >
+                  {item.trend === "up" ? "↑" : item.trend === "down" ? "↓" : "→"}
+                </Badge>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 

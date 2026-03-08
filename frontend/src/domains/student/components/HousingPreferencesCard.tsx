@@ -23,15 +23,40 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
     moveInDate: profile.housingPreferences?.moveInDate ? new Date(profile.housingPreferences.moveInDate).toISOString().split('T')[0] : '',
   });
 
+  const isPastDateSelected = () => {
+    if (!formData.moveInDate) return false;
+    const selectedDate = new Date(formData.moveInDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+    return selectedDate < today;
+  };
+
   const handleSave = async () => {
     try {
+      // Validate budget
+      if (formData.budgetMax > 0 && formData.budgetMin > 0 && formData.budgetMax < formData.budgetMin) {
+        throw new Error('Maximum budget cannot be lower than minimum budget');
+      }
+
+      // Validate move-in date is not in the past
+      if (formData.moveInDate) {
+        const selectedDate = new Date(formData.moveInDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (selectedDate < today) {
+          throw new Error('Move-in date cannot be in the past');
+        }
+      }
+
       setIsSaving(true);
       await onUpdate({
         housingPreferences: formData
       });
       setIsEditing(false);
-    } catch (error) {
+    } catch (error: any) {
       // Error handled by parent
+      throw error;
     } finally {
       setIsSaving(false);
     }
@@ -108,12 +133,18 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
               id="budgetMin" 
               type="number"
               value={formData.budgetMin}
-              onChange={(e) => setFormData({...formData, budgetMin: Number(e.target.value)})}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setFormData({...formData, budgetMin: value});
+              }}
               disabled={!isEditing}
               className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
               placeholder="500"
               min="0"
             />
+            {isEditing && formData.budgetMax > 0 && formData.budgetMin > formData.budgetMax && (
+              <p className="text-xs text-red-600">Minimum cannot be greater than maximum</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="budgetMax" className="text-sm">Max Budget ($/month)</Label>
@@ -121,12 +152,18 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
               id="budgetMax" 
               type="number"
               value={formData.budgetMax}
-              onChange={(e) => setFormData({...formData, budgetMax: Number(e.target.value)})}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setFormData({...formData, budgetMax: value});
+              }}
               disabled={!isEditing}
               className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
               placeholder="1000"
               min="0"
             />
+            {isEditing && formData.budgetMin > 0 && formData.budgetMax > 0 && formData.budgetMax < formData.budgetMin && (
+              <p className="text-xs text-red-600">Maximum cannot be lower than minimum</p>
+            )}
           </div>
         </div>
 
@@ -143,10 +180,13 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             onChange={(e) => setFormData({...formData, moveInDate: e.target.value})}
             disabled={!isEditing}
             className={`${!isEditing ? 'bg-muted/50' : ''} text-sm`}
-            min={new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]}
+            min={new Date().toISOString().split('T')[0]}
           />
           {isEditing && (
-            <p className="text-xs text-muted-foreground">Must be a future date</p>
+            <p className="text-xs text-muted-foreground">Must be today or a future date</p>
+          )}
+          {isEditing && isPastDateSelected() && (
+            <p className="text-xs text-red-600">⚠️ Past date selected - please choose today or a future date</p>
           )}
         </div>
 
@@ -160,7 +200,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
             <>
               <Button 
                 onClick={handleSave} 
-                disabled={isSaving}
+                disabled={isSaving || isPastDateSelected()}
                 className="flex-1 sm:flex-initial"
               >
                 {isSaving ? (

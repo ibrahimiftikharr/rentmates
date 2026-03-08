@@ -35,7 +35,7 @@ const joinRequestSchema = new mongoose.Schema({
   // Status tracking
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected', 'waiting_completion', 'completed'],
+    enum: ['pending', 'approved', 'rejected', 'waiting_completion', 'completed', 'terminated'],
     default: 'pending'
   },
 
@@ -68,12 +68,29 @@ const joinRequestSchema = new mongoose.Schema({
       signed: { type: Boolean, default: false },
       signedAt: { type: Date },
       signature: { type: String }
+    },
+    // Blockchain verification data
+    blockchainVerification: {
+      contractHash: { type: String },        // SHA-256 hash of the contract document
+      ipfsCID: { type: String },            // IPFS Content Identifier
+      transactionHash: { type: String },    // Blockchain transaction hash
+      blockchainContractId: { type: Number }, // Smart contract record ID
+      verifiedAt: { type: Date },          // When the contract was verified on blockchain
+      blockchainNetwork: { type: String }   // Network where contract is stored (e.g., 'amoy')
     }
   },
 
   // Rejection reason
   rejectionReason: {
     type: String
+  },
+
+  // Termination details
+  terminationReason: {
+    type: String
+  },
+  terminatedAt: {
+    type: Date
   },
 
   // Timestamps

@@ -8,6 +8,8 @@ router.use(authenticateToken);
 
 router.get('/', notificationController.getNotifications);
 router.get('/unread-count', notificationController.getUnreadCount);
+router.get('/preferences', notificationController.getPreferences);
+router.put('/preferences', notificationController.updatePreferences);
 router.put('/:notificationId/read', notificationController.markAsRead);
 router.put('/mark-all-read', notificationController.markAllAsRead);
 router.delete('/:notificationId', notificationController.deleteNotification);

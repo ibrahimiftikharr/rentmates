@@ -68,8 +68,13 @@ export function LandlordDashboard() {
         return;
       }
       
-      toast.info(data.title, {
-        description: data.message,
+      // Don't show toast for visit_request type - already handled by new_visit_request event
+      if (data.notification?.type === 'visit_request') {
+        return;
+      }
+      
+      toast.info(data.notification?.title || data.title, {
+        description: data.notification?.message || data.message,
       });
     });
 

@@ -153,3 +153,40 @@ export const getMyCollateral = async () => {
     );
   }
 };
+
+/**
+ * Withdraw collateral for a completed loan
+ */
+export const withdrawCollateral = async (loanId: string) => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/api/collateral/withdraw`,
+      { loanId },
+      getAuthHeaders()
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error('Withdraw collateral error:', error);
+    throw new Error(
+      error.response?.data?.error || error.response?.data?.message || 'Failed to withdraw collateral'
+    );
+  }
+};
+
+/**
+ * Get collateral status for a specific loan
+ */
+export const getCollateralStatus = async (loanId: string) => {
+  try {
+    const response = await axios.get(
+      `${API_URL}/api/collateral/status/${loanId}`,
+      getAuthHeaders()
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error('Get collateral status error:', error);
+    throw new Error(
+      error.response?.data?.error || 'Failed to fetch collateral status'
+    );
+  }
+};

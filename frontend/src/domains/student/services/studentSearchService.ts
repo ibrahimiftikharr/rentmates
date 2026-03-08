@@ -37,7 +37,7 @@ export interface CompatibleStudent {
   interests: string[];
   reputationScore: number;
   trustLevel: string;
-  compatibilityScore: number;
+  compatibilityScore: number | null; // Allow null for progressive loading
   housingPreferences: {
     propertyType: string[];
     budgetMin: number;
@@ -48,6 +48,12 @@ export interface CompatibleStudent {
     furnished: boolean;
     billsIncluded: boolean;
   };
+}
+
+export interface CompatibilityScore {
+  studentId: string;
+  compatibilityScore: number;
+  calculatedAt: string;
 }
 
 export interface SearchStudentsParams {
@@ -112,7 +118,65 @@ export const getStudentProfile = async (studentId: string): Promise<CompatibleSt
   }
 };
 
+/**
+ * Get students FAST without waiting for compatibility scores (Progressive Loading)
+ * Returns students immediately with compatibilityScore: null
+ */
+export const getStudentsFast = async (
+  params?: SearchStudentsParams
+): Promise<CompatibleStudent[]> => {
+  try {
+    const response = await api.get('/public/students-fast', {
+      params: {
+        search: params?.search || undefined,
+        university: params?.university || undefined,
+        nationality: params?.nationality || undefined,
+      },
+    });
+
+    if (response.data.success) {
+      return response.data.students;
+    } else {
+      throw new Error(response.data.message || 'Failed to fetch students');
+    }
+  } catch (error: any) {
+    console.error('Error fetching students fast:', error);
+    throw new Error(
+      error.response?.data?.message || 
+      error.message || 
+      'Failed to fetch students'
+    );
+  }
+};
+
+/**
+ * Calculate compatibility scores for specific student IDs (Progressive Loading)
+ * Returns a map of studentId -> score object
+ */
+export const calculateCompatibilityScores = async (
+  studentIds: string[]
+): Promise<Record<string, CompatibilityScore>> => {
+  try {
+    const response = await api.post('/public/calculate-compatibility', {
+      studentIds,
+    });
+
+    if (response.data.success) {
+      return response.data.scores;
+    } else {
+      console.warn('Compatibility calculation failed:', response.data.message);
+      return {}; // Return empty object on failure (graceful degradation)
+    }
+  } catch (error: any) {
+    console.error('Error calculating compatibility scores:', error);
+    // Return empty object on error (offline mode, timeout, etc.)
+    return {};
+  }
+};
+
 export const studentSearchService = {
   getStudentsWithCompatibility,
   getStudentProfile,
+  getStudentsFast,
+  calculateCompatibilityScores,
 };

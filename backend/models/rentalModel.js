@@ -66,6 +66,16 @@ const rentalSchema = new mongoose.Schema({
     generatedAt: { type: Date, required: true }
   },
 
+  // Blockchain verification data
+  blockchainVerification: {
+    contractHash: { type: String },        // SHA-256 hash of the contract document
+    ipfsCID: { type: String },            // IPFS Content Identifier
+    transactionHash: { type: String },    // Blockchain transaction hash
+    blockchainContractId: { type: Number }, // Smart contract record ID
+    verifiedAt: { type: Date },          // When the contract was verified on blockchain
+    blockchainNetwork: { type: String }   // Network where contract is stored (e.g., 'amoy')
+  },
+
   // Property Information (snapshot at time of rental)
   propertyInfo: {
     title: { type: String },
@@ -99,6 +109,37 @@ const rentalSchema = new mongoose.Schema({
     enum: ['registered', 'active', 'terminated', 'completed'],
     default: 'registered'
   },
+
+  // Termination details
+  terminationReason: {
+    type: String
+  },
+  terminatedAt: {
+    type: Date
+  },
+
+  // Security Deposit Tracking
+  securityDepositStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'refunded', 'overdue'],
+    default: 'pending'
+  },
+  securityDepositPaidAt: {
+    type: Date
+  },
+  securityDepositRefundedAt: {
+    type: Date
+  },
+  securityDepositRefundReason: {
+    type: String
+  },
+  
+  // Notification tracking for security deposit reminders
+  securityDepositReminders: [{
+    sentAt: { type: Date },
+    reminderType: { type: String, enum: ['3-day', 'daily'] },
+    daysRemaining: { type: Number }
+  }],
 
   // Payment tracking - updated to include month/year info
   payments: [{

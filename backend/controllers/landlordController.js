@@ -15,8 +15,8 @@ const getProfile = async (req, res) => {
     
     const userId = req.user.id; // From authenticateToken middleware
 
-    // Find landlord by user ID and populate user data
-    let landlord = await Landlord.findOne({ user: userId }).populate('user', 'name email');
+    // Find landlord by user ID and populate user data (including walletAddress)
+    let landlord = await Landlord.findOne({ user: userId }).populate('user', 'name email walletAddress isVerified');
 
     // If landlord doesn't exist, create a new one
     if (!landlord) {
@@ -26,24 +26,21 @@ const getProfile = async (req, res) => {
         reputationScore: 20 // Start with 20 pts for email verification
       });
       await landlord.save();
-      await landlord.populate('user', 'name email');
+      await landlord.populate('user', 'name email walletAddress isVerified');
       console.log('✓ New landlord profile created with reputation score:', landlord.reputationScore);
-    } else {
-      // Fix existing landlords with 0 score - they should have at least 20 for email verification
-      if (landlord.reputationScore === 0) {
-        landlord.reputationScore = 20;
-        await landlord.save();
-        console.log('✓ Fixed reputation score for existing landlord:', landlord.reputationScore);
-      }
-      
-      // Check basic profile completion to ensure isProfileComplete is up to date
-      const wasComplete = landlord.isProfileComplete;
-      landlord.checkBasicProfileCompletion();
-      if (wasComplete !== landlord.isProfileComplete) {
-        await landlord.save();
-        console.log('✓ Updated profile completion status:', landlord.isProfileComplete);
-      }
     }
+    
+    // Always recalculate reputation score to ensure it's up to date
+    await landlord.calculateReputationScore();
+    
+    // Check basic profile completion to ensure isProfileComplete is up to date
+    landlord.checkBasicProfileCompletion();
+    
+    // Save if anything changed
+    await landlord.save();
+    
+    console.log('✓ Landlord reputation score:', landlord.reputationScore);
+    console.log('✓ Profile complete:', landlord.isProfileComplete);
 
     res.status(200).json({
       success: true,
@@ -51,6 +48,7 @@ const getProfile = async (req, res) => {
         id: landlord._id,
         name: landlord.user.name,
         email: landlord.user.email,
+        walletAddress: landlord.user.walletAddress || '',
         phone: landlord.phone || '',
         nationality: landlord.nationality || '',
         address: landlord.address || '',
@@ -94,6 +92,12 @@ const updateProfile = async (req, res) => {
       governmentId
     } = req.body;
 
+    console.log('📝 Update Profile Request:');
+    console.log('  - phone:', phone);
+    console.log('  - nationality:', nationality);
+    console.log('  - address:', address);
+    console.log('  - governmentId:', governmentId);
+
     // Find or create landlord
     let landlord = await Landlord.findOne({ user: userId });
     if (!landlord) {
@@ -101,13 +105,18 @@ const updateProfile = async (req, res) => {
     }
 
     // Update fields
-    if (phone) landlord.phone = phone;
-    if (nationality) landlord.nationality = nationality;
-    if (address) landlord.address = address;
-    if (city) landlord.city = city;
-    if (country) landlord.country = country;
-    if (postalCode) landlord.postalCode = postalCode;
-    if (governmentId) landlord.governmentId = governmentId;
+    if (phone !== undefined) landlord.phone = phone;
+    if (nationality !== undefined) landlord.nationality = nationality;
+    if (address !== undefined) landlord.address = address;
+    if (city !== undefined) landlord.city = city;
+    if (country !== undefined) landlord.country = country;
+    if (postalCode !== undefined) landlord.postalCode = postalCode;
+    if (governmentId !== undefined) landlord.governmentId = governmentId;
+
+    // Log current state before calculating reputation
+    console.log('After profile update:');
+    console.log('- governmentId:', landlord.governmentId);
+    console.log('- govIdDocument:', landlord.govIdDocument);
 
     // Check basic profile completion (for adding properties)
     landlord.checkBasicProfileCompletion();
@@ -118,7 +127,7 @@ const updateProfile = async (req, res) => {
     landlord.updatedAt = Date.now();
 
     await landlord.save();
-    await landlord.populate('user', 'name email');
+    await landlord.populate('user', 'name email walletAddress');
 
     console.log('✓ Landlord profile updated:', landlord.user.email);
     console.log('✓ New reputation score:', landlord.reputationScore);
@@ -126,11 +135,14 @@ const updateProfile = async (req, res) => {
     // Emit Socket.IO event for real-time reputation update
     const io = req.app.get('io');
     if (io) {
+      console.log(`📡 Emitting reputation_updated to landlord_${userId}`);
       io.to(`landlord_${userId}`).emit('reputation_updated', {
         reputationScore: landlord.reputationScore,
         isProfileComplete: landlord.isProfileComplete
       });
-      console.log(`✓ Emitted reputation_updated to landlord_${userId}`);
+      console.log(`✓ Emitted reputation_updated to landlord_${userId} with score: ${landlord.reputationScore}`);
+    } else {
+      console.log('⚠️ Socket.IO not initialized');
     }
 
     res.status(200).json({
@@ -140,6 +152,7 @@ const updateProfile = async (req, res) => {
         id: landlord._id,
         name: landlord.user.name,
         email: landlord.user.email,
+        walletAddress: landlord.user.walletAddress || '',
         phone: landlord.phone,
         nationality: landlord.nationality,
         address: landlord.address,
@@ -253,6 +266,11 @@ const uploadGovIdDocument = async (req, res) => {
     // Save new document URL
     landlord.govIdDocument = req.file.path;
     
+    // Log current state before calculating reputation
+    console.log('Before reputation calculation:');
+    console.log('- governmentId:', landlord.governmentId);
+    console.log('- govIdDocument:', landlord.govIdDocument);
+    
     // Recalculate reputation score
     await landlord.calculateReputationScore();
     
@@ -265,10 +283,14 @@ const uploadGovIdDocument = async (req, res) => {
     // Emit Socket.IO event for real-time reputation update
     const io = req.app.get('io');
     if (io) {
+      console.log(`📡 Emitting reputation_updated to landlord_${userId}`);
       io.to(`landlord_${userId}`).emit('reputation_updated', {
         reputationScore: landlord.reputationScore,
         govIdDocument: landlord.govIdDocument
       });
+      console.log(`✓ Emitted with score: ${landlord.reputationScore}`);
+    } else {
+      console.log('⚠️ Socket.IO not initialized');
     }
 
     res.status(200).json({

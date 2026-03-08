@@ -3,7 +3,9 @@ const Loan = require('../models/loanModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const PoolInvestment = require('../models/poolInvestmentModel');
 const Student = require('../models/studentModel');
+const QueuedLoanRequest = require('../models/queuedLoanRequestModel');
 const { convertUSDTtoPAXG, getPAXGPriceWithTimestamp } = require('../services/coinMarketCapService');
+const { notifyLoanApplicationSubmitted } = require('../services/notificationService');
 
 /**
  * Calculate monthly repayment using amortized loan formula
@@ -108,6 +110,22 @@ exports.checkLoanAvailability = async (req, res) => {
         }
       });
     }
+    
+    // Check for unwithdrawn collateral from completed loans
+    const completedLoanWithCollateral = await Loan.findOne({
+      borrower: student._id,
+      status: 'completed',
+      collateralStatus: 'returned'
+    });
+    
+    if (completedLoanWithCollateral) {
+      return res.status(400).json({
+        error: 'You have unwithdrawn collateral from a previous loan. Please withdraw your collateral before applying for a new loan.',
+        hasUnwithdrawnCollateral: true,
+        loanId: completedLoanWithCollateral._id,
+        collateralAmount: completedLoanWithCollateral.requiredCollateral
+      });
+    }
 
     // Get all active investment pools
     const pools = await InvestmentPool.find({ isActive: true }).sort({ ltv: 1 });
@@ -189,7 +207,8 @@ exports.checkLoanAvailability = async (req, res) => {
       requestedAmount,
       requestedDuration,
       purpose: purpose || 'Not specified',
-      pools: poolsWithAvailability
+      pools: poolsWithAvailability,
+      hasEligiblePools: poolsWithAvailability.some(p => p.isEligible)
     });
 
   } catch (error) {
@@ -247,6 +266,22 @@ exports.applyForLoan = async (req, res) => {
         error: 'You already have an active loan. Please complete it before applying for a new one.'
       });
     }
+    
+    // Check for unwithdrawn collateral from completed loans
+    const completedLoanWithCollateral = await Loan.findOne({
+      borrower: student._id,
+      status: 'completed',
+      collateralStatus: 'returned'
+    });
+    
+    if (completedLoanWithCollateral) {
+      return res.status(400).json({
+        error: 'You have unwithdrawn collateral from a previous loan. Please withdraw your collateral before applying for a new loan.',
+        hasUnwithdrawnCollateral: true,
+        loanId: completedLoanWithCollateral._id,
+        collateralAmount: completedLoanWithCollateral.requiredCollateral
+      });
+    }
 
     // Get pool details
     const pool = await InvestmentPool.findById(poolId);
@@ -301,6 +336,9 @@ exports.applyForLoan = async (req, res) => {
     });
 
     await loan.save();
+
+    // Send notification to student
+    await notifyLoanApplicationSubmitted(student._id, requestedAmount, pool.name);
 
     res.json({
       success: true,
@@ -399,6 +437,92 @@ exports.getLoanById = async (req, res) => {
 };
 
 /**
+ * Get loan statistics for student
+ */
+exports.getLoanStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Get all loans for the student - only fetch active/repaying loans
+    const loans = await Loan.find({ 
+      borrower: student._id,
+      status: { $in: ['active', 'repaying'] }
+    });
+
+    // Initialize stats
+    let totalLoanAmount = 0;
+    let totalRepaid = 0;
+    let totalInterest = 0;
+    let nextInstallment = null;
+    let hasActiveLoan = loans.length > 0;
+
+    // Only calculate stats if there are active loans
+    if (hasActiveLoan) {
+      // Calculate stats from active loans only
+      for (const loan of loans) {
+        totalLoanAmount += loan.loanAmount || 0;
+        totalRepaid += loan.amountRepaid || 0;
+        
+        // Calculate total interest as (totalRepayment - loanAmount)
+        const loanInterest = (loan.totalRepayment || 0) - (loan.loanAmount || 0);
+        totalInterest += loanInterest;
+
+        // Find next unpaid installment
+        if (loan.repaymentSchedule && loan.repaymentSchedule.length > 0) {
+          const upcomingInstallment = loan.repaymentSchedule.find(
+            inst => ['pending', 'overdue'].includes(inst.status)
+          );
+
+          if (upcomingInstallment) {
+            // If we don't have nextInstallment yet, or this one is sooner
+            if (!nextInstallment || new Date(upcomingInstallment.dueDate) < new Date(nextInstallment.date)) {
+              nextInstallment = {
+                date: new Date(upcomingInstallment.dueDate).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric', 
+                  year: 'numeric' 
+                }),
+                amount: upcomingInstallment.amount,
+                loanId: loan._id
+              };
+            }
+          }
+        }
+      }
+    }
+
+    // Default values if no active loans
+    if (!nextInstallment) {
+      nextInstallment = {
+        date: 'N/A',
+        amount: 0
+      };
+    }
+
+    res.json({
+      success: true,
+      stats: {
+        totalLoanAmount: Math.round(totalLoanAmount * 100) / 100,
+        totalRepaid: Math.round(totalRepaid * 100) / 100,
+        totalInterest: Math.round(totalInterest * 100) / 100,
+        nextInstallment,
+        hasActiveLoan
+      }
+    });
+
+  } catch (error) {
+    console.error('Get loan stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch loan statistics' });
+  }
+};
+
+/**
  * Cancel loan application (only if collateral not deposited)
  */
 exports.cancelLoan = async (req, res) => {
@@ -469,6 +593,171 @@ exports.getPAXGPrice = async (req, res) => {
       error: 'Failed to fetch PAXG price',
       fallbackPrice: 2000 // Provide fallback in response
     });
+  }
+};
+
+/**
+ * Queue a loan request when no matching pools are available
+ * This request will be shown in Investor Analytics as investment opportunity
+ */
+exports.queueLoanRequest = async (req, res) => {
+  try {
+    const { loanAmount, duration, purpose, maxAcceptableAPR, preferredRiskLevel, attemptedPools } = req.body;
+    const userId = req.user.id;
+
+    // Validate inputs
+    if (!loanAmount || !duration || !purpose) {
+      return res.status(400).json({ 
+        error: 'Loan amount, duration, and purpose are required' 
+      });
+    }
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Check if student already has a similar queued request (within last 7 days)
+    const recentQueuedRequest = await QueuedLoanRequest.findOne({
+      student: student._id,
+      status: 'queued',
+      requestedAmount: loanAmount,
+      duration: duration,
+      requestedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+    });
+
+    if (recentQueuedRequest) {
+      return res.status(400).json({
+        error: 'You already have a similar loan request in the queue',
+        existingRequest: {
+          id: recentQueuedRequest._id,
+          requestedAt: recentQueuedRequest.requestedAt
+        }
+      });
+    }
+
+    // Create queued loan request
+    const queuedRequest = new QueuedLoanRequest({
+      student: student._id,
+      requestedAmount: parseFloat(loanAmount),
+      duration: parseInt(duration),
+      purpose: purpose,
+      maxAcceptableAPR: maxAcceptableAPR ? parseFloat(maxAcceptableAPR) : null,
+      preferredRiskLevel: preferredRiskLevel || 'any',
+      attemptedPools: attemptedPools || [],
+      status: 'queued'
+    });
+
+    // Calculate priority score
+    queuedRequest.calculatePriorityScore();
+    
+    await queuedRequest.save();
+
+    // Emit Socket.IO event to notify investors
+    if (req.app.get('io')) {
+      const io = req.app.get('io');
+      io.emit('analytics_updated', {
+        type: 'new_queued_request',
+        data: {
+          requestId: queuedRequest._id,
+          amount: queuedRequest.requestedAmount,
+          duration: queuedRequest.duration,
+          purpose: queuedRequest.purpose
+        }
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Your loan request has been queued. You will be notified when a suitable pool becomes available.',
+      queuedRequest: {
+        id: queuedRequest._id,
+        requestedAmount: queuedRequest.requestedAmount,
+        duration: queuedRequest.duration,
+        purpose: queuedRequest.purpose,
+        requestedAt: queuedRequest.requestedAt,
+        expiresAt: queuedRequest.expiresAt
+      }
+    });
+  } catch (error) {
+    console.error('Queue loan request error:', error);
+    res.status(500).json({ error: 'Failed to queue loan request' });
+  }
+};
+
+/**
+ * Get student's queued loan requests
+ */
+exports.getMyQueuedRequests = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Get all queued requests for this student
+    const queuedRequests = await QueuedLoanRequest.find({
+      student: student._id,
+      status: { $in: ['queued', 'matched'] }
+    }).sort({ requestedAt: -1 });
+
+    res.json({
+      success: true,
+      queuedRequests: queuedRequests
+    });
+  } catch (error) {
+    console.error('Get queued requests error:', error);
+    res.status(500).json({ error: 'Failed to fetch queued requests' });
+  }
+};
+
+/**
+ * Cancel a queued loan request
+ */
+exports.cancelQueuedRequest = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user.id;
+
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+
+    // Find and update the request
+    const queuedRequest = await QueuedLoanRequest.findOne({
+      _id: requestId,
+      student: student._id
+    });
+
+    if (!queuedRequest) {
+      return res.status(404).json({ error: 'Queued request not found' });
+    }
+
+    queuedRequest.status = 'cancelled';
+    await queuedRequest.save();
+
+    // Emit Socket.IO event
+    if (req.app.get('io')) {
+      const io = req.app.get('io');
+      io.emit('analytics_updated', {
+        type: 'queued_request_cancelled',
+        data: { requestId }
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Queued loan request cancelled'
+    });
+  } catch (error) {
+    console.error('Cancel queued request error:', error);
+    res.status(500).json({ error: 'Failed to cancel queued request' });
   }
 };
 

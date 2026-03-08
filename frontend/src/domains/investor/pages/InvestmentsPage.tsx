@@ -1,7 +1,15 @@
+import { useState } from "react";
 import { InvestmentPoolExplorer } from "../components/InvestmentPoolExplorer";
 import { PortfolioPerformance } from "../components/PortfolioPerformance";
 
 export function InvestmentsPage() {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleInvestmentSuccess = () => {
+    // Trigger refresh of portfolio by updating key
+    setRefreshKey(prev => prev + 1);
+  };
+
   return (
     <div className="space-y-4 md:space-y-6">
       <div>
@@ -11,8 +19,8 @@ export function InvestmentsPage() {
         </p>
       </div>
 
-      <InvestmentPoolExplorer />
-      <PortfolioPerformance />
+      <InvestmentPoolExplorer onInvestmentSuccess={handleInvestmentSuccess} />
+      <PortfolioPerformance key={refreshKey} />
     </div>
   );
 }

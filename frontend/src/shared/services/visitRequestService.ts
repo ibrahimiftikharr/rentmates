@@ -25,11 +25,17 @@ export interface VisitRequest {
       name: string;
       email: string;
     };
+    fullName?: string;
+    profilePicture?: string;
+    documents?: {
+      profileImage?: string;
+    };
   };
   property: {
     _id: string;
     title: string;
     address: string;
+    location?: string;
     images?: string[];
     mainImage?: string;
   };
@@ -39,18 +45,29 @@ export interface VisitRequest {
       name: string;
       email: string;
     };
+    fullName?: string;
   };
   visitType: 'virtual' | 'in-person';
   visitDate: string;
-  visitTime: string;
+  visitTime: string; // UTC time in HH:mm format
+  visitTimeEnd?: string; // UTC time in HH:mm format
+  studentTimeZone?: string; // IANA time zone
+  landlordTimeZone?: string; // IANA time zone
   status: 'pending' | 'confirmed' | 'rescheduled' | 'rejected' | 'completed';
   meetLink?: string;
   rescheduledDate?: string;
   rescheduledTime?: string;
+  rescheduledTimeEnd?: string;
   rejectionReason?: string;
   landlordNotes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TimeSlot {
+  startTime: string; // HH:mm format in UTC
+  endTime: string; // HH:mm format in UTC
+  available: boolean;
 }
 
 export const visitRequestService = {
@@ -61,7 +78,9 @@ export const visitRequestService = {
     propertyId: string;
     visitType: 'virtual' | 'in-person';
     visitDate: string;
-    visitTime: string;
+    visitTime: string; // UTC time
+    visitTimeEnd?: string; // UTC time
+    studentTimeZone?: string; // IANA time zone
   }): Promise<VisitRequest> {
     try {
       const response = await api.post('/visit-requests', data);
@@ -142,6 +161,32 @@ export const visitRequestService = {
       return response.data.visitRequest;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to reject visit request');
+    }
+  },
+
+  /**
+   * Mark visit as completed (Landlord)
+   */
+  async completeVisitRequest(visitRequestId: string): Promise<VisitRequest> {
+    try {
+      const response = await api.put(`/visit-requests/${visitRequestId}/complete`);
+      return response.data.visitRequest;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to mark visit as completed');
+    }
+  },
+
+  /**
+   * Get available time slots for a property on a specific date
+   */
+  async getAvailableTimeSlots(propertyId: string, date: string): Promise<TimeSlot[]> {
+    try {
+      const response = await api.get('/visit-requests/available-slots', {
+        params: { propertyId, date }
+      });
+      return response.data.slots;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to fetch available time slots');
     }
   },
 };

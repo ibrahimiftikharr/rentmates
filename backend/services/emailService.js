@@ -44,7 +44,9 @@ const sendOTPEmail = async (email, otp) => {
 
 const sendPasswordResetEmail = async (email, resetToken) => {
   try {
-    const resetUrl = `http://localhost:5174/reset-password?token=${resetToken}`;
+    // Use environment variable for frontend URL, fallback to localhost:5173 for development
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
     
     const mailOptions = {
       from: 'therentmates@gmail.com',

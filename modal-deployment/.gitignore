@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environment (if testing locally)
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Modal cache
+.modal/
+
+# Logs
+*.log
+
+# Model files (stored in Modal volume)
+*.pkl
+*.joblib
+
+# Testing
+.pytest_cache/

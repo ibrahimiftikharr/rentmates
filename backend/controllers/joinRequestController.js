@@ -8,6 +8,9 @@ const VisitRequest = require('../models/visitRequestModel');
 const Notification = require('../models/notificationModel');
 const emailService = require('../services/emailService');
 const { emitDashboardUpdate } = require('../utils/socketHelpers');
+const pdfService = require('../services/pdfService');
+const ipfsService = require('../services/ipfsService');
+const blockchainService = require('../services/blockchainService');
 
 // Check if student profile is complete
 exports.checkStudentProfileCompletion = async (req, res) => {
@@ -747,8 +750,99 @@ exports.landlordSignContract = async (req, res) => {
     };
     joinRequest.status = 'completed';
 
+    // ============================================
+    // BLOCKCHAIN VERIFICATION FLOW
+    // ============================================
+    console.log('🔗 Starting blockchain verification flow...');
+    
+    let blockchainData = null;
+    try {
+      // Step 1: Generate PDF from contract content
+      console.log('Step 1: Generating contract PDF...');
+      const contractPDFData = {
+        content: joinRequest.contract.content,
+        propertyTitle: joinRequest.contract.propertyTitle,
+        propertyAddress: joinRequest.contract.propertyAddress,
+        studentName: joinRequest.contract.studentName,
+        landlordName: joinRequest.contract.landlordName,
+        studentSignature: joinRequest.contract.studentSignature,
+        landlordSignature: joinRequest.contract.landlordSignature
+      };
+      const pdfBuffer = await pdfService.generateContractPDF(contractPDFData);
+      console.log('✅ PDF generated successfully');
+
+      // Step 2: Generate SHA-256 hash of the PDF
+      console.log('Step 2: Generating contract hash...');
+      const contractHashHex = ipfsService.generateFileHash(pdfBuffer);
+      const contractHashBytes32 = ipfsService.hexToBytes32(contractHashHex);
+      console.log('✅ Contract hash generated:', contractHashBytes32);
+
+      // Step 3: Upload PDF to IPFS
+      console.log('Step 3: Uploading contract to IPFS...');
+      const ipfsResult = await ipfsService.uploadToIPFS(
+        pdfBuffer,
+        `rental-contract-${joinRequest._id}.pdf`,
+        {
+          requestId: joinRequest._id.toString(),
+          propertyTitle: joinRequest.contract.propertyTitle,
+          studentName: joinRequest.contract.studentName,
+          landlordName: joinRequest.contract.landlordName,
+          signedDate: new Date().toISOString()
+        }
+      );
+      console.log('✅ Contract uploaded to IPFS. CID:', ipfsResult.ipfsCID);
+
+      // Step 4: Store on blockchain
+      console.log('Step 4: Storing contract verification on blockchain...');
+      
+      // Get wallet addresses from users (you'll need to add walletAddress field to your User model)
+      // For now, using placeholder addresses - UPDATE THIS BASED ON YOUR USER MODEL
+      const landlordWalletAddress = landlord.walletAddress || user.walletAddress || '0x0000000000000000000000000000000000000000';
+      const studentWalletAddress = studentDoc.walletAddress || studentUser.walletAddress || '0x0000000000000000000000000000000000000000';
+      
+      // Use backend private key for the transaction
+      const backendPrivateKey = process.env.PRIVATE_KEY;
+      
+      if (!backendPrivateKey) {
+        throw new Error('PRIVATE_KEY not configured in environment');
+      }
+
+      const blockchainResult = await blockchainService.storeRentalContractOnBlockchain(
+        contractHashBytes32,
+        ipfsResult.ipfsCID,
+        landlordWalletAddress,
+        studentWalletAddress,
+        backendPrivateKey
+      );
+      
+      console.log('✅ Contract stored on blockchain. Transaction:', blockchainResult.transactionHash);
+
+      // Store blockchain verification data
+      blockchainData = {
+        contractHash: contractHashBytes32,
+        ipfsCID: ipfsResult.ipfsCID,
+        transactionHash: blockchainResult.transactionHash,
+        blockchainContractId: blockchainResult.contractId,
+        verifiedAt: new Date(),
+        blockchainNetwork: 'amoy',
+        gatewayUrl: ipfsResult.gatewayUrl,
+        blockNumber: blockchainResult.blockNumber,
+        gasUsed: blockchainResult.gasUsed
+      };
+
+      // Update join request with blockchain verification data
+      joinRequest.contract.blockchainVerification = blockchainData;
+      
+      console.log('✅ Blockchain verification flow completed successfully');
+    } catch (blockchainError) {
+      console.error('⚠️  Blockchain verification failed:', blockchainError.message);
+      console.error('Contract will be signed but blockchain verification data will not be available');
+      // Continue with regular flow even if blockchain verification fails
+      // This ensures the contract signing process is not completely blocked
+    }
+
     await joinRequest.save();
-    console.log('Join request updated and saved');
+    console.log('Join request updated and saved with blockchain data');
 
     // Calculate due dates
     const contractSignedDate = new Date();
@@ -784,6 +878,8 @@ exports.landlordSignContract = async (req, res) => {
         landlordSignature: joinRequest.contract.landlordSignature.signature,
         generatedAt: joinRequest.contract.generatedAt
       },
+      // Include blockchain verification data if available
+      blockchainVerification: blockchainData || undefined,
       propertyInfo: {
         title: joinRequest.property.title,
         address: joinRequest.property.address,
@@ -810,8 +906,10 @@ exports.landlordSignContract = async (req, res) => {
         {
           action: 'Contract Signed',
           date: contractSignedDate,
-          notes: 'Smart contract deployed on blockchain',
-          gasFee: '0.004 ETH'
+          notes: blockchainData 
+            ? `Smart contract deployed on blockchain. TX: ${blockchainData.transactionHash}` 
+            : 'Smart contract signed (blockchain verification pending)',
+          gasFee: blockchainData ? blockchainData.gasUsed : '0.004 ETH'
         }
       ]
     });
@@ -1041,12 +1139,10 @@ If fraudulent or misrepresented conditions are found, the tenant may cancel befo
 
 • Early Termination:
   Either party may terminate early with 60 days' notice.
-  Deposit remains in 60-day hold for dispute resolution.
+  Deposit remains in 7-day hold for dispute resolution.
 
 • Student Withdrawal Before Move-in:
-  In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.
-  ◦ If rent not paid → Full refund.
-  ◦ If rent paid → Funds held 60 days before resolution and refund.
+  In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel and request security deposit refund before move-in. Full deposit refund will be issued in this case.
 
 7. Inspections & Utilities
 The landlord may request an inspection with 24-hour prior notice.
@@ -1094,24 +1190,51 @@ exports.getLandlordTenants = async (req, res) => {
       .populate('property', 'title address')
       .sort({ contractSignedDate: -1 });
 
-    const tenantsData = rentals.map(rental => ({
-      id: rental._id,
-      name: rental.studentInfo.name,
-      email: rental.studentInfo.email,
-      photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(rental.studentInfo.name)}`,
-      propertyTitle: rental.propertyInfo.title,
-      propertyAddress: rental.propertyInfo.address,
-      moveInDate: rental.movingDate,
-      monthlyRent: rental.monthlyRentAmount.toString(),
-      rentDueDay: rental.monthlyRentDueDate,
-      leaseDuration: rental.leaseDuration || '12',
-      leaseEndDate: rental.leaseEndDate,
-      status: rental.status,
-      securityDeposit: rental.securityDepositAmount.toString(),
-      securityDepositDueDate: rental.securityDepositDueDate,
-      contractSignedDate: rental.contractSignedDate,
-      actionHistory: rental.actionHistory || []
-    }));
+    const tenantsData = rentals.map(rental => {
+      // Calculate correct status based on dates and current status
+      let calculatedStatus = rental.status;
+      const now = new Date();
+      const moveInDate = new Date(rental.movingDate);
+      const leaseEndDate = rental.leaseEndDate ? new Date(rental.leaseEndDate) : null;
+
+      // If rental is not terminated, calculate status based on dates
+      if (rental.status !== 'terminated') {
+        if (now < moveInDate) {
+          // Before move-in date - should be 'registered'
+          calculatedStatus = 'registered';
+        } else if (leaseEndDate && now >= leaseEndDate) {
+          // After lease end date - should be 'completed'
+          calculatedStatus = 'completed';
+        } else if (now >= moveInDate && rental.securityDepositStatus === 'paid') {
+          // Between move-in and lease end, deposit paid - should be 'active'
+          calculatedStatus = 'active';
+        } else if (now >= moveInDate && rental.securityDepositStatus !== 'paid') {
+          // After move-in but deposit not paid - stays 'registered'
+          calculatedStatus = 'registered';
+        }
+      }
+
+      return {
+        id: rental._id,
+        name: rental.studentInfo.name,
+        email: rental.studentInfo.email,
+        photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(rental.studentInfo.name)}`,
+        propertyTitle: rental.propertyInfo.title,
+        propertyAddress: rental.propertyInfo.address,
+        moveInDate: rental.movingDate,
+        monthlyRent: rental.monthlyRentAmount.toString(),
+        rentDueDay: rental.monthlyRentDueDate,
+        leaseDuration: rental.leaseDuration || '12',
+        leaseEndDate: rental.leaseEndDate,
+        status: calculatedStatus,
+        securityDeposit: rental.securityDepositAmount.toString(),
+        securityDepositDueDate: rental.securityDepositDueDate,
+        contractSignedDate: rental.contractSignedDate,
+        actionHistory: rental.actionHistory || [],
+        terminationReason: rental.terminationReason,
+        terminatedAt: rental.terminatedAt
+      };
+    });
 
     res.json({
       success: true,

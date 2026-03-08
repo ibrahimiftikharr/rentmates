@@ -24,6 +24,9 @@ router.post('/pay-rent', walletController.payRent);
 // GET /api/wallet/transactions - Get transaction history with filtering
 router.get('/transactions', walletController.getTransactionHistory);
 
+// GET /api/wallet/transactions/:transactionId/download-receipt - Download transaction receipt PDF
+router.get('/transactions/:transactionId/download-receipt', walletController.downloadTransactionReceipt);
+
 // GET /api/wallet/rental-info - Get student's active rental information
 router.get('/rental-info', walletController.getStudentRentalInfo);
 

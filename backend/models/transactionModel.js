@@ -21,7 +21,8 @@ const transactionSchema = new mongoose.Schema({
       'loan_disbursement', 
       'loan_repayment',
       'investment_principal_return',
-      'investment_interest_earned'
+      'investment_interest_earned',
+      'collateral_return'
     ],
     required: true
   },
@@ -80,6 +81,19 @@ transactionSchema.index({ user: 1, createdAt: -1 });
 transactionSchema.index({ type: 1, createdAt: -1 });
 transactionSchema.index({ rental: 1 });
 transactionSchema.index({ status: 1 });
+
+// Virtual field for blockchain explorer URL
+transactionSchema.virtual('blockchainExplorerUrl').get(function() {
+  if (this.txHash) {
+    // Polygon Amoy Testnet Explorer
+    return `https://amoy.polygonscan.com/tx/${this.txHash}`;
+  }
+  return null;
+});
+
+// Ensure virtuals are included when converting to JSON
+transactionSchema.set('toJSON', { virtuals: true });
+transactionSchema.set('toObject', { virtuals: true });
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 module.exports = Transaction;

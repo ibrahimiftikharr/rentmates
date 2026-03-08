@@ -6,9 +6,14 @@ import { Badge } from "./ui/badge";
 import { Progress } from "./ui/progress";
 import { InvestmentConfirmationModal } from "./modals/InvestmentConfirmationModal";
 import { getAllPools, InvestmentPool } from "../services/investmentService";
+import { socketService } from "@/shared/services/socketService";
 import { toast } from "sonner";
 
-export function InvestmentPoolExplorer() {
+interface InvestmentPoolExplorerProps {
+  onInvestmentSuccess?: () => void;
+}
+
+export function InvestmentPoolExplorer({ onInvestmentSuccess }: InvestmentPoolExplorerProps = {}) {
   const [pools, setPools] = useState<InvestmentPool[]>([]);
   const [userBalance, setUserBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,6 +25,25 @@ export function InvestmentPoolExplorer() {
   // Fetch pools on mount
   useEffect(() => {
     loadPools();
+
+    // Connect to Socket.IO and listen for pool updates
+    const socket = socketService.connect();
+    
+    // Listen for investment and pool update events
+    socketService.on('investment_created', handleInvestmentCreated);
+    socketService.on('withdrawal_completed', handleWithdrawalCompleted);
+    socketService.on('pool_updated', handlePoolUpdated);
+    socketService.on('pool_share_price_updated', handlePoolSharePriceUpdated);
+    socketService.on('loan_approved', handleLoanApproved);
+
+    return () => {
+      // Clean up event listeners
+      socketService.off('investment_created', handleInvestmentCreated);
+      socketService.off('withdrawal_completed', handleWithdrawalCompleted);
+      socketService.off('pool_updated', handlePoolUpdated);
+      socketService.off('pool_share_price_updated', handlePoolSharePriceUpdated);
+      socketService.off('loan_approved', handleLoanApproved);
+    };
   }, []);
 
   const loadPools = async () => {
@@ -34,6 +58,49 @@ export function InvestmentPoolExplorer() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Socket.IO event handlers
+  const handleInvestmentCreated = (data: any) => {
+    console.log('Investment created event:', data);
+    loadPools(); // Refresh pools
+    toast.success('Investment completed! 🎉', {
+      description: `Successfully invested in ${data.poolName}`,
+      duration: 3000
+    });
+  };
+
+  const handleWithdrawalCompleted = (data: any) => {
+    console.log('Withdrawal completed event:', data);
+    loadPools(); // Refresh pools
+  };
+
+  const handlePoolUpdated = (data: any) => {
+    console.log('Pool updated event:', data);
+    // Silently refresh pools in background
+    loadPools();
+  };
+
+  const handlePoolSharePriceUpdated = (data: any) => {
+    console.log('Pool share price updated event:', data);
+    // Silently update pools to show new share prices in real-time
+    // Don't show toast to avoid spam - investors will see toast in their portfolio
+    loadPools();
+  };
+
+  const handleLoanApproved = (data: any) => {
+    console.log('Loan approved event:', data);
+    // Pool balance changed due to loan disbursement
+    loadPools();
+  };
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    loadPools(); // Refresh pools after closing modal
+    // Call the callback to refresh portfolio
+    if (onInvestmentSuccess) {
+      onInvestmentSuccess();
     }
   };
 
@@ -122,7 +189,7 @@ export function InvestmentPoolExplorer() {
 
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-xs md:text-sm">
-                        <span className="text-muted-foreground">Expected ROI</span>
+                        <span className="text-muted-foreground">APR (Annual)</span>
                         <span className="text-primary font-medium">{pool.expectedROI.toFixed(2)}%</span>
                       </div>
                       <div className="flex justify-between text-xs md:text-sm">
@@ -237,10 +304,7 @@ export function InvestmentPoolExplorer() {
       {selectedPool && (
         <InvestmentConfirmationModal
           isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            loadPools(); // Refresh pools after closing modal
-          }}
+          onClose={handleModalClose}
           poolId={selectedPool._id}
           poolName={selectedPool.name}
           duration={selectedPool.durationMonths}

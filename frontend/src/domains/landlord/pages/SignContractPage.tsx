@@ -165,13 +165,11 @@ export function SignContractPage({ requestId, onNavigate, onContractSigned }: Si
                     <div>
                       <p className="mb-1">• <strong>Early Termination:</strong></p>
                       <p className="pl-4 mb-1">Either party may terminate early with 60 days' notice.</p>
-                      <p className="pl-4">Deposit remains in 60-day hold for dispute resolution.</p>
+                      <p className="pl-4">Deposit remains in 7-day hold for dispute resolution.</p>
                     </div>
                     <div>
                       <p className="mb-1">• <strong>Student Withdrawal Before Move-in:</strong></p>
-                      <p className="pl-4 mb-1">In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel before move-in.</p>
-                      <p className="pl-8 mb-1">o If rent not paid → Full refund.</p>
-                      <p className="pl-8">o If rent paid → Funds held 60 days before resolution and refund.</p>
+                      <p className="pl-4">In cases of visa rejection, travel cancellation, or property fraud, tenant may cancel and request security deposit refund before move-in. Full deposit refund will be issued in this case.</p>
                     </div>
                   </div>
                 </div>
@@ -278,13 +276,13 @@ export function SignContractPage({ requestId, onNavigate, onContractSigned }: Si
               </div>
               
               <h3 className="text-[#4A4A68] mb-2">
-                {isSigning ? 'Processing Transaction...' : 'Blockchain Signing Fee Notice'}
+                {isSigning ? 'Processing Transaction...' : 'Confirm Contract Signing'}
               </h3>
               
               <p className="text-muted-foreground mb-6">
                 {isSigning 
                   ? 'Please wait while your contract is being deployed to the blockchain...'
-                  : 'A $3 gas fee will be automatically deducted from your connected wallet to complete this on-chain signing process.'
+                  : 'Please confirm that you want to proceed with signing this contract on the blockchain.'
                 }
               </p>
 

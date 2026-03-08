@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { visitRequestService, VisitRequest as VisitRequestType } from '@/shared/services/visitRequestService';
 import { socketService } from '@/shared/services/socketService';
 import { toast } from '@/shared/utils/toast';
+import { getUserTimeZone, convertUTCToLocal, convertLocalToUTC, addMinutesToTime, formatDateForAPI } from '@/shared/utils/timezone';
 
 interface VisitRequest {
   id: string;
@@ -102,6 +103,7 @@ export function VisitRequestsPage() {
   const [requests, setRequests] = useState<VisitRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'physical' | 'virtual'>('physical');
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'confirmed' | 'completed'>('pending');
   const [showRescheduleModal, setShowRescheduleModal] = useState<string | null>(null);
   const [showDisapproveModal, setShowDisapproveModal] = useState<string | null>(null);
   const [showMeetLinkModal, setShowMeetLinkModal] = useState<string | null>(null);
@@ -113,18 +115,25 @@ export function VisitRequestsPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [landlordTimeZone] = useState<string>(getUserTimeZone());
 
   useEffect(() => {
     fetchVisitRequests();
 
     // Listen for real-time updates
     socketService.on('new_visit_request', () => {
+      console.log('📩 New visit request received - refreshing list');
       fetchVisitRequests();
-      toast.info('New visit request received');
+    });
+
+    socketService.on('visit_request_updated', () => {
+      fetchVisitRequests();
     });
 
     return () => {
       socketService.off('new_visit_request');
+      socketService.off('visit_request_updated');
     };
   }, []);
 
@@ -132,26 +141,54 @@ export function VisitRequestsPage() {
     try {
       setIsLoading(true);
       const response = await visitRequestService.getLandlordVisitRequests();
+      console.log('Fetched visit requests from backend:', response);
       
       // Transform backend data to match UI structure
       const transformedRequests: VisitRequest[] = response.map((request: VisitRequestType) => {
-        return {
+        // Convert UTC time to landlord's local time for display
+        let localTime = request.visitTime || '';
+        let localTimeEnd = '';
+        if (request.visitDate && request.visitTime) {
+          try {
+            localTime = convertUTCToLocal(request.visitTime, request.visitDate, landlordTimeZone);
+            if (request.visitTimeEnd) {
+              localTimeEnd = convertUTCToLocal(request.visitTimeEnd, request.visitDate, landlordTimeZone);
+            } else {
+              localTimeEnd = addMinutesToTime(localTime, 30);
+            }
+          } catch (error) {
+            console.error('Error converting time:', error);
+            localTime = request.visitTime;
+          }
+        }
+
+        const transformed = {
           id: request._id,
           propertyName: request.property?.title || 'Property',
           propertyAddress: request.property?.location || request.property?.address || 'Address not available',
           propertyId: request.property?._id || '',
           studentName: request.student?.fullName || request.student?.user?.name || 'Student',
           studentId: request.student?._id || '',
-          studentPhoto: request.student?.profilePicture || 'https://via.placeholder.com/100',
-          visitType: request.visitType === 'virtual' ? 'virtual' : 'physical',
+          studentPhoto: request.student?.profilePicture || request.student?.documents?.profileImage || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(request.student?.fullName || 'Student'),
+          visitType: (request.visitType === 'virtual' ? 'virtual' : 'physical') as 'virtual' | 'physical',
           requestedDate: request.visitDate ? new Date(request.visitDate).toISOString().split('T')[0] : '',
-          requestedTime: request.visitTime || '',
+          requestedTime: localTimeEnd ? `${localTime} - ${localTimeEnd}` : localTime,
           status: request.status === 'confirmed' || request.status === 'rescheduled' ? 'confirmed' : 
                   request.status === 'rejected' ? 'disapproved' : 
                   request.status === 'completed' ? 'completed' : 'pending',
           meetLink: request.meetLink,
           notes: request.landlordNotes,
         };
+        console.log('Transformed request:', { original: request.status, transformed: transformed.status, id: request._id });
+        return transformed;
+      }) as VisitRequest[];
+
+      console.log('All transformed requests:', transformedRequests);
+      console.log('Status breakdown:', {
+        pending: transformedRequests.filter(r => r.status === 'pending').length,
+        confirmed: transformedRequests.filter(r => r.status === 'confirmed').length,
+        completed: transformedRequests.filter(r => r.status === 'completed').length,
+        disapproved: transformedRequests.filter(r => r.status === 'disapproved').length
       });
 
       setRequests(transformedRequests);
@@ -168,9 +205,9 @@ export function VisitRequestsPage() {
       case 'pending':
         return 'bg-yellow-500/10 text-yellow-700 border-yellow-200';
       case 'confirmed':
-        return 'bg-blue-500/10 text-blue-700 border-blue-200';
-      case 'completed':
         return 'bg-green-500/10 text-green-700 border-green-200';
+      case 'completed':
+        return 'bg-blue-500/10 text-blue-700 border-blue-200';
       case 'disapproved':
         return 'bg-red-500/10 text-red-700 border-red-200';
       default:
@@ -178,7 +215,9 @@ export function VisitRequestsPage() {
     }
   };
 
-  const filteredRequests = requests.filter(req => req.visitType === activeTab);
+  const filteredRequests = requests.filter(req => 
+    req.visitType === activeTab && req.status === statusFilter
+  );
 
   const handleConfirm = async (id: string) => {
     const request = requests.find(r => r.id === id);
@@ -189,8 +228,20 @@ export function VisitRequestsPage() {
       try {
         setIsConfirming(true);
         await visitRequestService.confirmVisitRequest(id);
+        
+        // Optimistically update the local state immediately
+        setRequests(prevRequests => 
+          prevRequests.map(req => 
+            req.id === id 
+              ? { ...req, status: 'confirmed' }
+              : req
+          )
+        );
+        
         toast.success('Visit confirmed successfully!');
-        await fetchVisitRequests();
+        
+        // Fetch in background to ensure consistency
+        fetchVisitRequests();
       } catch (error: any) {
         toast.error(error.message || 'Failed to confirm visit');
       } finally {
@@ -215,10 +266,22 @@ export function VisitRequestsPage() {
     try {
       setIsConfirming(true);
       await visitRequestService.confirmVisitRequest(showMeetLinkModal!, meetLink.trim());
+      
+      // Optimistically update the local state immediately
+      setRequests(prevRequests => 
+        prevRequests.map(req => 
+          req.id === showMeetLinkModal 
+            ? { ...req, status: 'confirmed', meetLink: meetLink.trim() }
+            : req
+        )
+      );
+      
       setShowMeetLinkModal(null);
       setMeetLink('');
       toast.success('Virtual visit confirmed with meeting link!');
-      await fetchVisitRequests();
+      
+      // Fetch in background to ensure consistency
+      fetchVisitRequests();
     } catch (error: any) {
       toast.error(error.message || 'Failed to confirm visit');
     } finally {
@@ -234,11 +297,33 @@ export function VisitRequestsPage() {
 
     try {
       setIsRescheduling(true);
+      
+      // Convert landlord's local time to UTC for storage
+      const utcTime = convertLocalToUTC(rescheduleTime, rescheduleDate, landlordTimeZone);
+      
+      // Format date as YYYY-MM-DD to preserve the local date without timezone conversion
+      const dateString = formatDateForAPI(rescheduleDate);
+      
       await visitRequestService.rescheduleVisitRequest(
         showRescheduleModal!,
-        rescheduleDate.toISOString(),
-        rescheduleTime,
+        dateString,
+        utcTime, // Send UTC time to backend
         landlordNotes
+      );
+      
+      // Optimistically update the local state immediately with local time for display
+      setRequests(prevRequests => 
+        prevRequests.map(req => 
+          req.id === showRescheduleModal 
+            ? {
+                ...req,
+                requestedDate: dateString,
+                requestedTime: `${rescheduleTime} - ${addMinutesToTime(rescheduleTime, 30)}`,
+                notes: landlordNotes,
+                status: 'confirmed'
+              }
+            : req
+        )
       );
       
       setShowRescheduleModal(null);
@@ -246,7 +331,9 @@ export function VisitRequestsPage() {
       setRescheduleTime('');
       setLandlordNotes('');
       toast.success('Visit rescheduled successfully!');
-      await fetchVisitRequests();
+      
+      // Fetch in background to ensure consistency
+      fetchVisitRequests();
     } catch (error: any) {
       toast.error(error.message || 'Failed to reschedule visit');
     } finally {
@@ -263,10 +350,22 @@ export function VisitRequestsPage() {
     try {
       setIsRejecting(true);
       await visitRequestService.rejectVisitRequest(showDisapproveModal!, disapproveReason);
+      
+      // Optimistically update the local state immediately
+      setRequests(prevRequests => 
+        prevRequests.map(req => 
+          req.id === showDisapproveModal 
+            ? { ...req, status: 'disapproved' }
+            : req
+        )
+      );
+      
       setShowDisapproveModal(null);
       setDisapproveReason('');
       toast.success('Visit request declined');
-      await fetchVisitRequests();
+      
+      // Fetch in background to ensure consistency
+      fetchVisitRequests();
     } catch (error: any) {
       toast.error(error.message || 'Failed to reject visit');
     } finally {
@@ -277,6 +376,37 @@ export function VisitRequestsPage() {
   const copyMeetLink = (link: string) => {
     navigator.clipboard.writeText(link);
     toast.success('Meeting link copied to clipboard!');
+  };
+
+  const handleComplete = async (id: string) => {
+    try {
+      setIsCompleting(true);
+      console.log('Marking visit as completed:', id);
+      await visitRequestService.completeVisitRequest(id);
+      console.log('Visit marked as completed successfully');
+      
+      // Optimistically update the local state immediately
+      setRequests(prevRequests => 
+        prevRequests.map(req => 
+          req.id === id 
+            ? { ...req, status: 'completed' }
+            : req
+        )
+      );
+      
+      // Switch to completed tab to show the result
+      setStatusFilter('completed');
+      
+      toast.success('Visit marked as completed!');
+      
+      // Fetch in background to ensure consistency
+      fetchVisitRequests();
+    } catch (error: any) {
+      console.error('Error marking visit as completed:', error);
+      toast.error(error.message || 'Failed to mark visit as completed');
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
   return (
@@ -299,6 +429,34 @@ export function VisitRequestsPage() {
             Virtual Visits
           </TabsTrigger>
         </TabsList>
+
+        {/* Status Filter Buttons */}
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => setStatusFilter('pending')}
+            variant={statusFilter === 'pending' ? 'default' : 'outline'}
+            className={`${statusFilter === 'pending' ? 'bg-[#8C57FF]' : ''}`}
+          >
+            <Clock className="h-4 w-4 mr-2" />
+            Pending
+          </Button>
+          <Button
+            onClick={() => setStatusFilter('confirmed')}
+            variant={statusFilter === 'confirmed' ? 'default' : 'outline'}
+            className={`${statusFilter === 'confirmed' ? 'bg-[#8C57FF]' : ''}`}
+          >
+            <Check className="h-4 w-4 mr-2" />
+            Confirmed
+          </Button>
+          <Button
+            onClick={() => setStatusFilter('completed')}
+            variant={statusFilter === 'completed' ? 'default' : 'outline'}
+            className={`${statusFilter === 'completed' ? 'bg-[#8C57FF]' : ''}`}
+          >
+            <CalendarIcon className="h-4 w-4 mr-2" />
+            Completed
+          </Button>
+        </div>
 
         <TabsContent value={activeTab} className="space-y-4">
           {isLoading ? (
@@ -444,6 +602,20 @@ export function VisitRequestsPage() {
                         Add Meet Link
                       </Button>
                     )}
+
+                    {request.status === 'confirmed' && (
+                      (request.visitType === 'physical' || (request.visitType === 'virtual' && request.meetLink)) && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleComplete(request.id)}
+                          className="bg-blue-600 hover:bg-blue-700 mt-2"
+                          disabled={isCompleting}
+                        >
+                          {isCompleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />}
+                          Mark Completed
+                        </Button>
+                      )
+                    )}
                   </div>
                 </div>
               </Card>
@@ -588,6 +760,21 @@ export function VisitRequestsPage() {
             </div>
             
             <div className="space-y-4">
+              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                <p className="text-sm text-blue-900 mb-2">
+                  Generate a meeting link on Google Meet:
+                </p>
+                <a
+                  href="https://meet.google.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open Google Meet
+                </a>
+              </div>
+              
               <div>
                 <Label>Meeting Link</Label>
                 <Input

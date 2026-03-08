@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getActiveInvestments } from "@/shared/services/investorPortfolioService";
 import { PoolWithdrawalModal } from "./modals/PoolWithdrawalModal";
+import { socketService } from "@/shared/services/socketService";
 import { toast } from "sonner";
 
 // ✅ SHARE-BASED: Updated interface for aggregated investments
@@ -79,6 +80,23 @@ export function PortfolioPerformance() {
 
   useEffect(() => {
     loadInvestments();
+
+    // Connect to Socket.IO and listen for investment updates
+    const socket = socketService.connect();
+    
+    // Listen for investment value updates (from loan repayments)
+    socketService.on('investment_value_updated', handleInvestmentValueUpdated);
+    socketService.on('pool_share_price_updated', handlePoolSharePriceUpdated);
+    socketService.on('investment_created', handleInvestmentCreated);
+    socketService.on('withdrawal_completed', handleWithdrawalCompleted);
+
+    return () => {
+      // Clean up event listeners
+      socketService.off('investment_value_updated', handleInvestmentValueUpdated);
+      socketService.off('pool_share_price_updated', handlePoolSharePriceUpdated);
+      socketService.off('investment_created', handleInvestmentCreated);
+      socketService.off('withdrawal_completed', handleWithdrawalCompleted);
+    };
   }, []);
 
   const loadInvestments = async () => {
@@ -96,6 +114,40 @@ export function PortfolioPerformance() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Socket.IO event handlers
+  const handleInvestmentValueUpdated = (data: any) => {
+    console.log('Investment value updated event:', data);
+    // Refresh investments to show new values
+    loadInvestments();
+    toast.success('Investment value increased! 📈', {
+      description: `Your investment in ${data.poolName} earned $${data.valueIncrease.toFixed(2)}`,
+      duration: 5000
+    });
+  };
+
+  const handlePoolSharePriceUpdated = (data: any) => {
+    console.log('Pool share price updated event:', data);
+    // Silently refresh investments to show updated share prices
+    // Don't show toast here - the investment_value_updated event will show a more specific toast
+    loadInvestments();
+  };
+
+  const handleInvestmentCreated = (data: any) => {
+    console.log('New investment created:', data);
+    // Refresh to show new investment
+    loadInvestments();
+  };
+
+  const handleWithdrawalCompleted = (data: any) => {
+    console.log('Withdrawal completed:', data);
+    // Refresh after withdrawal
+    loadInvestments();
+    toast.success('Withdrawal successful! 💰', {
+      description: `Withdrew $${data.amount.toFixed(2)} from ${data.poolName}`,
+      duration: 3000
+    });
   };
 
   const toggleInvestmentExpansion = (poolId: string) => {
@@ -122,13 +174,17 @@ export function PortfolioPerformance() {
       return [];
     }
 
-    // Format data for recharts
-    return investment.earningsHistory.map((earning, index) => ({
-      date: new Date(earning.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      value: earning.totalValue,
-      sharePrice: earning.sharePrice,
-      index: index
-    }));
+    // Calculate cumulative profit over time
+    let cumulativeProfit = 0;
+    return investment.earningsHistory.map((earning, index) => {
+      cumulativeProfit += earning.amount;
+      return {
+        date: new Date(earning.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        profit: cumulativeProfit,
+        sharePrice: earning.sharePrice,
+        index: index
+      };
+    });
   };
 
   if (loading) {
@@ -349,7 +405,7 @@ export function PortfolioPerformance() {
                 {/* Section 2: Performance Graph - SHARE-BASED */}
                 <div className="mb-6">
                   <h4 className="text-sm font-semibold text-muted-foreground mb-4 uppercase tracking-wide">
-                    Value Growth Over Time
+                    Total Profit Earned Over Time
                   </h4>
                   <div 
                     className="bg-gradient-to-br from-gray-50 to-gray-100/30 rounded-xl p-6 border"
@@ -368,7 +424,7 @@ export function PortfolioPerformance() {
                             <YAxis 
                               tick={{ fontSize: 12 }}
                               stroke="#9ca3af"
-                              label={{ value: 'Value ($)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }}
+                              label={{ value: 'Profit ($)', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }}
                             />
                             <Tooltip 
                               contentStyle={{
@@ -378,23 +434,23 @@ export function PortfolioPerformance() {
                                 boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                               }}
                               formatter={(value: any, name: string) => {
-                                if (name === 'value') return [`$${Number(value).toFixed(2)}`, 'Total Value'];
+                                if (name === 'profit') return [`$${Number(value).toFixed(2)}`, 'Total Profit'];
                                 return [value, name];
                               }}
                             />
                             <Line 
                               type="monotone" 
-                              dataKey="value" 
+                              dataKey="profit" 
                               stroke="#8C57FF" 
                               strokeWidth={3}
                               dot={{ fill: '#8C57FF', r: 5 }}
                               activeDot={{ r: 7 }}
-                              name="Total Value"
+                              name="Total Profit"
                             />
                           </LineChart>
                         </ResponsiveContainer>
                         <p className="text-xs text-muted-foreground text-center mt-4">
-                          📈 Your investment value increases as loan repayments are received (returns are auto-reinvested)
+                          📈 Your cumulative profit grows as loan repayments are received (returns are auto-reinvested)
                         </p>
                       </div>
                     ) : (

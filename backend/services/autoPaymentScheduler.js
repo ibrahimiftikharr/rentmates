@@ -148,10 +148,10 @@ async function sendInsufficientBalanceNotifications(rental, student, studentUser
   
   // Send email
   try {
-    await sendEmail(
-      studentUser.email,
-      'Auto-Payment Failed - Insufficient Balance',
-      `
+    await sendEmail({
+      to: studentUser.email,
+      subject: 'Auto-Payment Failed - Insufficient Balance',
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #DC2626;">Auto-Payment Failed</h2>
           <p>Dear ${studentUser.name},</p>
@@ -175,7 +175,7 @@ async function sendInsufficientBalanceNotifications(rental, student, studentUser
           </div>
         </div>
       `
-    );
+    });
     console.log('✓ Insufficient balance email sent to student');
   } catch (emailError) {
     console.error('Error sending insufficient balance email:', emailError);
@@ -201,10 +201,10 @@ async function sendInsufficientBalanceNotifications(rental, student, studentUser
 async function sendSuccessNotifications(rental, student, studentUser, landlord, landlordUser, rentAmount, monthName, studentTransaction, io) {
   // Send email to student
   try {
-    await sendEmail(
-      studentUser.email,
-      'Rent Auto-Payment Successful',
-      `
+    await sendEmail({
+      to: studentUser.email,
+      subject: 'Rent Auto-Payment Successful',
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #059669;">Rent Payment Successful</h2>
           <p>Dear ${studentUser.name},</p>
@@ -226,17 +226,17 @@ async function sendSuccessNotifications(rental, student, studentUser, landlord, 
           </div>
         </div>
       `
-    );
+    });
   } catch (emailError) {
     console.error('Error sending auto-payment success email to student:', emailError);
   }
 
   // Send email to landlord
   try {
-    await sendEmail(
-      landlordUser.email,
-      'Rent Payment Received (Auto-Payment)',
-      `
+    await sendEmail({
+      to: landlordUser.email,
+      subject: 'Rent Payment Received (Auto-Payment)',
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #8C57FF;">Rent Payment Received</h2>
           <p>Dear ${landlordUser.name},</p>
@@ -259,7 +259,7 @@ async function sendSuccessNotifications(rental, student, studentUser, landlord, 
           </div>
         </div>
       `
-    );
+    });
   } catch (emailError) {
     console.error('Error sending auto-payment email to landlord:', emailError);
   }

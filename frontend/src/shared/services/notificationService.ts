@@ -20,8 +20,8 @@ api.interceptors.request.use((config) => {
 export interface Notification {
   _id: string;
   recipient: string;
-  recipientModel: 'Student' | 'Landlord';
-  type: 'visit_request' | 'visit_confirmed' | 'visit_rescheduled' | 'visit_rejected' | 'message' | 'property_update' | 'application_status';
+  recipientModel: 'Student' | 'Landlord' | 'Investor';
+  type: 'visit_request' | 'visit_confirmed' | 'visit_rescheduled' | 'visit_rejected' | 'message' | 'property_update' | 'application_status' | 'loan_application_submitted' | 'loan_disbursed' | 'loan_repayment_received' | 'investor_profit_earned' | 'loan_defaulted' | 'collateral_liquidated';
   title: string;
   message: string;
   relatedId?: string;
@@ -29,6 +29,19 @@ export interface Notification {
   metadata?: any;
   read: boolean;
   createdAt: string;
+}
+
+export interface NotificationPreferences {
+  loanActivity?: boolean;
+  repayments?: boolean;
+  defaults?: boolean;
+  profits?: boolean;
+  propertyUpdates?: boolean;
+  visitRequests?: boolean;
+  joinRequests?: boolean;
+  poolUpdates?: boolean;
+  systemAlerts?: boolean;
+  marketingEmails?: boolean;
 }
 
 export const notificationService = {
@@ -87,6 +100,30 @@ export const notificationService = {
       await api.delete(`/notifications/${notificationId}`);
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to delete notification');
+    }
+  },
+
+  /**
+   * Get notification preferences
+   */
+  async getPreferences(): Promise<NotificationPreferences> {
+    try {
+      const response = await api.get('/notifications/preferences');
+      return response.data.preferences || {};
+    } catch (error: any) {
+      console.error('Failed to fetch notification preferences:', error);
+      return {};
+    }
+  },
+
+  /**
+   * Update notification preferences
+   */
+  async updatePreferences(preferences: NotificationPreferences): Promise<void> {
+    try {
+      await api.put('/notifications/preferences', { preferences });
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to update preferences');
     }
   },
 };

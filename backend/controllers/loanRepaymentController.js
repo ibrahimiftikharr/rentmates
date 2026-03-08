@@ -5,6 +5,8 @@ const Transaction = require('../models/transactionModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const { sendEmail } = require('../services/emailService');
 const { distributeRepaymentToInvestors } = require('../services/investorRepaymentDistribution');
+const { returnCollateral } = require('../services/collateralLiquidationService');
+const { notifyLoanCompleted } = require('../services/notificationService');
 
 /**
  * Get active loan details for the student
@@ -159,6 +161,27 @@ exports.payInstallment = async (req, res) => {
     await loan.save();
     
     console.log('✓ Loan installment payment completed');
+    
+    // If loan is now completed, mark collateral as ready for withdrawal
+    if (loan.status === 'completed') {
+      console.log('🎉 Loan fully repaid! Marking collateral as available for withdrawal...');
+      try {
+        await returnCollateral(loan._id);
+        console.log('✓ Collateral marked as available for withdrawal');
+        
+        // Send notification about loan completion
+        await notifyLoanCompleted(
+          student._id,
+          loan._id,
+          loan.loanAmount,
+          loan.requiredCollateral,
+          loan.poolName
+        );
+      } catch (collateralError) {
+        console.error('❌ Error marking collateral for return:', collateralError);
+        // Don't fail the payment - just log the error
+      }
+    }
 
     // Distribute repayment to investors proportionally
     try {
@@ -189,10 +212,10 @@ exports.payInstallment = async (req, res) => {
 
     // Send email notification
     try {
-      await sendEmail(
-        user.email,
-        'Loan Installment Payment Successful',
-        `
+      await sendEmail({
+        to: user.email,
+        subject: 'Loan Installment Payment Successful',
+        html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #059669;">Loan Payment Successful</h2>
             <p>Dear ${user.name},</p>
@@ -224,7 +247,7 @@ exports.payInstallment = async (req, res) => {
             </div>
           </div>
         `
-      );
+      });
     } catch (emailError) {
       console.error('Error sending loan payment email:', emailError);
     }

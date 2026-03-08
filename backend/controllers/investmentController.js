@@ -4,6 +4,8 @@ const Investor = require('../models/investorModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const PoolInvestment = require('../models/poolInvestmentModel');
 const Transaction = require('../models/transactionModel');
+const QueuedLoanRequest = require('../models/queuedLoanRequestModel');
+const Notification = require('../models/notificationModel');
 
 /**
  * Get all investment pools with dynamic calculations
@@ -51,8 +53,10 @@ exports.getAllPools = async (req, res) => {
       const userCurrentValue = userTotalShares * currentSharePrice;
       const userSharePercentage = pool.totalShares > 0 ? (userTotalShares / pool.totalShares) * 100 : 0;
       
-      // Calculate Expected ROI
-      const expectedROI = pool.calculateROI();
+      // Calculate APR and effective ROI for the duration
+      const apr = pool.calculateAPR();
+      // Calculate effective ROI based on pool's average loan size (use minInvestment as reference)
+      const effectiveROI = pool.calculateEffectiveROI(pool.minInvestment);
       
       // Check if pool is full based on capital
       const isFull = poolSize >= pool.maxCapital;
@@ -63,7 +67,9 @@ exports.getAllPools = async (req, res) => {
         description: pool.description,
         ltv: pool.ltv,
         durationMonths: pool.durationMonths,
-        expectedROI: Number(expectedROI.toFixed(2)),
+        apr: Number(apr.toFixed(2)), // Annual Percentage Rate (for loans)
+        effectiveROI: Number(effectiveROI.toFixed(2)), // Actual ROI for duration
+        expectedROI: Number(apr.toFixed(2)), // Backward compatibility (deprecated)
         
         // Pool totals
         poolSize: Number(poolSize.toFixed(2)),
@@ -269,6 +275,147 @@ exports.investInPool = async (req, res) => {
 
     console.log(`✓ Investment successful: ${amount} USDT in ${pool.name} by user ${userId}`);
 
+    // Get Socket.IO instance
+    const io = req.app.get('io');
+
+    // ✅ Check for matching queued loan requests and notify students
+    try {
+      const queuedRequests = await QueuedLoanRequest.find({ 
+        status: 'queued',
+        requestedAmount: { $lte: pool.availableBalance },
+        expiresAt: { $gt: new Date() }
+      }).populate({
+        path: 'student',
+        populate: { path: 'user' }
+      });
+
+      console.log(`🔍 Checking ${queuedRequests.length} queued requests for pool ${pool.name} (duration: ${pool.durationMonths} months, available: $${pool.availableBalance})`);
+
+      for (const request of queuedRequests) {
+        // Verify student is populated
+        if (!request.student || !request.student.user) {
+          console.error(`❌ Request ${request._id} has no student or user populated`);
+          continue;
+        }
+
+        // Check if request matches pool criteria
+        const isAmountSuitable = request.requestedAmount <= pool.availableBalance;
+        // Match EXACT duration: Conservative(6), Balanced(9), High Yield(12)
+        const isDurationSuitable = request.duration === pool.durationMonths;
+        
+        console.log(`  Request ${request._id}: amount=${request.requestedAmount} (suitable: ${isAmountSuitable}), duration=${request.duration} (suitable: ${isDurationSuitable}), notificationSent=${request.notificationSent}, student=${request.student._id}, userId=${request.student.user}`);
+        
+        if (isAmountSuitable && isDurationSuitable && !request.notificationSent) {
+          console.log(`🎯 MATCH FOUND! Processing request ${request._id}...`);
+          
+          // Create notification for student
+          try {
+            const notification = await Notification.create({
+              recipient: request.student._id,
+              recipientModel: 'Student',
+              type: 'pool_available',
+              title: 'Loan Pool Available',
+              message: `A suitable pool (${pool.name}) is now available for your ${request.purpose} loan request of $${request.requestedAmount} USDT.`,
+              relatedId: pool._id,
+              relatedModel: 'InvestmentPool',
+              metadata: {
+                poolId: pool._id,
+                poolName: pool.name,
+                requestId: request._id,
+                requestedAmount: request.requestedAmount,
+                duration: request.duration
+              }
+            });
+
+            console.log(`✅ Notification created: ${notification._id} for student profile ${request.student._id} (user: ${request.student.user})`);
+
+            // Update request status to matched and mark notification as sent
+            request.status = 'matched';
+            request.matchedPool = pool._id;
+            request.matchedAt = new Date();
+            request.notificationSent = true;
+            await request.save();
+
+            console.log(`✅ Request ${request._id} status updated to 'matched'`);
+
+            // Emit Socket.IO event to student
+            if (io) {
+              io.to(`user_${request.student.user}`).emit('pool_available', {
+                poolId: pool._id,
+                poolName: pool.name,
+                requestId: request._id,
+                message: `A suitable pool is now available for your loan request`
+              });
+              
+              // Also emit to trigger notification bell update
+              io.to(`user_${request.student.user}`).emit('new_notification', {
+                type: 'pool_available',
+                title: 'Loan Pool Available',
+                message: `A suitable pool (${pool.name}) is now available for your loan request`,
+                poolId: pool._id
+              });
+              
+              console.log(`✅ Socket events emitted to user_${request.student.user}`);
+            } else {
+              console.log(`⚠️ io not available for Socket.IO emission`);
+            }
+
+            console.log(`📢 Notification sent to student ${request.student.user} for queued request ${request._id}`);
+          } catch (innerError) {
+            console.error(`❌ Error processing match for request ${request._id}:`, innerError);
+            throw innerError; // Re-throw to be caught by outer try-catch
+          }
+        } else {
+          if (!isAmountSuitable || !isDurationSuitable) {
+            console.log(`  ⏭️ Request ${request._id} does not match criteria`);
+          }
+          if (request.notificationSent) {
+            console.log(`  ⏭️ Request ${request._id} already has notification sent`);
+          }
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error checking queued requests:', notificationError);
+      // Don't fail the investment if notification fails
+    }
+
+    // ✅ Emit Socket.IO event for real-time investment update
+    if (io) {
+      // Notify the investor
+      io.to(`user_${userId}`).emit('investment_created', {
+        poolId: pool._id,
+        poolName: pool.name,
+        amount: amount,
+        shares: sharesToMint,
+        sharePrice: currentSharePrice,
+        timestamp: new Date()
+      });
+
+      // Broadcast pool update to all connected users
+      io.emit('pool_updated', {
+        poolId: pool._id,
+        poolName: pool.name,
+        totalInvested: pool.totalInvested,
+        availableBalance: pool.availableBalance,
+        timestamp: new Date()
+      });      
+      // Emit dashboard metrics update to investor
+      io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
+        trigger: 'investment_created',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
+      });
+      
+      // Emit analytics update to all investors
+      io.emit('analytics_updated', {
+        type: 'investment_created',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
+      });
+    }
+
     res.json({
       success: true,
       message: 'Investment successful',
@@ -418,39 +565,82 @@ exports.withdrawFromPool = async (req, res) => {
     const sharesToSell = amount / currentSharePrice;
     console.log('Shares to Sell:', sharesToSell.toFixed(6));
 
-    // Update investments (proportionally reduce shares from each investment)
+    // Update investments (proportionally reduce shares AND amountInvested)
     let remainingSharesToSell = sharesToSell;
+    let remainingAmountToWithdraw = amount;
     const updatedInvestments = [];
 
     for (const investment of investments) {
       if (remainingSharesToSell <= 0) break;
 
       const sharesToReduceFromThis = Math.min(investment.shares, remainingSharesToSell);
+      
+      // ✅ FIX: Proportionally reduce amountInvested to maintain correct totalEarnings
+      const proportionReduced = sharesToReduceFromThis / investment.shares;
+      const amountInvestedToReduce = investment.amountInvested * proportionReduced;
+      
       investment.shares -= sharesToReduceFromThis;
+      investment.amountInvested -= amountInvestedToReduce;
       remainingSharesToSell -= sharesToReduceFromThis;
+      remainingAmountToWithdraw -= amountInvestedToReduce;
 
       if (investment.shares <= 0.000001) { // Essentially zero
         investment.status = 'withdrawn';
         investment.shares = 0;
+        investment.amountInvested = 0;
       }
 
+      // ✅ FIX: Update current value and total earnings after withdrawal
+      await investment.updateValue();
       await investment.save();
+      
       updatedInvestments.push({
         investmentId: investment._id,
         sharesReduced: sharesToReduceFromThis,
+        amountInvestedReduced: amountInvestedToReduce,
         remainingShares: investment.shares,
+        remainingAmountInvested: investment.amountInvested,
         status: investment.status
       });
       
-      console.log(`  Investment ${investment._id}: Reduced ${sharesToReduceFromThis.toFixed(6)} shares → ${investment.shares.toFixed(6)} remaining`);
+      console.log(`  Investment ${investment._id}: Reduced ${sharesToReduceFromThis.toFixed(6)} shares & $${amountInvestedToReduce.toFixed(2)} invested → ${investment.shares.toFixed(6)} shares, $${investment.amountInvested.toFixed(2)} invested remaining`);
     }
 
-    // Update pool
-    pool.totalShares -= sharesToSell;
+    // ✅ FIX: Update pool using FULL ECONOMIC VALUE formula
+    // Pool Value = availableBalance + disbursedLoans + accruedInterest
+    // Share Price = Pool Value / totalShares
+    console.log('\n📊 UPDATING POOL VALUES (maintaining invariant)');
+    console.log(`Before withdrawal:`);
+    console.log(`  - availableBalance: ${pool.availableBalance.toFixed(2)}`);
+    console.log(`  - disbursedLoans: ${pool.disbursedLoans.toFixed(2)}`);
+    console.log(`  - accruedInterest: ${pool.accruedInterest.toFixed(2)}`);
+    console.log(`  - totalShares: ${pool.totalShares.toFixed(6)}`);
+    console.log(`  - poolValue: ${pool.getTotalPoolValue().toFixed(2)}`);
+    console.log(`  - sharePrice: ${currentSharePrice.toFixed(6)}`);
+    
+    // Step 1: Reduce available balance (cash leaving pool)
     pool.availableBalance -= amount;
+    
+    // Step 2: Reduce total shares (shares burned)
+    pool.totalShares -= sharesToSell;
+    
+    // Step 3: Keep disbursedLoans unchanged (loans still outstanding)
+    // Step 4: Keep accruedInterest unchanged (interest still owed to pool)
+    // Step 5: Keep totalInvested unchanged (historical tracking only)
+    
+    // Save pool (will recalculate share price with new values)
     await pool.save();
-    console.log(`📊 Pool: Total shares reduced to ${pool.totalShares.toFixed(6)}`);
-    console.log(`📊 Pool: Available balance reduced to ${pool.availableBalance.toFixed(2)}`);
+    
+    const newSharePrice = pool.getSharePrice();
+    const newPoolValue = pool.getTotalPoolValue();
+    console.log(`After withdrawal:`);
+    console.log(`  - availableBalance: ${pool.availableBalance.toFixed(2)}`);
+    console.log(`  - disbursedLoans: ${pool.disbursedLoans.toFixed(2)}`);
+    console.log(`  - accruedInterest: ${pool.accruedInterest.toFixed(2)}`);
+    console.log(`  - totalShares: ${pool.totalShares.toFixed(6)}`);
+    console.log(`  - poolValue: ${newPoolValue.toFixed(2)}`);
+    console.log(`  - sharePrice: ${newSharePrice.toFixed(6)}`);
+    console.log('✅ Share price stable! Invariant maintained: Share Price = Pool Value / Total Shares\n');
 
     // Add to user's off-chain balance
     const oldBalance = user.offChainBalance;
@@ -471,19 +661,61 @@ exports.withdrawFromPool = async (req, res) => {
     console.log('✅ WITHDRAWAL SUCCESSFUL');
     console.log('========================================\n');
 
+    // ✅ Emit Socket.IO event for real-time withdrawal update
+    const io = req.app.get('io');
+    if (io) {
+      // Notify the investor
+      io.to(`user_${userId}`).emit('withdrawal_completed', {
+        poolId: pool._id,
+        poolName: pool.name,
+        amount: amount,
+        sharesSold: sharesToSell,
+        newSharePrice: newSharePrice,
+        timestamp: new Date()
+      });
+
+      // Broadcast pool update to all connected users
+      io.emit('pool_updated', {
+        poolId: pool._id,
+        poolName: pool.name,
+        availableBalance: pool.availableBalance,
+        totalShares: pool.totalShares,
+        sharePrice: newSharePrice,
+        timestamp: new Date()
+      });
+      
+      // Emit dashboard metrics update to investor
+      io.to(`user_${userId}`).emit('dashboard_metrics_updated', {
+        trigger: 'withdrawal_completed',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
+      });
+      
+      // Emit analytics update to all investors
+      io.emit('analytics_updated', {
+        type: 'withdrawal_completed',
+        poolId: pool._id,
+        poolName: pool.name,
+        timestamp: new Date()
+      });
+    }
+
     res.json({
       success: true,
       message: 'Withdrawal successful',
       withdrawal: {
         amount: amount,
         sharesSold: sharesToSell,
-        sharePrice: currentSharePrice,
+        sharePriceAtWithdrawal: currentSharePrice,
         investments: updatedInvestments
       },
       pool: {
         name: pool.name,
         remainingShares: pool.totalShares,
-        currentSharePrice: currentSharePrice
+        sharePriceAfterWithdrawal: newSharePrice,
+        totalInvested: pool.totalInvested,
+        availableBalance: pool.availableBalance
       },
       newBalance: user.offChainBalance
     });

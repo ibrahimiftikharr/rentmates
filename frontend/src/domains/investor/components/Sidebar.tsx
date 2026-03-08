@@ -1,4 +1,4 @@
-import { LayoutDashboard, TrendingUp, Wallet, BarChart3, ChevronLeft, ChevronRight, Sparkles, User, Shield } from "lucide-react";
+import { LayoutDashboard, TrendingUp, Wallet, BarChart3, ChevronLeft, ChevronRight, Sparkles, User, Shield, Bell } from "lucide-react";
 import { cn } from "./ui/utils";
 
 type MenuItem = {
@@ -12,6 +12,7 @@ const menuItems: MenuItem[] = [
   { id: "profile", icon: User, label: "Profile" },
   { id: "investments", icon: TrendingUp, label: "Investments" },
   { id: "wallet", icon: Wallet, label: "Wallet" },
+  { id: "notifications", icon: Bell, label: "Notifications" },
   { id: "analytics", icon: BarChart3, label: "Analytics" },
   { id: "demo", icon: Sparkles, label: "Demo" },
 ];

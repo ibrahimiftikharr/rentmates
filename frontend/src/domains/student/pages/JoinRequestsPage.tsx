@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserPlus, Home, DollarSign, CheckCircle2, Clock, XCircle, FileSignature, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
@@ -17,29 +18,36 @@ interface JoinRequest {
   landlordName: string;
   bidAmount: number;
   requestDate: string;
-  status: 'pending' | 'approved' | 'rejected' | 'contract-sent' | 'awaiting-landlord' | 'completed';
+  status: 'pending' | 'approved' | 'rejected' | 'contract-sent' | 'awaiting-landlord' | 'completed' | 'terminated';
   moveInDate?: string;
   leaseDuration?: string;
   securityDeposit?: number;
   contractHash?: string;
   isDisabled?: boolean;
+  terminationReason?: string;
+  terminatedAt?: string;
 }
 
 export function JoinRequestsPage() {
+  const navigate = useNavigate();
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [signingContract, setSigningContract] = useState<JoinRequest | null>(null);
   const [terminatingContract, setTerminatingContract] = useState<JoinRequest | null>(null);
   const [isTerminating, setIsTerminating] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'approved' | 'awaiting' | 'completed' | 'pending' | 'rejected'>('approved');
+  const [selectedTab, setSelectedTab] = useState<'approved' | 'awaiting' | 'completed' | 'pending' | 'rejected' | 'terminated'>('approved');
   const [loading, setLoading] = useState(true);
 
   // Fetch join requests from API
   useEffect(() => {
+    // Ensure socket is connected
+    socketService.connect();
+    console.log('[StudentJoinRequestsPage] Socket connection status:', socketService.isConnected());
+    
     fetchJoinRequests();
 
     // Listen for real-time join request updates via Socket.IO
     socketService.on('join_request_approved', (data: any) => {
-      console.log('Join request approved (real-time):', data);
+      console.log('[StudentJoinRequestsPage] Join request approved (real-time):', data);
       toast.success(`Your join request for "${data.propertyTitle}" has been approved! Please sign the contract.`);
       
       // Update the specific join request in the list
@@ -94,11 +102,39 @@ export function JoinRequestsPage() {
           req.id === data.joinRequestId
             ? { 
                 ...req, 
-                status: mapBackendStatus(data.status)
+                status: mapBackendStatus(data.status),
+                terminationReason: data.terminationReason || req.terminationReason,
+                terminatedAt: data.terminatedAt || req.terminatedAt
               }
             : req
         )
       );
+    });
+
+    // Listen for join request status updates (including termination)
+    socketService.on('join_request_status_updated', (data: any) => {
+      console.log('[StudentJoinRequestsPage] Join request status updated (real-time):', data);
+      
+      // Update the specific join request status
+      setJoinRequests(prev =>
+        prev.map(req =>
+          req.id === data.joinRequestId
+            ? { 
+                ...req, 
+                status: data.status === 'terminated' ? 'terminated' : mapBackendStatus(data.status),
+                terminationReason: data.terminationReason || req.terminationReason,
+                terminatedAt: data.terminatedAt || req.terminatedAt
+              }
+            : req
+        )
+      );
+    });
+
+    // Listen for contract termination (security deposit refund)
+    socketService.on('contract_terminated', (data: any) => {
+      console.log('[StudentJoinRequestsPage] Contract terminated (real-time):', data);
+      toast.info(`Your rental contract has been terminated. Reason: ${data.reason}`);
+      // No fetch needed - join_request_status_updated already handles the state update
     });
 
     // Cleanup listeners on unmount
@@ -107,6 +143,8 @@ export function JoinRequestsPage() {
       socketService.off('join_request_rejected');
       socketService.off('contract_landlord_signed');
       socketService.off('contract_status_updated');
+      socketService.off('join_request_status_updated');
+      socketService.off('contract_terminated');
     };
   }, []);
 
@@ -123,12 +161,14 @@ export function JoinRequestsPage() {
         landlordName: req.landlord?.name || 'Unknown',
         bidAmount: req.bidAmount,
         requestDate: req.createdAt,
-        status: mapBackendStatus(req.status),
+        status: req.status === 'terminated' ? 'terminated' : mapBackendStatus(req.status),
         moveInDate: req.movingDate,
         leaseDuration: req.contract?.leaseDurationMonths ? `${req.contract.leaseDurationMonths} months` : undefined,
         securityDeposit: req.contract?.securityDeposit,
-        contractHash: req.contract?.studentSignature?.signature || undefined,
-        isDisabled: req.isDisabled || false
+        contractHash: req.contract?.blockchainVerification?.contractHash || undefined,
+        isDisabled: req.isDisabled || false,
+        terminationReason: req.terminationReason,
+        terminatedAt: req.terminatedAt
       }));
 
       setJoinRequests(mappedRequests);
@@ -160,6 +200,10 @@ export function JoinRequestsPage() {
 
   const handleSignContract = (request: JoinRequest) => {
     setSigningContract(request);
+  };
+
+  const handleViewContract = (request: JoinRequest) => {
+    navigate(`/student/view-contract/${request.id}`);
   };
 
   const handleContractSigned = async (contractHash: string) => {
@@ -227,6 +271,8 @@ export function JoinRequestsPage() {
         return 'bg-blue-500';
       case 'completed':
         return 'bg-purple-500';
+      case 'terminated':
+        return 'bg-red-600';
       default:
         return 'bg-gray-500';
     }
@@ -238,6 +284,8 @@ export function JoinRequestsPage() {
         return 'Awaiting Landlord Signature';
       case 'contract-sent':
         return 'Contract Sent';
+      case 'terminated':
+        return 'Terminated';
       default:
         return status.charAt(0).toUpperCase() + status.slice(1);
     }
@@ -356,24 +404,10 @@ export function JoinRequestsPage() {
                     <span className="font-medium text-blue-900">Awaiting Landlord Signature</span>
                   </div>
                   <div className="text-sm text-blue-800 space-y-2">
-                    <p>Your contract has been signed and submitted to the blockchain.</p>
+                    <p>Your contract has been signed and submitted.</p>
                     <p>Waiting for the landlord to complete their signature.</p>
-                    {request.contractHash && (
-                      <div className="mt-3 p-2 bg-white rounded border border-blue-300">
-                        <div className="text-xs text-muted-foreground mb-1">Transaction Hash:</div>
-                        <div className="font-mono text-xs break-all">{request.contractHash}</div>
-                      </div>
-                    )}
                   </div>
                 </div>
-                <Button 
-                  variant="outline"
-                  className="w-full border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800 mt-3"
-                  onClick={() => setTerminatingContract(request)}
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Terminate Contract
-                </Button>
               </>
             )}
 
@@ -391,18 +425,18 @@ export function JoinRequestsPage() {
                   </div>
                   {request.contractHash && (
                     <div className="mt-3 p-2 bg-white rounded border border-purple-300">
-                      <div className="text-xs text-muted-foreground mb-1">Contract Hash:</div>
-                      <div className="font-mono text-xs break-all">{request.contractHash}</div>
+                      <div className="text-xs text-muted-foreground mb-1">Contract Hash (SHA-256):</div>
+                      <div className="font-mono text-xs break-all text-gray-700">{request.contractHash}</div>
                     </div>
                   )}
                 </div>
                 <Button 
-                  variant="outline"
-                  className="w-full border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800 mt-3"
-                  onClick={() => setTerminatingContract(request)}
+                  variant="default"
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white mt-3"
+                  onClick={() => handleViewContract(request)}
                 >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Terminate Contract
+                  <FileSignature className="w-4 h-4 mr-2" />
+                  View Contract
                 </Button>
               </>
             )}
@@ -417,6 +451,42 @@ export function JoinRequestsPage() {
                     <span className="font-medium">Request Rejected</span>
                   </div>
                   <p className="text-red-700 mt-1">The landlord has declined your request</p>
+                </div>
+              </>
+            )}
+
+            {/* Terminated */}
+            {request.status === 'terminated' && (
+              <>
+                <Separator className="my-3" />
+                <div className="p-4 rounded-lg bg-red-50 border-2 border-red-300 text-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <span className="font-medium text-red-900">Contract Terminated</span>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-red-800">This rental contract has been terminated.</p>
+                    {request.terminationReason && (
+                      <div className="mt-2 p-2 bg-white rounded border border-red-200">
+                        <div className="text-xs text-muted-foreground mb-1">Reason:</div>
+                        <div className="text-sm text-red-900">{request.terminationReason}</div>
+                      </div>
+                    )}
+                    {request.terminatedAt && (
+                      <div className="text-xs text-red-700">
+                        Terminated on: {new Date(request.terminatedAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </div>
+                    )}
+                    <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
+                      <p className="text-xs text-green-800">
+                        ✅ Your security deposit has been refunded to your wallet
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
@@ -456,6 +526,7 @@ export function JoinRequestsPage() {
   const completedRequests = joinRequests.filter(r => r.status === 'completed');
   const pendingRequests = joinRequests.filter(r => r.status === 'pending' && !r.isDisabled);
   const rejectedRequests = joinRequests.filter(r => r.status === 'rejected');
+  const terminatedRequests = joinRequests.filter(r => r.status === 'terminated');
 
   if (loading) {
     return (
@@ -596,6 +667,17 @@ export function JoinRequestsPage() {
             <Badge className="ml-2 bg-white text-primary">{rejectedRequests.length}</Badge>
           )}
         </Button>
+        <Button
+          onClick={() => setSelectedTab('terminated')}
+          variant={selectedTab === 'terminated' ? 'default' : 'outline'}
+          className={`${selectedTab === 'terminated' ? 'bg-red-600' : 'border-red-300'}`}
+        >
+          <AlertCircle className="w-4 h-4 mr-2" />
+          Terminated
+          {terminatedRequests.length > 0 && (
+            <Badge className="ml-2 bg-white text-red-600">{terminatedRequests.length}</Badge>
+          )}
+        </Button>
       </div>
 
       {/* Approved Requests */}
@@ -697,6 +779,27 @@ export function JoinRequestsPage() {
               <h3 className="mb-2">No Rejected Requests</h3>
               <p className="text-muted-foreground">
                 You don't have any rejected requests
+              </p>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Terminated Requests */}
+      {selectedTab === 'terminated' && (
+        <>
+          {terminatedRequests.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {terminatedRequests.map((request) => (
+                <RequestCard key={request.id} request={request} />
+              ))}
+            </div>
+          ) : (
+            <Card className="p-12 text-center shadow-lg">
+              <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-400" />
+              <h3 className="mb-2">No Terminated Contracts</h3>
+              <p className="text-muted-foreground">
+                You don't have any terminated rental contracts
               </p>
             </Card>
           )}

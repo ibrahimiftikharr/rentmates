@@ -1,5 +1,5 @@
 import { HardhatUserConfig } from "hardhat/config";
-import hardhatEthers from "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-ethers";
 import * as dotenv from "dotenv";
 
 dotenv.config();
@@ -22,7 +22,6 @@ const config: HardhatUserConfig = {
       accounts: process.env.PRIVATE_KEY ? [`0x${process.env.PRIVATE_KEY}`] : [],
     },
   },
-  plugins: [hardhatEthers],
 };
 
 export default config;

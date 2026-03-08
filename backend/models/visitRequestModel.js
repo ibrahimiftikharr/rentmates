@@ -35,8 +35,24 @@ const visitRequestSchema = new mongoose.Schema({
   },
 
   visitTime: {
-    type: String, // Format: "HH:mm" (e.g., "14:30")
+    type: String, // Format: "HH:mm" (e.g., "14:30") - stored in UTC
     required: true
+  },
+
+  visitTimeEnd: {
+    type: String, // Format: "HH:mm" for end of 30-minute slot - stored in UTC
+    required: false
+  },
+
+  // Time zone information
+  studentTimeZone: {
+    type: String, // IANA time zone (e.g., "America/New_York")
+    required: false
+  },
+
+  landlordTimeZone: {
+    type: String, // IANA time zone
+    required: false
   },
 
   // Status tracking
@@ -57,7 +73,11 @@ const visitRequestSchema = new mongoose.Schema({
   },
 
   rescheduledTime: {
-    type: String
+    type: String // stored in UTC
+  },
+
+  rescheduledTimeEnd: {
+    type: String // end time of rescheduled slot in UTC
   },
 
   // Rejection reason
@@ -68,6 +88,11 @@ const visitRequestSchema = new mongoose.Schema({
   // Landlord notes
   landlordNotes: {
     type: String
+  },
+
+  // Completion timestamp
+  completedAt: {
+    type: Date
   },
 
   // Timestamps

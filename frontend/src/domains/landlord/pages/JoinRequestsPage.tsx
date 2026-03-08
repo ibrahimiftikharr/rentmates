@@ -10,7 +10,8 @@ import {
   Shield,
   Calendar,
   DollarSign,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -31,7 +32,7 @@ interface JoinRequest {
   bidAmount: string;
   leaseDuration: string;
   moveInDate: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'terminated';
   contractSigned: boolean;
   blockchainVerified: boolean;
   contractId?: string;
@@ -44,6 +45,8 @@ interface JoinRequest {
   landlordApproved?: boolean;
   studentSigned?: boolean;
   landlordSigned?: boolean;
+  terminationReason?: string;
+  terminatedAt?: string;
 }
 
 interface JoinRequestsPageProps {
@@ -62,20 +65,26 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
 
   // Fetch join requests from API
   useEffect(() => {
+    // Ensure socket is connected
+    const socket = socketService.connect();
+    console.log('[LandlordJoinRequestsPage] Initializing socket connection...');
+    
+    // Initial data fetch
     fetchJoinRequests();
 
-    // Listen for new join requests via Socket.IO
-    socketService.on('new_join_request', (data: any) => {
-      console.log('New join request received:', data);
+    // Set up socket event handlers
+    const handleNewJoinRequest = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] 📨 New join request received:', data);
       toast.info(`New join request from ${data.student?.name || 'a student'}`);
-      fetchJoinRequests(); // Refresh the list
-    });
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchJoinRequests();
+      }, 500);
+    };
 
-    // Listen for contract signed by student
-    socketService.on('contract_student_signed', (data: any) => {
-      console.log('Student signed contract (real-time):', data);
+    const handleContractStudentSigned = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] ✍️ Student signed contract:', data);
       toast.info(`${data.studentName} has signed the rental contract for "${data.propertyTitle}". Please review and sign.`);
-      
       // Update the specific join request in the list
       setRequests(prev =>
         prev.map(req =>
@@ -83,36 +92,33 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
             ? {
                 ...req,
                 studentSigned: true,
-                // Keep status as 'approved' since we map 'waiting_completion' to 'approved'
                 status: 'approved' as const
               }
             : req
         )
       );
-    });
+    };
 
-    // Listen for status updates on our own actions
-    socketService.on('join_request_status_updated', (data: any) => {
-      console.log('Join request status updated (real-time):', data);
-      
+    const handleJoinRequestStatusUpdated = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] 🔄 Join request status updated:', data);
       // Update the specific join request status
       setRequests(prev =>
         prev.map(req =>
           req.id === data.joinRequestId
             ? { 
                 ...req, 
-                status: mapBackendStatus(data.status),
-                landlordApproved: data.status === 'approved' || data.status === 'waiting_completion' || data.status === 'completed'
+                status: data.status === 'terminated' ? 'terminated' : mapBackendStatus(data.status),
+                landlordApproved: data.status === 'approved' || data.status === 'waiting_completion' || data.status === 'completed',
+                terminationReason: data.terminationReason || req.terminationReason,
+                terminatedAt: data.terminatedAt || req.terminatedAt
               }
             : req
         )
       );
-    });
+    };
 
-    // Listen for contract completion updates
-    socketService.on('contract_status_updated', (data: any) => {
-      console.log('Contract status updated (real-time):', data);
-      
+    const handleContractStatusUpdated = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] 📝 Contract status updated:', data);
       // Update the specific join request with signing statuses
       setRequests(prev =>
         prev.map(req =>
@@ -128,13 +134,48 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
             : req
         )
       );
-    });
+    };
 
+    const handleContractTerminated = (data: any) => {
+      console.log('[LandlordJoinRequestsPage] ⚠️ Contract terminated:', data);
+      toast.info(`Contract terminated for ${data.propertyTitle}. Student requested refund.`);
+      // Small delay to ensure backend updates are complete
+      setTimeout(() => {
+        fetchJoinRequests();
+      }, 500);
+    };
+
+    // Wait for socket connection before attaching listeners
+    if (socket) {
+      socket.on('connect', () => {
+        console.log('[LandlordJoinRequestsPage] ✅ Socket connected, setting up event listeners');
+      });
+
+      socket.on('disconnect', () => {
+        console.log('[LandlordJoinRequestsPage] ⚠️ Socket disconnected');
+      });
+
+      socket.on('reconnect', () => {
+        console.log('[LandlordJoinRequestsPage] 🔄 Socket reconnected, refreshing data');
+        fetchJoinRequests();
+      });
+    }
+
+    // Attach event listeners
+    socketService.on('new_join_request', handleNewJoinRequest);
+    socketService.on('contract_student_signed', handleContractStudentSigned);
+    socketService.on('join_request_status_updated', handleJoinRequestStatusUpdated);
+    socketService.on('contract_status_updated', handleContractStatusUpdated);
+    socketService.on('contract_terminated', handleContractTerminated);
+
+    // Cleanup function
     return () => {
-      socketService.off('new_join_request');
-      socketService.off('contract_student_signed');
-      socketService.off('join_request_status_updated');
-      socketService.off('contract_status_updated');
+      console.log('[LandlordJoinRequestsPage] Cleaning up socket listeners');
+      socketService.off('new_join_request', handleNewJoinRequest);
+      socketService.off('contract_student_signed', handleContractStudentSigned);
+      socketService.off('join_request_status_updated', handleJoinRequestStatusUpdated);
+      socketService.off('contract_status_updated', handleContractStatusUpdated);
+      socketService.off('contract_terminated', handleContractTerminated);
     };
   }, []);
 
@@ -155,7 +196,7 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
           bidAmount: req.bidAmount.toString(),
           leaseDuration: req.contract?.leaseDurationMonths?.toString() || '12',
           moveInDate: req.movingDate,
-          status: mapBackendStatus(req.status),
+          status: req.status === 'terminated' ? 'terminated' : mapBackendStatus(req.status),
           contractSigned: req.status === 'completed',
           blockchainVerified: req.status === 'completed',
           contractId: req.status === 'completed' ? `CONTRACT-${req._id.slice(-6)}` : undefined,
@@ -165,7 +206,9 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
           rentalScore: req.studentProfile?.reputationScore || 0,
           landlordApproved: req.status === 'approved' || req.status === 'waiting_completion' || req.status === 'completed',
           studentSigned: req.contract?.studentSignature?.signed || false,
-          landlordSigned: req.contract?.landlordSignature?.signed || false
+          landlordSigned: req.contract?.landlordSignature?.signed || false,
+          terminationReason: req.terminationReason,
+          terminatedAt: req.terminatedAt
         };
       });
 
@@ -179,7 +222,7 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
   };
 
   // Map backend status to frontend status
-  const mapBackendStatus = (backendStatus: string): 'pending' | 'approved' | 'rejected' => {
+  const mapBackendStatus = (backendStatus: string): 'pending' | 'approved' | 'rejected' | 'terminated' => {
     switch (backendStatus) {
       case 'pending':
         return 'pending';
@@ -189,6 +232,8 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
         return 'approved';
       case 'rejected':
         return 'rejected';
+      case 'terminated':
+        return 'terminated';
       default:
         return 'pending';
     }
@@ -202,6 +247,8 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
         return 'bg-green-500/10 text-green-700 border-green-200';
       case 'rejected':
         return 'bg-red-500/10 text-red-700 border-red-200';
+      case 'terminated':
+        return 'bg-red-600/10 text-red-800 border-red-300';
       default:
         return 'bg-gray-500/10 text-gray-700 border-gray-200';
     }
@@ -324,6 +371,7 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
               <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="terminated">Terminated</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -437,6 +485,18 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                         <FileText className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
                         <span className="hidden sm:inline">View Contract</span>
                       </Button>
+                    )}
+                    {request.status === 'terminated' && (
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className="bg-red-600 text-white text-xs truncate">
+                          ⚠ TERMINATED
+                        </Badge>
+                        {request.terminatedAt && (
+                          <p className="text-xs text-red-600">
+                            {new Date(request.terminatedAt).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -565,6 +625,43 @@ export function JoinRequestsPage({ onNavigate }: JoinRequestsPageProps) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Termination Info in Expanded View */}
+                  {request.status === 'terminated' && (
+                    <div className="mt-6 pt-6 border-t">
+                      <div className="p-4 rounded-lg bg-red-50 border-2 border-red-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertCircle className="w-5 h-5 text-red-600" />
+                          <span className="font-medium text-red-900">Contract Terminated</span>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <p className="text-red-800">This rental contract has been terminated by the student.</p>
+                          {request.terminationReason && (
+                            <div className="mt-2 p-3 bg-white rounded border border-red-200">
+                              <div className="text-xs text-muted-foreground mb-1">Reason:</div>
+                              <div className="text-sm text-red-900 font-medium">{request.terminationReason}</div>
+                            </div>
+                          )}
+                          {request.terminatedAt && (
+                            <div className="text-xs text-red-700 mt-2">
+                              Terminated on: {new Date(request.terminatedAt).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          )}
+                          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded">
+                            <p className="text-xs text-blue-800">
+                              ℹ️ The student's security deposit has been automatically refunded and the property is now available for new tenants.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Action Buttons in Expanded View */}
                   {request.status === 'pending' && !request.landlordApproved && (

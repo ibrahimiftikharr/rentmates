@@ -20,9 +20,12 @@ const reviewRouter = require('./routes/reviewRoutes.js');
 const investmentRouter = require('./routes/investmentRoutes.js');
 const loanRouter = require('./routes/loanRoutes.js');
 const collateralRouter = require('./routes/collateralRoutes.js');
+const securityDepositRouter = require('./routes/securityDepositRoutes.js');
 const { initRentNotificationScheduler } = require('./services/rentNotificationScheduler.js');
 const { initializeAutoPaymentScheduler } = require('./services/autoPaymentScheduler.js');
 const { initializeLoanAutoRepaymentScheduler } = require('./services/loanAutoRepaymentScheduler.js');
+const { initializeScheduledJobs } = require('./services/securityDepositScheduler.js');
+const { initializeScheduledJobs: initializeLoanMonitoringJobs } = require('./jobs/loanMonitoringJob.js');
 
 // Load environment variables
 dotenv.config();
@@ -65,7 +68,7 @@ io.on('connection', (socket) => {
     const roomName = `${role}_${userId}`;
     socket.join(roomName);
     socket.join(`user_${userId}`); // Also join generic user room for messaging
-    console.log(`User joined rooms: ${roomName}, user_${userId}`);
+    console.log(`✓ User joined rooms: ${roomName}, user_${userId} (Socket ID: ${socket.id})`);
   });
 
   // Typing indicator
@@ -116,6 +119,8 @@ mongoose.connect(MONGO_URI)
     initRentNotificationScheduler(io);
     initializeAutoPaymentScheduler(io);
     initializeLoanAutoRepaymentScheduler(io);
+    initializeScheduledJobs(); // Security deposit reminders and auto-termination
+    initializeLoanMonitoringJobs(io); // Loan overdue monitoring and collateral liquidation
   })
   .catch((err) => console.error('✗ MongoDB connection error:', err));
 
@@ -166,6 +171,9 @@ app.use('/api/loans', loanRouter);
 
 // Collateral routes (deposit, verify, balances)
 app.use('/api/collateral', collateralRouter);
+
+// Security deposit routes (payment, refund, status)
+app.use('/api/security-deposit', securityDepositRouter);
 
 // Join request routes (rental request workflow)
 app.use('/api/join-requests', joinRequestRouter);

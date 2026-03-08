@@ -1,6 +1,7 @@
 const Notification = require('../models/notificationModel');
 const Student = require('../models/studentModel');
 const Landlord = require('../models/landlordModel');
+const Investor = require('../models/investorModel');
 
 // Get notifications for current user
 const getNotifications = async (req, res) => {
@@ -31,6 +32,16 @@ const getNotifications = async (req, res) => {
       }
       recipientId = landlord._id;
       recipientModel = 'Landlord';
+    } else if (userRole === 'investor') {
+      const investor = await Investor.findOne({ user: userId });
+      if (!investor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Investor profile not found'
+        });
+      }
+      recipientId = investor._id;
+      recipientModel = 'Investor';
     }
 
     const notifications = await Notification.find({
@@ -120,6 +131,16 @@ const markAllAsRead = async (req, res) => {
       }
       recipientId = landlord._id;
       recipientModel = 'Landlord';
+    } else if (userRole === 'investor') {
+      const investor = await Investor.findOne({ user: userId });
+      if (!investor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Investor profile not found'
+        });
+      }
+      recipientId = investor._id;
+      recipientModel = 'Investor';
     }
 
     await Notification.updateMany(
@@ -169,6 +190,16 @@ const getUnreadCount = async (req, res) => {
       }
       recipientId = landlord._id;
       recipientModel = 'Landlord';
+    } else if (userRole === 'investor') {
+      const investor = await Investor.findOne({ user: userId });
+      if (!investor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Investor profile not found'
+        });
+      }
+      recipientId = investor._id;
+      recipientModel = 'Investor';
     }
 
     const unreadCount = await Notification.countDocuments({
@@ -217,6 +248,15 @@ const deleteNotification = async (req, res) => {
         });
       }
       recipientId = landlord._id;
+    } else if (userRole === 'investor') {
+      const investor = await Investor.findOne({ user: userId });
+      if (!investor) {
+        return res.status(404).json({
+          success: false,
+          message: 'Investor profile not found'
+        });
+      }
+      recipientId = investor._id;
     }
 
     // Find and verify ownership before deleting
@@ -251,10 +291,80 @@ const deleteNotification = async (req, res) => {
   }
 };
 
+// Get notification preferences
+const getPreferences = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const User = require('../models/userModel');
+    
+    const user = await User.findById(userId).select('notificationPreferences');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      preferences: user.notificationPreferences || {}
+    });
+  } catch (error) {
+    console.error('Get preferences error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notification preferences'
+    });
+  }
+};
+
+// Update notification preferences
+const updatePreferences = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { preferences } = req.body;
+    const User = require('../models/userModel');
+
+    if (!preferences || typeof preferences !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid preferences data'
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { notificationPreferences: preferences },
+      { new: true, runValidators: true }
+    ).select('notificationPreferences');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification preferences updated successfully',
+      preferences: user.notificationPreferences
+    });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update notification preferences'
+    });
+  }
+};
+
 module.exports = {
   getNotifications,
   markAsRead,
   markAllAsRead,
   getUnreadCount,
-  deleteNotification
+  deleteNotification,
+  getPreferences,
+  updatePreferences
 };

@@ -1,0 +1,36 @@
+{
+  "student1": {
+    "university": "University of Manchester",
+    "course": "Computer Science",
+    "yearOfStudy": "Year 2",
+    "nationality": "United Kingdom",
+    "bio": "Love coding and exploring new tech. Looking for a quiet flatmate who enjoys studying together but also respects personal space.",
+    "interests": ["Coding", "Gaming", "Coffee", "Tech Meetups", "Reading"],
+    "housingPreferences": {
+      "budgetMin": 500,
+      "budgetMax": 800,
+      "propertyType": ["Flat", "House"],
+      "petsAllowed": false,
+      "smokingAllowed": false,
+      "furnished": true,
+      "billsIncluded": true
+    }
+  },
+  "student2": {
+    "university": "University of Manchester",
+    "course": "Data Science",
+    "yearOfStudy": "Year 2",
+    "nationality": "United Kingdom",
+    "bio": "Data science student passionate about AI and machine learning. Clean, organized, and love a good coffee chat. Looking for a like-minded flatmate.",
+    "interests": ["AI/ML", "Data Analysis", "Coffee", "Reading", "Hiking"],
+    "housingPreferences": {
+      "budgetMin": 550,
+      "budgetMax": 850,
+      "propertyType": ["Flat"],
+      "petsAllowed": false,
+      "smokingAllowed": false,
+      "furnished": true,
+      "billsIncluded": true
+    }
+  }
+}

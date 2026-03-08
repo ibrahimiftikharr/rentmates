@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
 // Contract addresses
-export const USDT_ADDRESS = 'in ';
+export const USDT_ADDRESS = '0x93A7B3819f95Fb563ED6A042AA6268ac0fB7C083';
 export const VAULT_ADDRESS = '0x9a0070e5C9f1E1d75F105B85F93f955e2656Aa22';
 
 // Contract ABIs
@@ -136,7 +136,12 @@ export const approveUSDT = async (amount: string): Promise<string> => {
     const usdtContract = new ethers.Contract(USDT_ADDRESS, USDT_ABI, signer);
     
     const amountInWei = ethers.parseUnits(amount, 6);
-    const tx = await usdtContract.approve(VAULT_ADDRESS, amountInWei);
+    
+    // Set gas parameters to meet network minimum requirements
+    const tx = await usdtContract.approve(VAULT_ADDRESS, amountInWei, {
+      maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'),
+      maxFeePerGas: ethers.parseUnits('50', 'gwei')
+    });
     const receipt = await tx.wait();
     
     return receipt.hash;
@@ -193,7 +198,10 @@ export const depositToVault = async (amount: string): Promise<string> => {
     }
     
     // Deposit to vault
-    const tx = await vaultContract.deposit(amountInWei);
+    const tx = await vaultContract.deposit(amountInWei, {
+      maxPriorityFeePerGas: ethers.parseUnits('30', 'gwei'),
+      maxFeePerGas: ethers.parseUnits('50', 'gwei')
+    });
     const receipt = await tx.wait();
     
     return receipt.hash;
@@ -437,4 +445,43 @@ export const toggleAutoPayment = async (enabled: boolean) => {
   }
 
   return await response.json();
+};
+
+/**
+ * Download transaction receipt as PDF
+ */
+export const downloadTransactionReceipt = async (transactionId: string) => {
+  try {
+    const response = await fetch(`${API_URL}/wallet/transactions/${transactionId}/download-receipt`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to download receipt' }));
+      throw new Error(error.error || 'Failed to download receipt');
+    }
+
+    // Get the PDF blob
+    const blob = await response.blob();
+    
+    // Create a download link
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RentMates_Receipt_${transactionId}_${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Cleanup
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Download receipt error:', error);
+    throw error;
+  }
 };

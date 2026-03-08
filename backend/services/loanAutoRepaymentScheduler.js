@@ -116,10 +116,10 @@ async function sendInsufficientBalanceNotifications(loan, student, user, install
   
   // Send email
   try {
-    await sendEmail(
-      user.email,
-      'Loan Auto-Repayment Failed - Insufficient Balance',
-      `
+    await sendEmail({
+      to: user.email,
+      subject: 'Loan Auto-Repayment Failed - Insufficient Balance',
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #DC2626;">Loan Auto-Repayment Failed</h2>
           <p>Dear ${user.name},</p>
@@ -147,7 +147,7 @@ async function sendInsufficientBalanceNotifications(loan, student, user, install
           </div>
         </div>
       `
-    );
+    });
     console.log('✓ Insufficient balance email sent to student');
   } catch (emailError) {
     console.error('Error sending insufficient balance email:', emailError);
@@ -175,10 +175,10 @@ async function sendSuccessNotifications(loan, student, user, installmentAmount, 
   
   // Send email to student
   try {
-    await sendEmail(
-      user.email,
-      'Loan Auto-Repayment Successful',
-      `
+    await sendEmail({
+      to: user.email,
+      subject: 'Loan Auto-Repayment Successful',
+      html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #059669;">Loan Payment Successful</h2>
           <p>Dear ${user.name},</p>
@@ -210,7 +210,7 @@ async function sendSuccessNotifications(loan, student, user, installmentAmount, 
           </div>
         </div>
       `
-    );
+    });
   } catch (emailError) {
     console.error('Error sending auto-repayment success email:', emailError);
   }

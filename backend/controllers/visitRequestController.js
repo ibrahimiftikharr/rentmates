@@ -9,7 +9,7 @@ const { emitDashboardUpdate } = require('../utils/socketHelpers');
 const createVisitRequest = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { propertyId, visitType, visitDate, visitTime } = req.body;
+    const { propertyId, visitType, visitDate, visitTime, visitTimeEnd, studentTimeZone } = req.body;
 
     // Validate required fields
     if (!propertyId || !visitType || !visitDate || !visitTime) {
@@ -44,6 +44,29 @@ const createVisitRequest = async (req, res) => {
       landlordId: property.landlord._id
     });
 
+    // Check for conflicting visit requests (same property, date, and overlapping time)
+    const requestedDate = new Date(visitDate);
+    requestedDate.setHours(0, 0, 0, 0);
+    const nextDay = new Date(requestedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const conflictingRequests = await VisitRequest.find({
+      property: property._id,
+      visitDate: {
+        $gte: requestedDate,
+        $lt: nextDay
+      },
+      visitTime: visitTime, // Same time slot
+      status: { $in: ['pending', 'confirmed', 'rescheduled'] } // Only active requests
+    });
+
+    if (conflictingRequests.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'This time slot is already booked. Please select another time.'
+      });
+    }
+
     // Create visit request
     const visitRequest = new VisitRequest({
       student: student._id,
@@ -51,7 +74,9 @@ const createVisitRequest = async (req, res) => {
       landlord: property.landlord._id,
       visitType,
       visitDate: new Date(visitDate),
-      visitTime,
+      visitTime, // stored in UTC
+      visitTimeEnd, // end of 30-minute slot in UTC
+      studentTimeZone: studentTimeZone || 'UTC',
       status: 'pending'
     });
 
@@ -163,6 +188,9 @@ const getStudentVisitRequests = async (req, res) => {
       .populate({ path: 'landlord', populate: { path: 'user', select: 'name email' } })
       .sort({ createdAt: -1 });
 
+    console.log('Found student visit requests:', visitRequests.length);
+    console.log('Student visit request statuses:', visitRequests.map(r => ({ id: r._id, status: r.status })));
+
     // Transform data to include location field
     const transformedRequests = visitRequests.map(req => {
       const reqObj = req.toObject();
@@ -211,15 +239,22 @@ const getLandlordVisitRequests = async (req, res) => {
       .sort({ createdAt: -1 });
 
     console.log('Found visit requests:', visitRequests.length);
+    console.log('Visit request statuses:', visitRequests.map(r => ({ id: r._id, status: r.status })));
 
-    // Transform data to include location field
+    // Transform data to include location field and student profile picture
     const transformedRequests = visitRequests.map(req => {
       const reqObj = req.toObject();
       if (reqObj.property && reqObj.property.address) {
         reqObj.property.location = reqObj.property.address;
       }
-      if (reqObj.student && reqObj.student.user) {
-        reqObj.student.fullName = reqObj.student.user.name;
+      if (reqObj.student) {
+        if (reqObj.student.user) {
+          reqObj.student.fullName = reqObj.student.user.name;
+        }
+        // Include profile picture from documents.profileImage
+        if (reqObj.student.documents && reqObj.student.documents.profileImage) {
+          reqObj.student.profilePicture = reqObj.student.documents.profileImage;
+        }
       }
       return reqObj;
     });
@@ -287,8 +322,15 @@ const confirmVisitRequest = async (req, res) => {
     // Emit Socket.IO event to student
     const io = req.app.get('io');
     if (io) {
-      io.to(`student_${visitRequest.student._id}`).emit('visit_confirmed', {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_confirmed', {
         notification,
+        visitRequest
+      });
+
+      // Also emit to landlord for real-time update on their dashboard
+      const landlordUserId = req.user.id;
+      io.to(`landlord_${landlordUserId}`).emit('visit_request_updated', {
         visitRequest
       });
     }
@@ -325,8 +367,8 @@ const rescheduleVisitRequest = async (req, res) => {
     }
 
     visitRequest.status = 'rescheduled';
-    visitRequest.rescheduledDate = new Date(newDate);
-    visitRequest.rescheduledTime = newTime;
+    visitRequest.visitDate = new Date(newDate);
+    visitRequest.visitTime = newTime;
     visitRequest.landlordNotes = landlordNotes;
     visitRequest.updatedAt = new Date();
 
@@ -343,10 +385,8 @@ const rescheduleVisitRequest = async (req, res) => {
       relatedModel: 'VisitRequest',
       metadata: {
         propertyTitle: visitRequest.property.title,
-        originalDate: visitRequest.visitDate,
-        originalTime: visitRequest.visitTime,
-        newDate: visitRequest.rescheduledDate,
-        newTime: visitRequest.rescheduledTime,
+        newDate: visitRequest.visitDate,
+        newTime: visitRequest.visitTime,
         landlordNotes
       }
     });
@@ -356,8 +396,15 @@ const rescheduleVisitRequest = async (req, res) => {
     // Emit Socket.IO event to student
     const io = req.app.get('io');
     if (io) {
-      io.to(`student_${visitRequest.student._id}`).emit('visit_rescheduled', {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_rescheduled', {
         notification,
+        visitRequest
+      });
+
+      // Also emit to landlord for real-time update on their dashboard
+      const landlordUserId = req.user.id;
+      io.to(`landlord_${landlordUserId}`).emit('visit_request_updated', {
         visitRequest
       });
     }
@@ -421,7 +468,8 @@ const rejectVisitRequest = async (req, res) => {
     // Emit Socket.IO event to student
     const io = req.app.get('io');
     if (io) {
-      io.to(`student_${visitRequest.student._id}`).emit('visit_rejected', {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_rejected', {
         notification,
         visitRequest
       });
@@ -441,11 +489,159 @@ const rejectVisitRequest = async (req, res) => {
   }
 };
 
+// Mark visit as completed (Landlord)
+const completeVisitRequest = async (req, res) => {
+  try {
+    const { visitRequestId } = req.params;
+    console.log('Completing visit request:', visitRequestId);
+
+    const visitRequest = await VisitRequest.findById(visitRequestId)
+      .populate({ path: 'student', populate: { path: 'user', select: 'name email' } })
+      .populate('property', 'title address');
+
+    if (!visitRequest) {
+      console.log('Visit request not found:', visitRequestId);
+      return res.status(404).json({
+        success: false,
+        message: 'Visit request not found'
+      });
+    }
+
+    console.log('Current visit request status:', visitRequest.status);
+
+    if (visitRequest.status !== 'confirmed' && visitRequest.status !== 'rescheduled') {
+      console.log('Visit request cannot be completed. Current status:', visitRequest.status);
+      return res.status(400).json({
+        success: false,
+        message: 'Only confirmed visits can be marked as completed'
+      });
+    }
+
+    visitRequest.status = 'completed';
+    visitRequest.completedAt = new Date();
+    visitRequest.updatedAt = new Date();
+
+    await visitRequest.save();
+    console.log('Visit request saved with status:', visitRequest.status);
+
+    // Create notification for student
+    const notification = new Notification({
+      recipient: visitRequest.student._id,
+      recipientModel: 'Student',
+      type: 'visit_completed',
+      title: 'Visit Completed',
+      message: `Your visit to ${visitRequest.property.title} has been marked as completed`,
+      relatedId: visitRequest._id,
+      relatedModel: 'VisitRequest',
+      metadata: {
+        propertyTitle: visitRequest.property.title,
+        visitDate: visitRequest.visitDate,
+        visitTime: visitRequest.visitTime
+      }
+    });
+
+    await notification.save();
+
+    // Emit Socket.IO event to student
+    const io = req.app.get('io');
+    if (io) {
+      const studentUserId = visitRequest.student.user._id || visitRequest.student.user;
+      io.to(`student_${studentUserId}`).emit('visit_completed', {
+        notification,
+        visitRequest
+      });
+
+      // Also emit to landlord for real-time update on their dashboard
+      const landlordUserId = req.user.id;
+      io.to(`landlord_${landlordUserId}`).emit('visit_request_updated', {
+        visitRequest
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Visit marked as completed',
+      visitRequest
+    });
+  } catch (error) {
+    console.error('Complete visit request error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark visit as completed'
+    });
+  }
+};
+
+// Get available time slots for a property on a specific date
+const getAvailableTimeSlots = async (req, res) => {
+  try {
+    const { propertyId, date } = req.query;
+
+    if (!propertyId || !date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Property ID and date are required'
+      });
+    }
+
+    // Parse the date
+    const requestedDate = new Date(date);
+    requestedDate.setHours(0, 0, 0, 0);
+    const nextDay = new Date(requestedDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    // Get all booked time slots for this property on this date
+    const bookedSlots = await VisitRequest.find({
+      property: propertyId,
+      visitDate: {
+        $gte: requestedDate,
+        $lt: nextDay
+      },
+      status: { $in: ['pending', 'confirmed', 'rescheduled'] }
+    }).select('visitTime visitTimeEnd');
+
+    // Extract booked times
+    const bookedTimes = bookedSlots.map(slot => slot.visitTime);
+
+    // Generate all possible 30-minute time slots (8:00 - 20:00 UTC)
+    const allSlots = [];
+    for (let hour = 8; hour < 20; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const startTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+        const endMinute = minute + 30;
+        const endHour = endMinute >= 60 ? hour + 1 : hour;
+        const adjustedEndMinute = endMinute >= 60 ? 0 : endMinute;
+        const endTime = `${String(endHour).padStart(2, '0')}:${String(adjustedEndMinute).padStart(2, '0')}`;
+        
+        allSlots.push({
+          startTime,
+          endTime,
+          available: !bookedTimes.includes(startTime)
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      date: requestedDate,
+      slots: allSlots
+    });
+  } catch (error) {
+    console.error('Get available time slots error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch available time slots'
+    });
+  }
+};
+
 module.exports = {
   createVisitRequest,
   getStudentVisitRequests,
   getLandlordVisitRequests,
   confirmVisitRequest,
   rescheduleVisitRequest,
-  rejectVisitRequest
+  rejectVisitRequest,
+  completeVisitRequest,
+  getAvailableTimeSlots
 };

@@ -2,6 +2,7 @@ const Loan = require('../models/loanModel');
 const InvestmentPool = require('../models/investmentPoolModel');
 const Student = require('../models/studentModel');
 const blockchainService = require('../services/blockchainService');
+const { notifyLoanDisbursed, notifyLoanIssuedFromPool } = require('../services/notificationService');
 
 /**
  * Get smart contract addresses for frontend
@@ -204,6 +205,87 @@ exports.confirmCollateralDeposit = async (req, res) => {
     
     console.log(`✅ Collateral deposited for loan ${loanId}, loan approved and activated`);
     
+    // Send notifications for loan disbursement
+    await notifyLoanDisbursed(student._id, loan._id, loan.loanAmount, loan.poolName);
+    
+    // Notify all investors in the pool about the new loan
+    try {
+      const PoolInvestment = require('../models/poolInvestmentModel');
+      const Investor = require('../models/investorModel');
+      const User = require('../models/userModel');
+      
+      // Find all active investments in this pool
+      const investments = await PoolInvestment.find({ 
+        pool: pool._id, 
+        status: 'active' 
+      });
+      
+      // Deduplicate investors - get unique investor user IDs
+      const uniqueInvestorIds = [...new Set(investments.map(inv => inv.investor.toString()))];
+      
+      console.log(`📨 Notifying ${uniqueInvestorIds.length} unique investors about loan #${loan._id}`);
+      
+      for (const investorUserId of uniqueInvestorIds) {
+        try {
+          // Get investor profile from user ID
+          const investorProfile = await Investor.findOne({ user: investorUserId });
+          
+          if (investorProfile) {
+            // Get student name for notification
+            const studentUser = await User.findById(userId);
+            const studentName = studentUser?.name || 'a student';
+            
+            await notifyLoanIssuedFromPool(
+              investorProfile._id,
+              pool._id,
+              loan.loanAmount,
+              studentName
+            );
+            console.log(`   ✓ Notified investor ${investorProfile._id}`);
+            
+            // Emit Socket.IO event for real-time notification
+            if (io) {
+              io.to(`user_${investorUserId}`).emit('new_notification', {
+                type: 'loan_issued_from_pool',
+                title: 'Loan Issued from Your Pool',
+                message: `A loan of $${loan.loanAmount} has been issued to ${studentName} from your investment pool.`,
+                timestamp: new Date()
+              });
+              console.log(`   ✓ Socket.IO notification sent to investor ${investorUserId}`);
+            }
+          }
+        } catch (notifError) {
+          console.error(`   ⚠️  Failed to notify investor:`, notifError.message);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error sending investor notifications:', error);
+      // Don't fail the entire request if notifications fail
+    }
+    
+    // ✅ Emit Socket.IO events for real-time loan approval update
+    const io = req.app.get('io');
+    if (io) {
+      // Notify the student/borrower
+      io.to(`user_${userId}`).emit('loan_approved', {
+        loanId: loan._id,
+        poolName: loan.poolName,
+        amount: loan.loanAmount,
+        duration: loan.duration,
+        apr: loan.lockedAPR,
+        timestamp: new Date()
+      });
+
+      // Broadcast pool update to all connected users (investors might be interested)
+      io.emit('pool_updated', {
+        poolId: loan.pool,
+        poolName: loan.poolName,
+        availableBalance: pool?.availableBalance,
+        disbursedLoans: pool?.disbursedLoans,
+        timestamp: new Date()
+      });
+    }
+    
     res.json({
       success: true,
       message: 'Collateral deposit confirmed and loan approved',
@@ -277,6 +359,189 @@ exports.getMyCollateral = async (req, res) => {
   } catch (error) {
     console.error('Get my collateral error:', error);
     res.status(500).json({ error: 'Failed to fetch collateral deposits' });
+  }
+};
+
+/**
+ * Withdraw collateral for a completed loan
+ * The collateral will be transferred from the holder contract back to the student's wallet
+ */
+exports.withdrawCollateral = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { loanId } = req.body;
+    
+    if (!loanId) {
+      return res.status(400).json({ error: 'Loan ID is required' });
+    }
+    
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+    
+    // Get loan
+    const loan = await Loan.findOne({
+      _id: loanId,
+      borrower: student._id
+    }).populate('pool');
+    
+    if (!loan) {
+      return res.status(404).json({ error: 'Loan not found' });
+    }
+    
+    // Verify loan is completed
+    if (loan.status !== 'completed') {
+      return res.status(400).json({ 
+        error: 'Loan is not completed yet',
+        message: 'You can only withdraw collateral after completing all loan payments'
+      });
+    }
+    
+    // Verify collateral is available for withdrawal
+    if (loan.collateralStatus !== 'returned') {
+      return res.status(400).json({ 
+        error: 'Collateral is not available for withdrawal',
+        message: 'Collateral must be marked as returned before withdrawal'
+      });
+    }
+    
+    // Check if collateral was already withdrawn
+    if (loan.collateralStatus === 'withdrawn') {
+      return res.status(400).json({ 
+        error: 'Collateral already withdrawn',
+        message: 'You have already withdrawn your collateral for this loan'
+      });
+    }
+    
+    // Get the wallet address used for deposit
+    const walletAddress = loan.walletAddress;
+    if (!walletAddress) {
+      return res.status(400).json({ 
+        error: 'No wallet address found',
+        message: 'Original deposit wallet address not found'
+      });
+    }
+    
+    // IMPORTANT: In production, this would trigger an admin-approved blockchain transaction
+    // to transfer PAXG from the collateral holder back to the student's wallet.
+    // For now, we'll mark it as withdrawn and create a notification.
+    // The actual blockchain transfer would need to be done by an administrator with
+    // the private key to the collateral holder contract.
+    
+    console.log(`💎 Processing collateral withdrawal for loan ${loanId}`);
+    console.log(`   Student wallet: ${walletAddress}`);
+    console.log(`   Collateral amount: ${loan.requiredCollateral} PAXG`);
+    
+    // Mark collateral as withdrawn in the database
+    loan.collateralStatus = 'withdrawn';
+    loan.notes = (loan.notes || '') + `\n[${new Date().toISOString()}] Collateral withdrawal requested by student. Amount: ${loan.requiredCollateral} PAXG to wallet ${walletAddress}`;
+    await loan.save();
+    
+    // Create a notification for the student
+    const Notification = require('../models/notificationModel');
+    await Notification.create({
+      recipient: student._id,
+      recipientModel: 'Student',
+      type: 'loan_completed',
+      title: 'Collateral Withdrawal Initiated',
+      message: `Your collateral withdrawal request for ${loan.requiredCollateral.toFixed(4)} PAXG has been initiated. The funds will be transferred to your wallet (${walletAddress.substring(0, 10)}...${walletAddress.substring(walletAddress.length - 8)}) shortly.`,
+      relatedId: loan._id,
+      relatedModel: 'Loan',
+      metadata: {
+        loanId: loan._id,
+        collateralAmount: loan.requiredCollateral,
+        walletAddress: walletAddress
+      }
+    });
+    
+    // Emit Socket.IO event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${userId}`).emit('collateral_withdrawn', {
+        loanId: loan._id,
+        collateralAmount: loan.requiredCollateral,
+        walletAddress: walletAddress,
+        timestamp: new Date()
+      });
+    }
+    
+    console.log(`✅ Collateral withdrawal marked for loan ${loanId}`);
+    
+    res.json({
+      success: true,
+      message: 'Collateral withdrawal initiated',
+      collateral: {
+        amount: loan.requiredCollateral,
+        walletAddress: walletAddress,
+        status: 'withdrawn'
+      }
+    });
+    
+  } catch (error) {
+    console.error('Withdraw collateral error:', error);
+    res.status(500).json({ 
+      error: 'Failed to withdraw collateral',
+      details: error.message 
+    });
+  }
+};
+
+/**
+ * Get collateral status for a specific loan
+ */
+exports.getCollateralStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { loanId } = req.params;
+    
+    // Get student profile
+    const student = await Student.findOne({ user: userId });
+    if (!student) {
+      return res.status(404).json({ error: 'Student profile not found' });
+    }
+    
+    // Get loan
+    const loan = await Loan.findOne({
+      _id: loanId,
+      borrower: student._id
+    });
+    
+    if (!loan) {
+      return res.status(404).json({ error: 'Loan not found' });
+    }
+    
+    // Calculate PAXG to USDT value
+    const { getPAXGPrice } = require('../services/coinMarketCapService');
+    const paxgPrice = await getPAXGPrice();
+    const collateralValueUSDT = loan.requiredCollateral * paxgPrice;
+    
+    res.json({
+      success: true,
+      collateral: {
+        amount: loan.requiredCollateral,
+        valueUSDT: collateralValueUSDT,
+        status: loan.collateralStatus,
+        deposited: loan.collateralDeposited,
+        depositedAt: loan.collateralDepositedAt,
+        txHash: loan.collateralTxHash,
+        walletAddress: loan.walletAddress,
+        canWithdraw: loan.status === 'completed' && loan.collateralStatus === 'returned'
+      },
+      loan: {
+        id: loan._id,
+        status: loan.status,
+        paymentsCompleted: loan.paymentsCompleted,
+        totalPayments: loan.repaymentSchedule.length,
+        amountRepaid: loan.amountRepaid,
+        remainingBalance: loan.remainingBalance
+      }
+    });
+    
+  } catch (error) {
+    console.error('Get collateral status error:', error);
+    res.status(500).json({ error: 'Failed to fetch collateral status' });
   }
 };
 

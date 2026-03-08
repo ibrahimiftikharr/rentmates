@@ -7,6 +7,7 @@ const Rental = require('../models/rentalModel');
 const Transaction = require('../models/transactionModel');
 const { getUSDTBalance, withdrawFromVault, getVaultBalance } = require('../services/contractService');
 const { sendEmail } = require('../services/emailService');
+const { generateTransactionReceipt } = require('../utils/pdfGenerator');
 
 /**
  * Connect wallet - Store user's MetaMask wallet address
@@ -456,10 +457,10 @@ exports.payRent = async (req, res) => {
 
     // Send email notification to landlord
     try {
-      await sendEmail(
-        landlord.email,
-        'Rent Payment Received',
-        `
+      await sendEmail({
+        to: landlord.email,
+        subject: 'Rent Payment Received',
+        html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #8C57FF;">Rent Payment Received</h2>
             <p>Dear ${landlord.name},</p>
@@ -483,7 +484,7 @@ exports.payRent = async (req, res) => {
             </div>
           </div>
         `
-      );
+      });
     } catch (emailError) {
       console.error('Error sending rent payment email:', emailError);
     }
@@ -695,4 +696,55 @@ exports.toggleAutoPayment = async (req, res) => {
     res.status(500).json({ error: 'Failed to toggle auto-payment' });
   }
 };
+
+/**
+ * Download transaction receipt as PDF
+ */
+exports.downloadTransactionReceipt = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { transactionId } = req.params;
+
+    // Validate transaction ID
+    if (!mongoose.Types.ObjectId.isValid(transactionId)) {
+      return res.status(400).json({ error: 'Invalid transaction ID' });
+    }
+
+    // Find the transaction and verify it belongs to the user
+    const transaction = await Transaction.findOne({
+      _id: transactionId,
+      user: userId
+    })
+      .populate('relatedUser', 'name email')
+      .populate('rental', 'propertyInfo');
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Get user details
+    const user = await User.findById(userId).select('name email role');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Generate PDF
+    const pdfBuffer = await generateTransactionReceipt(transaction, user);
+
+    // Set response headers for PDF download
+    const filename = `RentMates_Receipt_${transactionId}_${Date.now()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+
+    // Send PDF
+    res.send(pdfBuffer);
+
+    console.log(`✓ Receipt downloaded for transaction ${transactionId} by user ${userId}`);
+  } catch (error) {
+    console.error('Download receipt error:', error);
+    res.status(500).json({ error: 'Failed to generate receipt' });
+  }
+};
+
 

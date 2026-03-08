@@ -12,7 +12,7 @@ import { Textarea } from '@/shared/ui/textarea';
 import { toast } from '@/shared/utils/toast';
 import { PropertyReviewSection } from './PropertyReviewSection';
 import { studentService } from '../../services/studentService';
-import { visitRequestService } from '@/shared/services/visitRequestService';
+import { visitRequestService, TimeSlot } from '@/shared/services/visitRequestService';
 import { 
   checkStudentProfile, 
   checkPropertyVisit, 
@@ -65,6 +65,9 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   const [visitType, setVisitType] = useState<'virtual' | 'in-person'>('virtual');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>('');
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<TimeSlot[]>([]);
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+  const [userTimeZone] = useState<string>(getUserTimeZone());
   const [bidAmount, setBidAmount] = useState('');
   const [stayTenure, setStayTenure] = useState('');
   const [moveInDate, setMoveInDate] = useState('');
@@ -265,14 +268,6 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
     // Only future dates or today are available
     if (date < today) return false;
     
-    // Debug logging
-    if (month === currentMonth && year === currentYear && property.availabilityDates) {
-      console.log(`📅 Checking day ${day}:`, {
-        availabilityDates: property.availabilityDates,
-        dateCount: property.availabilityDates.length
-      });
-    }
-    
     // If property has specific availability dates, check against them
     if (property.availabilityDates && property.availabilityDates.length > 0) {
       const isAvailable = property.availabilityDates.some((availDate: string | Date) => {
@@ -281,10 +276,6 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
         const matches = availableDate.getDate() === day &&
                availableDate.getMonth() === month &&
                availableDate.getFullYear() === year;
-        
-        if (matches && month === currentMonth && year === currentYear) {
-          console.log(`✅ Day ${day} matches availability date:`, availableDate);
-        }
         
         return matches;
       });
@@ -439,11 +430,21 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
 
     setIsSchedulingVisit(true);
     try {
+      // selectedTime is in local time (from user's perspective)
+      // We need to convert it to UTC for storage
+      const utcTime = convertLocalToUTC(selectedTime, selectedDate, userTimeZone);
+      const utcTimeEnd = addMinutesToTime(utcTime, 30);
+
+      // Format date as YYYY-MM-DD to preserve the local date without timezone conversion
+      const dateString = formatDateForAPI(selectedDate);
+
       await visitRequestService.createVisitRequest({
         propertyId: property.id,
         visitType,
-        visitDate: selectedDate.toISOString(),
-        visitTime: selectedTime,
+        visitDate: dateString,
+        visitTime: utcTime, // Store in UTC
+        visitTimeEnd: utcTimeEnd, // Store in UTC
+        studentTimeZone: userTimeZone,
       });
       
       setOpenVisitDialog(false);
@@ -1247,8 +1248,8 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                           </div>
                           <div className="overflow-hidden flex-1">
                             <p className="text-xs text-gray-600">Email</p>
-                            {property.landlord.user.email ? (
-                              <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user.email}</p>
+                            {property.landlord.user?.email ? (
+                              <p className="font-medium text-gray-900 truncate text-sm">{property.landlord.user?.email}</p>
                             ) : (
                               <p className="text-sm italic text-gray-500">Landlord prefers not to disclose</p>
                             )}
@@ -1681,28 +1682,39 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
 
             {/* Time Selection */}
             <div className="space-y-2">
-              <Label htmlFor="visit-time">Visit Time (UTC)</Label>
-              <select
-                id="visit-time"
-                value={selectedTime}
-                onChange={(e) => setSelectedTime(e.target.value)}
-                className="w-full px-4 py-2 border-2 rounded-lg focus:border-primary focus:outline-none"
-              >
-                <option value="">Select a time</option>
-                <option value="08:00">08:00 UTC (Morning)</option>
-                <option value="09:00">09:00 UTC</option>
-                <option value="10:00">10:00 UTC</option>
-                <option value="11:00">11:00 UTC</option>
-                <option value="12:00">12:00 UTC (Noon)</option>
-                <option value="13:00">13:00 UTC</option>
-                <option value="14:00">14:00 UTC (Afternoon)</option>
-                <option value="15:00">15:00 UTC</option>
-                <option value="16:00">16:00 UTC</option>
-                <option value="17:00">17:00 UTC</option>
-                <option value="18:00">18:00 UTC (Evening)</option>
-                <option value="19:00">19:00 UTC</option>
-                <option value="20:00">20:00 UTC</option>
-              </select>
+              <Label htmlFor="visit-time">
+                Visit Time {selectedDate && `(${userTimeZone})`}
+              </Label>
+              {!selectedDate ? (
+                <p className="text-sm text-gray-500">Please select a date first</p>
+              ) : loadingTimeSlots ? (
+                <p className="text-sm text-gray-500">Loading available time slots...</p>
+              ) : (
+                <select
+                  id="visit-time"
+                  value={selectedTime}
+                  onChange={(e) => setSelectedTime(e.target.value)}
+                  className="w-full px-4 py-2 border-2 rounded-lg focus:border-primary focus:outline-none"
+                  disabled={!selectedDate || loadingTimeSlots}
+                >
+                  <option value="">Select a time slot</option>
+                  {availableTimeSlots.map((slot) => {
+                    // Convert UTC times to local time for display
+                    const localStartTime = convertUTCToLocal(slot.startTime, selectedDate, userTimeZone);
+                    const localEndTime = convertUTCToLocal(slot.endTime, selectedDate, userTimeZone);
+                    
+                    return (
+                      <option 
+                        key={slot.startTime} 
+                        value={localStartTime}
+                        disabled={!slot.available}
+                      >
+                        {localStartTime} - {localEndTime} {!slot.available ? '(Booked)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
             </div>
 
             {/* Summary */}
@@ -1712,7 +1724,9 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 <div className="space-y-1 text-sm">
                   <p><span className="text-gray-600">Type:</span> {visitType === 'virtual' ? 'Virtual Visit' : 'In-Person Visit'}</p>
                   <p><span className="text-gray-600">Date:</span> {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
-                  <p><span className="text-gray-600">Time:</span> {selectedTime} UTC</p>
+                  <p>
+                    <span className="text-gray-600">Time:</span> {selectedTime} - {addMinutesToTime(selectedTime, 30)} ({userTimeZone.split('/').pop()?.replace('_', ' ')})
+                  </p>
                 </div>
               </div>
             )}

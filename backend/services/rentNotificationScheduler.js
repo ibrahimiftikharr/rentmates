@@ -31,10 +31,10 @@ const checkUpcomingRentPayments = async (io) => {
 
         // Send email notification
         try {
-          await sendEmail(
-            rental.student.email,
-            'Upcoming Rent Payment Reminder',
-            `
+          await sendEmail({
+            to: rental.student.email,
+            subject: 'Upcoming Rent Payment Reminder',
+            html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #8C57FF;">Rent Payment Reminder</h2>
                 <p>Dear ${rental.student.name},</p>
@@ -57,7 +57,7 @@ const checkUpcomingRentPayments = async (io) => {
                 </div>
               </div>
             `
-          );
+          });
         } catch (emailError) {
           console.error('Error sending rent reminder email:', emailError);
         }

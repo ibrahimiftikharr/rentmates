@@ -106,16 +106,30 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   };
 
+  // Format notification type to human-readable text
+  const formatNotificationType = (type: string): string => {
+    const typeMap: Record<string, string> = {
+      'join_request': 'Join Request',
+      'visit_request': 'Visit Request',
+      'contract_terminated': 'Contract Terminated',
+      'security_deposit_paid': 'Security Deposit Paid',
+      'security_deposit_refunded': 'Security Deposit Refunded',
+      'loan_approved': 'Loan Approved',
+      'loan_rejected': 'Loan Rejected'
+    };
+    
+    // Return mapped value or convert underscores to spaces and capitalize
+    return typeMap[type] || type.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
   // Format notification message for display
   const getNotificationPreview = () => {
     if (notifications.length === 0) return 'No new notifications';
     if (notifications.length === 1) return notifications[0].message;
     
-    const types = notifications.map(n => {
-      if (n.type === 'join_request') return 'join request';
-      if (n.type === 'visit_request') return 'visit';
-      return n.type;
-    });
+    const types = notifications.map(n => formatNotificationType(n.type).toLowerCase());
     
     return types.slice(0, 2).join(' and ');
   };

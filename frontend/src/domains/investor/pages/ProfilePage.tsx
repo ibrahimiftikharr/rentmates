@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Upload, CheckCircle2, Clock, FileText, Bell, Camera, Mail, Shield, Star, DollarSign, BarChart3, AlertCircle, Loader2, X } from "lucide-react";
+import { User, Upload, CheckCircle2, Clock, FileText, Bell, Camera, Mail, Shield, Star, DollarSign, BarChart3, AlertCircle, Loader2, X, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -8,6 +8,7 @@ import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { toast } from "sonner";
 import { investorService, InvestorProfile } from "../services/investorService";
+import { notificationService, NotificationPreferences } from "@/shared/services/notificationService";
 
 export function ProfilePage() {
   const [profile, setProfile] = useState<InvestorProfile | null>(null);
@@ -18,16 +19,19 @@ export function ProfilePage() {
   const [isUploading, setIsUploading] = useState<'photo' | 'document' | null>(null);
 
   // Notification preferences
-  const [notificationPrefs, setNotificationPrefs] = useState({
-    loanRepayment: true,
-    poolPerformance: true,
-    defaultAlerts: true,
-    earningsCredits: true
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>({
+    loanActivity: true,
+    repayments: true,
+    defaults: true,
+    profits: true,
+    poolUpdates: true
   });
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
 
   // Fetch profile data on mount
   useEffect(() => {
     fetchProfile();
+    fetchNotificationPreferences();
   }, []);
 
   const fetchProfile = async () => {
@@ -44,6 +48,17 @@ export function ProfilePage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchNotificationPreferences = async () => {
+    try {
+      const prefs = await notificationService.getPreferences();
+      if (prefs && Object.keys(prefs).length > 0) {
+        setNotificationPrefs(prefs);
+      }
+    } catch (error: any) {
+      console.error('Failed to load notification preferences:', error);
     }
   };
 
@@ -116,11 +131,27 @@ export function ProfilePage() {
     }
   };
 
-  const handleNotificationToggle = (key: keyof typeof notificationPrefs) => {
-    setNotificationPrefs(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+  const handleNotificationToggle = async (key: keyof NotificationPreferences) => {
+    const newPrefs = {
+      ...notificationPrefs,
+      [key]: !notificationPrefs[key]
+    };
+    
+    setNotificationPrefs(newPrefs);
+    
+    try {
+      setIsSavingPrefs(true);
+      await notificationService.updatePreferences(newPrefs);
+      toast.success("Notification preferences updated");
+    } catch (error: any) {
+      toast.error("Failed to update preferences", {
+        description: error.message
+      });
+      // Revert on error
+      setNotificationPrefs(notificationPrefs);
+    } finally {
+      setIsSavingPrefs(false);
+    }
   };
 
   return (
@@ -377,40 +408,62 @@ export function ProfilePage() {
           </p>
         </CardHeader>
         <CardContent className="pt-8 space-y-4">
-          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-purple-50/30 shadow-lg">
+          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-green-50/30 shadow-lg">
             <div className="flex items-center gap-4 flex-1">
               <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-md flex-shrink-0">
                 <DollarSign className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="font-semibold text-sm mb-0.5">Loan Repayment Updates</p>
+                <p className="font-semibold text-sm mb-0.5">Loan Activity</p>
                 <p className="text-xs text-muted-foreground">
-                  Get notified when borrowers make loan repayments
+                  Get notified about loan applications, approvals, and disbursements
                 </p>
               </div>
             </div>
             <Switch
-              checked={notificationPrefs.loanRepayment}
-              onCheckedChange={() => handleNotificationToggle("loanRepayment")}
+              checked={notificationPrefs.loanActivity ?? true}
+              onCheckedChange={() => handleNotificationToggle("loanActivity")}
+              disabled={isSavingPrefs}
               className="data-[state=checked]:bg-primary"
             />
           </div>
 
-          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-blue-50/30 shadow-lg">
+          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-purple-50/30 shadow-lg">
             <div className="flex items-center gap-4 flex-1">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-md flex-shrink-0">
-                <BarChart3 className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-md flex-shrink-0">
+                <Shield className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="font-semibold text-sm mb-0.5">Pool Performance Updates</p>
+                <p className="font-semibold text-sm mb-0.5">Repayment Updates</p>
                 <p className="text-xs text-muted-foreground">
-                  Receive updates about your investment pool performance
+                  Receive notifications when borrowers make loan repayments
                 </p>
               </div>
             </div>
             <Switch
-              checked={notificationPrefs.poolPerformance}
-              onCheckedChange={() => handleNotificationToggle("poolPerformance")}
+              checked={notificationPrefs.repayments ?? true}
+              onCheckedChange={() => handleNotificationToggle("repayments")}
+              disabled={isSavingPrefs}
+              className="data-[state=checked]:bg-primary"
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-yellow-50/30 shadow-lg">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center shadow-md flex-shrink-0">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm mb-0.5">Profit Notifications</p>
+                <p className="text-xs text-muted-foreground">
+                  Get notified when you earn profits from investments
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={notificationPrefs.profits ?? true}
+              onCheckedChange={() => handleNotificationToggle("profits")}
+              disabled={isSavingPrefs}
               className="data-[state=checked]:bg-primary"
             />
           </div>
@@ -421,34 +474,36 @@ export function ProfilePage() {
                 <AlertCircle className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="font-semibold text-sm mb-0.5">Default / Liquidation Alerts</p>
+                <p className="font-semibold text-sm mb-0.5">Default & Liquidation Alerts</p>
                 <p className="text-xs text-muted-foreground">
-                  Important alerts about defaults and liquidations
+                  Important alerts about loan defaults and collateral liquidations
                 </p>
               </div>
             </div>
             <Switch
-              checked={notificationPrefs.defaultAlerts}
-              onCheckedChange={() => handleNotificationToggle("defaultAlerts")}
+              checked={notificationPrefs.defaults ?? true}
+              onCheckedChange={() => handleNotificationToggle("defaults")}
+              disabled={isSavingPrefs}
               className="data-[state=checked]:bg-primary"
             />
           </div>
 
-          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-yellow-50/30 shadow-lg">
+          <div className="flex items-center justify-between p-5 rounded-2xl border-2 hover:border-primary/50 transition-all duration-300 bg-gradient-to-br from-white to-blue-50/30 shadow-lg">
             <div className="flex items-center gap-4 flex-1">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center shadow-md flex-shrink-0">
-                <Star className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-md flex-shrink-0">
+                <BarChart3 className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="font-semibold text-sm mb-0.5">Earnings Credited Notifications</p>
+                <p className="font-semibold text-sm mb-0.5">Pool Updates</p>
                 <p className="text-xs text-muted-foreground">
-                  Get notified when earnings are credited to your wallet
+                  Receive updates about investment pool performance and changes
                 </p>
               </div>
             </div>
             <Switch
-              checked={notificationPrefs.earningsCredits}
-              onCheckedChange={() => handleNotificationToggle("earningsCredits")}
+              checked={notificationPrefs.poolUpdates ?? true}
+              onCheckedChange={() => handleNotificationToggle("poolUpdates")}
+              disabled={isSavingPrefs}
               className="data-[state=checked]:bg-primary"
             />
           </div>
