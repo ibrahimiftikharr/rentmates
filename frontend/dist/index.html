@@ -4,8 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RentMates - Student & Landlord Platform</title>
-    <script type="module" crossorigin src="/assets/index-DtqKKa_W.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-hwloVkF2.css">
+    <!-- Load Google Fonts centrally to avoid CSS @import ordering issues -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Load Google Maps API asynchronously -->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA7e3dxeNL_-DWYiAAquXEKr_newclW_rc&libraries=places&loading=async"></script>
+    <script type="module" crossorigin src="/assets/index-Ove0CgHh.js"></script>
   </head>
   <body>
     <div id="root"></div>

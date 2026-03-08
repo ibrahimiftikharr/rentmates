@@ -61,9 +61,9 @@ const MOCK_PROPERTY = {
   minStay: '6',
   maxStay: '12',
   status: 'available',
-  propertyType: 'apartment',
+  propertyType: 'flat',
   furnishing: 'fully',
-  description: 'Beautiful modern apartment in the heart of the city. Close to all amenities and public transport. Perfect for students or young professionals.',
+  description: 'Beautiful modern flat in the heart of the city. Close to all amenities and public transport. Perfect for students or young professionals.',
   petsAllowed: false,
   smokingAllowed: false,
   guestsAllowed: true,
@@ -119,7 +119,7 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
         minStay: data.minimumStay?.toString() || '',
         maxStay: data.maximumStay?.toString() || '',
         status: data.status || 'active',
-        propertyType: data.type || 'apartment',
+        propertyType: ['flat', 'house', 'studio'].includes(data.type) ? data.type : 'flat',
         furnishing: data.furnished ? 'fully' : 'unfurnished',
         photos: data.images?.length > 0 ? data.images.map((url: string, index: number) => ({
           url,
@@ -449,8 +449,8 @@ export function PropertyDetailsPage({ onNavigate }: PropertyDetailsPageProps) {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="studio">Studio</SelectItem>
-                          <SelectItem value="apartment">Apartment</SelectItem>
-                          <SelectItem value="shared">Shared House</SelectItem>
+                          <SelectItem value="flat">Flat</SelectItem>
+                          <SelectItem value="house">House</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (

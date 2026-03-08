@@ -12,7 +12,7 @@ interface SignContractPageProps {
 
 // Mock contract data - would be fetched based on requestId
 const MOCK_CONTRACT = {
-  propertyName: 'Modern Student Apartment',
+  propertyName: 'Modern Student Flat',
   propertyAddress: '123 University Ave, Boston, MA',
   landlordName: 'John Smith',
   landlordId: '3410625622826',

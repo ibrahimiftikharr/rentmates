@@ -23,7 +23,7 @@ const studentSchema = new mongoose.Schema({
   
   // Housing Preferences
   housingPreferences: {
-    propertyType: [{ type: String }], // ['studio', 'apartment', 'shared']
+    propertyType: [{ type: String }], // ['studio', 'flat', 'shared']
     budgetMin: { type: Number },
     budgetMax: { type: Number },
     moveInDate: { type: Date },

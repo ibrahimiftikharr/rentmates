@@ -18,7 +18,8 @@ interface Property {
   id: string;
   title: string;
   price: number;
-  type: 'flat' | 'house' | 'studio' | 'apartment';
+  currency?: string;
+  type: 'flat' | 'house' | 'studio';
   image: string;
   images: string[];
   distance?: number;
@@ -52,6 +53,28 @@ interface Property {
   };
   availabilityDates?: string[];
   moveInBy?: string;
+  scam_prediction?: boolean | null;
+  scam_probability?: number | null;
+  scam_explanations?: Array<{
+    feature: string;
+    impact: string;
+    score?: number;
+    direction?: 'increases' | 'decreases' | 'neutral';
+  }>;
+  scam_summary?: {
+    label: string;
+    confidence: number;
+    scam_probability: number;
+    top_factors: Array<{
+      feature: string;
+      score: number;
+      direction: 'increases' | 'decreases' | 'neutral';
+      impact: string;
+    }>;
+  };
+  scam_checked_at?: string;
+  review_count?: number;
+  average_review_rating?: number;
 }
 
 interface SearchPropertiesPageProps {
@@ -111,6 +134,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
           id: prop.id,
           title: prop.title,
           price: prop.price,
+          currency: (prop as any).currency ?? 'USD',
           type: prop.type,
           image: prop.mainImage || prop.images?.[0] || '',
           images: prop.images || [],
@@ -134,15 +158,20 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
           houseRules: prop.houseRules,
           availabilityDates: prop.availabilityDates,
           moveInBy: prop.moveInBy,
+          scam_prediction: prop.scam_prediction,
+          scam_probability: prop.scam_probability,
+          scam_explanations: prop.scam_explanations,
+          scam_summary: prop.scam_summary,
+          scam_checked_at: prop.scam_checked_at,
           distance: undefined,
         };
         
         // Log any property that might have issues
         if (!transformed.images || transformed.images.length === 0) {
-          console.warn(`⚠️ Property ${index + 1} (${prop.title}) has no images`);
+          console.warn(` Property ${index + 1} (${prop.title}) has no images`);
         }
         if (!transformed.image) {
-          console.warn(`⚠️ Property ${index + 1} (${prop.title}) has no main image`);
+          console.warn(` Property ${index + 1} (${prop.title}) has no main image`);
         }
         
         return transformed;
@@ -560,6 +589,14 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
                     <Badge className="bg-primary/90 backdrop-blur-sm text-white border-0 capitalize px-3 py-1">
                       {property.type}
                     </Badge>
+                    {/* Verification Badge */}
+                    {property.scam_prediction === false && (
+                      <Badge className="bg-green-500/90 backdrop-blur-sm text-white border-0 px-3 py-1">
+                        {(property.review_count || 0) > 0 && (property.average_review_rating || 0) >= 4.0 
+                          ? '⭐ Recommended' 
+                          : '✓ Verified'}
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <CardContent className="p-5 space-y-4">
@@ -608,7 +645,7 @@ export function SearchPropertiesPage({ onNavigate }: SearchPropertiesPageProps =
 
                   <div className="flex items-center justify-between pt-2">
                     <div>
-                      <p className="text-3xl text-primary">{getCurrencySymbol(property.currency)}{property.price}</p>
+                      <p className="text-3xl text-primary">{getCurrencySymbol(property.currency ?? 'USD')}{property.price}</p>
                       <p className="text-xs text-muted-foreground">per month</p>
                     </div>
                     <Button

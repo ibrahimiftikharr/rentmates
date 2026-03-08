@@ -21,7 +21,7 @@ const tickets = [
   },
   {
     id: 2,
-    property: 'Riverside Apartment 3B',
+    property: 'Riverside Flat 3B',
     issue: 'AC not cooling properly',
     date: '2025-10-07',
     status: 'pending',

@@ -1,8 +1,17 @@
 const mongoose = require('mongoose');
 const Property = require('./models/propertyModel');
+const Landlord = require('./models/landlordModel');
+const User = require('./models/userModel');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-const LANDLORD_ID = '6910bf31216bb1f03a50cf6f';
+// Demo landlord data
+const DEMO_LANDLORD_USER = {
+  name: 'Demo Landlord',
+  email: 'landlord@demo.com',
+  password: 'demo123',
+  role: 'landlord'
+};
 
 const mockProperties = [
   {
@@ -20,7 +29,7 @@ const mockProperties = [
     bedrooms: 1,
     bathrooms: 1,
     area: 450,
-    description: 'A beautiful modern studio apartment located just 0.5 miles from Oxford University campus. Perfect for students looking for a comfortable and convenient living space. Features contemporary design, ample natural light, and all essential amenities.',
+    description: 'A beautiful modern studio flat located just 0.5 miles from Oxford University campus. Perfect for students looking for a comfortable and convenient living space. Features contemporary design, ample natural light, and all essential amenities.',
     furnished: true,
     deposit: 850,
     amenities: ['WiFi', 'Central Heating', 'Double Glazing', 'Study Desk', 'Wardrobe'],
@@ -101,7 +110,7 @@ const mockProperties = [
     wishlistCount: 8
   },
   {
-    title: 'Luxury Apartment in City Centre',
+    title: 'Luxury Flat in City Centre',
     price: 1500,
     type: 'flat',
     images: [
@@ -115,7 +124,7 @@ const mockProperties = [
     bedrooms: 3,
     bathrooms: 2,
     area: 950,
-    description: 'Luxury 3-bedroom apartment in the heart of Cambridge city centre. High-spec finishes throughout, modern appliances, and excellent transport links. Located 2.1 miles from Cambridge University.',
+    description: 'Luxury 3-bedroom flat in the heart of Cambridge city centre. High-spec finishes throughout, modern appliances, and excellent transport links. Located 2.1 miles from Cambridge University.',
     furnished: true,
     deposit: 1500,
     amenities: ['WiFi', 'Gym Access', 'Concierge', 'Balcony', 'Modern Kitchen', 'Ensuite', 'Central Heating', 'Double Glazing'],
@@ -148,7 +157,7 @@ const mockProperties = [
     bedrooms: 1,
     bathrooms: 1,
     area: 400,
-    description: 'Compact and affordable studio apartment perfect for budget-conscious students. Only 0.3 miles from Oxford University and very close to the main library. Great location for academic life.',
+    description: 'Compact and affordable studio flat perfect for budget-conscious students. Only 0.3 miles from Oxford University and very close to the main library. Great location for academic life.',
     furnished: true,
     deposit: 650,
     amenities: ['WiFi', 'Kitchenette', 'Study Area', 'Storage', 'Central Heating'],
@@ -204,7 +213,7 @@ const mockProperties = [
 async function seedProperties() {
   try {
     // Connect to MongoDB
-    const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://ibrahimiftikhar0864_db_user:iUKh7mLZxiEUYjbQ@rentmates.a4rija4.mongodb.net/?appName=RentMates';
+    const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/Rentmates';
     
     await mongoose.connect(MONGO_URI, {
       useNewUrlParser: true,
@@ -212,10 +221,54 @@ async function seedProperties() {
     });
     console.log('✓ Connected to MongoDB');
 
-    // Verify landlord ID format
-    if (!mongoose.Types.ObjectId.isValid(LANDLORD_ID)) {
-      throw new Error('Invalid landlord ID format');
+    // Find or create a demo landlord
+    // First find the user, then find the landlord
+    let landlord = await User.findOne({ email: 'landlord@demo.com' });
+    
+    if (!landlord) {
+      console.log('Creating demo landlord...');
+      
+      // Create user first
+      const hashedPassword = await bcrypt.hash(DEMO_LANDLORD_USER.password, 10);
+      const user = await User.create({
+        name: DEMO_LANDLORD_USER.name,
+        email: DEMO_LANDLORD_USER.email,
+        password: hashedPassword,
+        role: DEMO_LANDLORD_USER.role,
+        isVerified: true
+      });
+      
+      // Create landlord profile
+      landlord = await Landlord.create({
+        user: user._id,
+        phone: '1234567890',
+        isProfileComplete: true
+      });
+      
+      console.log('✓ Demo landlord created:', landlord._id);
+      landlord = await Landlord.findById(landlord._id).populate('user');
+    } else {
+      console.log('✓ Found existing user:', landlord._id);
+      
+      // Find the landlord profile
+      landlord = await Landlord.findOne({ user: landlord._id });
+      
+      if (landlord) {
+        console.log('✓ Found existing landlord:', landlord._id);
+        landlord = await Landlord.findById(landlord._id).populate('user');
+      } else {
+        // Create landlord profile if only user exists
+        landlord = await Landlord.create({
+          user: landlord._id,
+          phone: '1234567890',
+          isProfileComplete: true
+        });
+        console.log('✓ Landlord profile created:', landlord._id);
+        landlord = await Landlord.findById(landlord._id).populate('user');
+      }
     }
+
+    const LANDLORD_ID = landlord._id;
 
     // Add landlord ID to all properties
     const propertiesWithLandlord = mockProperties.map(property => ({
@@ -223,9 +276,9 @@ async function seedProperties() {
       landlord: LANDLORD_ID
     }));
 
-    // Clear existing properties for this landlord (optional - comment out if you want to keep existing)
-    // await Property.deleteMany({ landlord: LANDLORD_ID });
-    // console.log('Cleared existing properties for landlord');
+    // Clear existing properties for this landlord
+    await Property.deleteMany({ landlord: LANDLORD_ID });
+    console.log('Cleared existing properties for landlord');
 
     // Insert new properties
     const result = await Property.insertMany(propertiesWithLandlord);

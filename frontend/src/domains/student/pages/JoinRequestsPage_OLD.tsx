@@ -27,7 +27,7 @@ export function JoinRequestsPage() {
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([
     {
       id: '1',
-      propertyTitle: 'Modern Student Apartment',
+      propertyTitle: 'Modern Student Flat',
       propertyAddress: '123 University Ave, Boston, MA',
       landlordName: 'John Smith',
       bidAmount: 1200,

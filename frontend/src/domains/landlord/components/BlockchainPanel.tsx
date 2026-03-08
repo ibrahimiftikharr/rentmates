@@ -9,7 +9,7 @@ const verifications = [
     verified: true,
   },
   {
-    contract: 'Riverside Apartment 3B - Lease Agreement',
+    contract: 'Riverside Flat 3B - Lease Agreement',
     hash: '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
     timestamp: '2025-09-20T14:15:00',
     verified: true,

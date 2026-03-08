@@ -14,7 +14,7 @@ const contracts = [
   },
   {
     id: 2,
-    property: 'Riverside Apartment 3B',
+    property: 'Riverside Flat 3B',
     tenant: 'Michael Chen',
     status: 'pending',
     hash: '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',

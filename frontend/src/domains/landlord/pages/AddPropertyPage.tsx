@@ -13,6 +13,7 @@ import {
   Loader2
 } from 'lucide-react';
 import PlacesAutocomplete from 'react-places-autocomplete';
+import { geocodeByAddress } from 'react-places-autocomplete';
 import { GoogleMapsLoader } from '@/shared/components/GoogleMapsLoader';
 
 // Extend Window interface for Google Maps
@@ -54,10 +55,12 @@ const AMENITIES = [
 interface PropertyData {
   title: string;
   address: string;
+  city: string;
+  country: string;
   propertyType: string;
   bedrooms: string;
   bathrooms: string;
-  size: string;
+  size: string; 
   rent: string;
   currency: string;
   deposit: string;
@@ -96,6 +99,8 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
   const [propertyData, setPropertyData] = useState<PropertyData>({
     title: '',
     address: '',
+    city: '',
+    country: '',
     propertyType: '',
     bedrooms: '',
     bathrooms: '',
@@ -140,6 +145,59 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
       toast.error('Failed to check profile status');
     } finally {
       setCheckingProfile(false);
+    }
+  };
+
+  const parseCityCountryFromAddress = (value: string) => {
+    const parts = String(value || '').split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const cityGuess = parts.length >= 3 ? parts[parts.length - 3] : parts[parts.length - 2];
+      const countryGuess = parts[parts.length - 1];
+      return { city: cityGuess || '', country: countryGuess || '' };
+    }
+    return { city: '', country: '' };
+  };
+
+  const extractCityCountryFromComponents = (components: any[]) => {
+    let city = '';
+    let country = '';
+
+    for (const comp of components || []) {
+      const types = comp.types || [];
+      if (!city && (types.includes('locality') || types.includes('postal_town') || types.includes('administrative_area_level_2'))) {
+        city = comp.long_name || '';
+      }
+      if (!country && types.includes('country')) {
+        country = comp.long_name || comp.short_name || '';
+      }
+    }
+
+    return { city, country };
+  };
+
+  const handleAddressSelect = async (value: string) => {
+    const fallback = parseCityCountryFromAddress(value);
+    setPropertyData(prev => ({
+      ...prev,
+      address: value,
+      city: prev.city || fallback.city,
+      country: prev.country || fallback.country
+    }));
+
+    try {
+      const geocodeResults = await geocodeByAddress(value);
+      if (geocodeResults && geocodeResults.length > 0) {
+        const parsed = extractCityCountryFromComponents(geocodeResults[0].address_components || []);
+        setPropertyData(prev => ({
+          ...prev,
+          address: value,
+          city: parsed.city || prev.city || fallback.city,
+          country: parsed.country || prev.country || fallback.country
+        }));
+      }
+    } catch (err) {
+      // Non-blocking; backend still has derivation fallbacks.
+      console.warn('Address geocode parsing failed:', err);
     }
   };
 
@@ -225,6 +283,10 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
     try {
       setPublishing(true);
 
+      const locationFallback = parseCityCountryFromAddress(propertyData.address);
+      const finalCity = propertyData.city || locationFallback.city;
+      const finalCountry = propertyData.country || locationFallback.country;
+
       // Prepare bills array
       const billsIncluded = [];
       if (propertyData.bills.wifi.included) billsIncluded.push('WiFi');
@@ -250,6 +312,8 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
         description: propertyData.description,
         type: propertyData.propertyType,
         address: propertyData.address,
+        city: finalCity,
+        country: finalCountry,
         bedrooms: parseInt(propertyData.bedrooms),
         bathrooms: parseInt(propertyData.bathrooms),
         area: propertyData.size ? parseInt(propertyData.size) : undefined,
@@ -368,7 +432,7 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                     <PlacesAutocomplete
                       value={propertyData.address}
                       onChange={(value) => setPropertyData({ ...propertyData, address: value })}
-                      onSelect={(value) => setPropertyData({ ...propertyData, address: value })}
+                      onSelect={handleAddressSelect}
                     >
                       {({ getInputProps, suggestions, getSuggestionItemProps, loading }) => (
                         <div className="relative">
@@ -412,7 +476,6 @@ export function AddPropertyPage({ onPublish, onNavigate }: AddPropertyPageProps)
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="studio">Studio</SelectItem>
-                    <SelectItem value="apartment">Apartment</SelectItem>
                     <SelectItem value="flat">Flat</SelectItem>
                     <SelectItem value="house">House</SelectItem>
                   </SelectContent>

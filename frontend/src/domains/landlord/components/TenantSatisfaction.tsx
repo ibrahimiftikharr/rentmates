@@ -10,7 +10,7 @@ const tenants = [
   },
   {
     name: 'Michael Chen',
-    property: 'Riverside Apartment 3B',
+    property: 'Riverside Flat 3B',
     rating: 4,
     comment: 'Great communication, minor maintenance delays.',
   },

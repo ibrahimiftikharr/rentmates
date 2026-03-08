@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Heart, Share2, MapPin, BedDouble, Bath, Ruler, Calendar, Home, Users, Shield, TrendingUp, User, Check, X as XIcon, ChevronLeft, ChevronRight, Flag, DollarSign, Mail, Phone, Globe } from 'lucide-react';
+import { ArrowLeft, Heart, Share2, MapPin, BedDouble, Bath, Ruler, Calendar, Home, Users, Shield, TrendingUp, User, Check, X as XIcon, ChevronLeft, ChevronRight, Flag, DollarSign, Mail, Phone, Globe, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent } from '@/shared/ui/card';
 import { Badge } from '@/shared/ui/badge';
@@ -19,7 +19,7 @@ import {
   checkHigherBids, 
   createJoinRequest 
 } from '@/shared/services/joinRequestService';
-import { getCurrencySymbol, formatCurrency } from '@/shared/utils/currency';
+import { getCurrencySymbol } from '@/shared/utils/currency';
 
 interface PropertyDetailsPageProps {
   property: any;
@@ -46,6 +46,16 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   // Get currency symbol for this property
   const currencySymbol = getCurrencySymbol(property.currency);
   
+  // Debug: log initial property scam data
+  console.log(`📱 PropertyDetailsPage loaded for: ${property.title}`);
+  console.log(`🔍 Initial scam data:`, {
+    scam_prediction: property.scam_prediction,
+    scam_probability: property.scam_probability,
+    hasExplanations: !!property.scam_explanations?.length,
+    hasSummary: !!property.scam_summary,
+    scam_checked_at: property.scam_checked_at
+  });
+  
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showImageModal, setShowImageModal] = useState(false);
   const [openJoinDialog, setOpenJoinDialog] = useState(false);
@@ -65,10 +75,125 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   const [selectedFlatmate, setSelectedFlatmate] = useState<Flatmate | null>(null);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isSchedulingVisit, setIsSchedulingVisit] = useState(false);
+  const [latestScamData, setLatestScamData] = useState<{
+    scam_prediction?: boolean | null;
+    scam_probability?: number | null;
+    scam_explanations?: Array<{
+      feature: string;
+      impact: string;
+      score?: number;
+      direction?: 'increases' | 'decreases' | 'neutral';
+    }>;
+    scam_summary?: {
+      label: string;
+      confidence: number;
+      scam_probability: number;
+      top_factors: Array<{
+        feature: string;
+        score: number;
+        direction: 'increases' | 'decreases' | 'neutral';
+        impact: string;
+      }>;
+    } | null;
+    scam_checked_at?: string;
+  } | null>(null);
+  const [isRefreshingScam, setIsRefreshingScam] = useState(false);
+  const [isRiskAssessmentCollapsed, setIsRiskAssessmentCollapsed] = useState(false);
+  const [marketDataNotice, setMarketDataNotice] = useState<string | null>(null);
 
   useEffect(() => {
     checkWishlistStatus();
   }, [property.id]);
+
+  useEffect(() => {
+    setMarketDataNotice(null);
+  }, [property.id]);
+
+  const refreshScamDataManually = async () => {
+    if (!property?.id) {
+      console.warn('🚨 No property ID available for scam refresh');
+      return;
+    }
+
+    setIsRefreshingScam(true);
+    try {
+      console.log(`🔄 Triggering fresh scam analysis for property: ${property.id}`);
+      const refreshResult = await studentService.refreshPropertyScam(property.id);
+      const latestProperty = refreshResult.property;
+      console.log(`✅ Scam data fetched:`, refreshResult);
+
+      if (refreshResult.marketDataUnavailable) {
+        setMarketDataNotice(refreshResult.message || 'Market data for this city is not available at the moment.');
+      } else {
+        setMarketDataNotice(null);
+      }
+      
+      setLatestScamData({
+        scam_prediction: latestProperty.scam_prediction,
+        scam_probability: latestProperty.scam_probability,
+        scam_explanations: latestProperty.scam_explanations,
+        scam_summary: latestProperty.scam_summary || null,
+        scam_checked_at: latestProperty.scam_checked_at,
+      });
+      console.log(`✅ Scam data state updated`);
+    } catch (error) {
+      console.error('❌ Failed to refresh property scam data:', error);
+    } finally {
+      setIsRefreshingScam(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const refreshScamData = async () => {
+      if (!property?.id) {
+        console.warn('🚨 No property ID available for initial scam refresh');
+        return;
+      }
+      try {
+        console.log(`📊 Initial scam fetch for property: ${property.id}`);
+        const latestProperty = await studentService.getProperty(property.id);
+        if (!isMounted) {
+          console.log('⚠️ Component unmounted, skipping state update');
+          return;
+        }
+        
+        if (latestProperty) {
+          console.log(`✅ Property data received with scam fields:`, {
+            scam_prediction: latestProperty.scam_prediction,
+            scam_probability: latestProperty.scam_probability,
+            hasExplanations: !!latestProperty.scam_explanations?.length
+          });
+        }
+
+        setLatestScamData({
+          scam_prediction: latestProperty.scam_prediction,
+          scam_probability: latestProperty.scam_probability,
+          scam_explanations: latestProperty.scam_explanations,
+          scam_summary: latestProperty.scam_summary || null,
+          scam_checked_at: latestProperty.scam_checked_at,
+        });
+      } catch (error) {
+        console.error('❌ ML API error (non-blocking):', error);
+      }
+    };
+
+    refreshScamData();
+    const interval = setInterval(refreshScamData, 6000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [property?.id]);
+
+  const effectiveScamPrediction = latestScamData?.scam_prediction ?? property.scam_prediction;
+  const effectiveScamProbability = latestScamData?.scam_probability ?? property.scam_probability;
+  const effectiveScamSummary = latestScamData?.scam_summary ?? property.scam_summary;
+  const effectiveScamExplanations = latestScamData?.scam_explanations ?? property.scam_explanations;
+  const effectiveScamCheckedAt = latestScamData?.scam_checked_at ?? property.scam_checked_at;
+  const hasScamResult = effectiveScamPrediction !== null && effectiveScamPrediction !== undefined;
 
   const checkWishlistStatus = async () => {
     try {
@@ -617,6 +742,150 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
               </div>
             </div>
 
+            {/* Property Risk Assessment - Collapsible Card */}
+            <Card className={`border-2 ${hasScamResult ? (effectiveScamPrediction ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300') : 'bg-amber-50 border-amber-300'}`}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3 justify-between">
+                  <div className="flex items-center gap-2">
+                    {hasScamResult ? (
+                      effectiveScamPrediction ? (
+                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                      ) : (
+                        <Shield className="w-5 h-5 text-green-600" />
+                      )
+                    ) : (
+                      <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+                    )}
+                    <h3 className="font-semibold text-lg">Property Risk Assessment</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={refreshScamDataManually}
+                      disabled={isRefreshingScam}
+                      className="border-2"
+                    >
+                      {isRefreshingScam ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        '🔄 Refresh'
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsRiskAssessmentCollapsed(!isRiskAssessmentCollapsed)}
+                      className="h-8 w-8 p-0"
+                      title={isRiskAssessmentCollapsed ? "Expand" : "Collapse"}
+                    >
+                      {isRiskAssessmentCollapsed ? (
+                        <ChevronRight className="w-4 h-4" />
+                      ) : (
+                        <ChevronLeft className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {!isRiskAssessmentCollapsed && (
+                  marketDataNotice ? (
+                  <div className="space-y-1 text-sm mb-1">
+                    <p className="font-medium">📍 Market Data Unavailable:</p>
+                    <p className="text-amber-800">
+                      {marketDataNotice}
+                    </p>
+                  </div>
+                ) : !hasScamResult ? (
+                  <div className="space-y-1 text-sm mb-1">
+                    <p className="font-medium">📋 Test Listing (Analysis Pending):</p>
+                    <p className="text-amber-800">
+                      ML check is still running for this listing. Click "Refresh" or wait a moment for results to appear.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-1 text-sm mb-3">
+                      <p className="font-semibold">
+                        🎯 Prediction:{' '}
+                        <span className={effectiveScamPrediction ? 'text-red-700' : 'text-green-700'}>
+                          {effectiveScamPrediction ? '❌ SCAM' : '✅ LEGITIMATE'}
+                        </span>
+                      </p>
+                      <p>
+                        Confidence:{' '}
+                        <strong>
+                          {effectiveScamSummary?.confidence !== undefined
+                            ? (effectiveScamSummary.confidence * 100).toFixed(1)
+                            : (((effectiveScamPrediction ? (effectiveScamProbability || 0) : (1 - (effectiveScamProbability || 0))) * 100).toFixed(1))}%
+                        </strong>
+                      </p>
+                      <p>
+                        Scam Probability:{' '}
+                        <strong>{((effectiveScamSummary?.scam_probability ?? effectiveScamProbability ?? 0) * 100).toFixed(1)}%</strong>
+                      </p>
+                      {effectiveScamCheckedAt && (
+                        <p className="text-xs text-gray-500">
+                          Last checked: {new Date(effectiveScamCheckedAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+
+                    {(effectiveScamSummary?.top_factors?.length > 0 || effectiveScamExplanations?.length > 0) && (
+                      <div className="border-t pt-3">
+                        <p className="font-medium mb-2 text-gray-700">📊 Top Contributing Factors:</p>
+                        <ul className="space-y-2">
+                          {(effectiveScamSummary?.top_factors || effectiveScamExplanations || []).slice(0, 5).map((e: { feature: string; score?: number; direction?: string; impact?: string }, i: number) => (
+                            <li key={i} className="flex items-start gap-2 text-sm">
+                              <span className="text-gray-500 mt-0.5">{i + 1}.</span>
+                              <div className="flex-1">
+                                <p className="mb-1">
+                                  <strong className="text-gray-800">
+                                    {(e.direction === 'decreases' ? '🟢' : e.direction === 'increases' ? '🔴' : '⚪')} {e.feature}
+                                  </strong>
+                                </p>
+                                <div className="text-xs text-gray-600 space-y-0.5">
+                                  {typeof e.score === 'number' && (
+                                    <p className="font-mono font-semibold">
+                                      <span className={e.score >= 0 ? 'text-red-600' : 'text-green-600'}>
+                                        {e.score >= 0 ? '+' : ''}{e.score.toFixed(3)}
+                                      </span>
+                                    </p>
+                                  )}
+                                  <p className="text-gray-600 capitalize">
+                                    {e.direction === 'decreases' ? '↓ ' : e.direction === 'increases' ? '↑ ' : '→ '}
+                                    {e.direction === 'decreases' 
+                                      ? 'Decreases scam probability' 
+                                      : e.direction === 'increases' 
+                                        ? 'Increases scam probability' 
+                                        : 'Neutral impact'}
+                                  </p>
+                                  {e.impact && e.impact !== (e.direction === 'decreases' ? 'Decreases scam probability' : 'Increases scam probability') && (
+                                    <p className="text-gray-500">{e.impact}</p>
+                                  )}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {effectiveScamPrediction && (
+                      <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded">
+                        <p className="text-sm text-red-800 font-medium">
+                          ⚠️ Exercise caution with this property. We recommend additional verification before proceeding.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )
+                )}
+              </CardContent>
+            </Card>
+
             {/* Tabs for Different Sections */}
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
@@ -810,6 +1079,14 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                 </div>
 
                 {/* Rent Insights */}
+                {property.areaAverageRent && (
+                  <Card className="mt-6 mb-4 bg-blue-50 border">
+                    <CardContent className="p-4 text-sm text-gray-700">
+                      Average market rent for an {property.furnished ? 'furnished' : 'unfurnished'} {property.bedrooms}-bedroom {property.type} in {property.city} is approximately {currencySymbol}{property.areaAverageRent.toLocaleString()} per month.
+                    </CardContent>
+                  </Card>
+                )}
+
                 <div className="border rounded-lg p-6">
                   <h3 className="mb-4">Rent Insights</h3>
                   <div className="grid grid-cols-3 gap-4">
@@ -819,7 +1096,9 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                     </div>
                     <div className="text-center p-4 bg-slate-50 rounded-lg">
                       <p className="text-sm text-gray-600 mb-1">Area Average</p>
-                      <p className="text-2xl font-semibold text-slate-900">{currencySymbol}{property.price + 50}</p>
+                      <p className="text-2xl font-semibold text-slate-900">
+                        {property.areaAverageRent ? currencySymbol + property.areaAverageRent.toLocaleString() : 'N/A'}
+                      </p>
                     </div>
                     <div className="text-center p-4 bg-emerald-50 rounded-lg">
                       <p className="text-sm text-gray-600 mb-1">You Save</p>

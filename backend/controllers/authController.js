@@ -129,7 +129,7 @@ const login = async (req, res) => {
     }
 
     // Find user in database by email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
@@ -140,19 +140,6 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Get student, landlord, or investor ID based on role
-    let profileId = null;
-    if (user.role === 'student') {
-      const student = await Student.findOne({ user: user._id });
-      profileId = student ? student._id.toString() : null;
-    } else if (user.role === 'landlord') {
-      const landlord = await Landlord.findOne({ user: user._id });
-      profileId = landlord ? landlord._id.toString() : null;
-    } else if (user.role === 'investor') {
-      const investor = await Investor.findOne({ user: user._id });
-      profileId = investor ? investor._id.toString() : null;
-    }
-
     // Generate JWT token for authenticated session
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },
@@ -160,7 +147,7 @@ const login = async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Return success with token and user data
+    // Return success with token and user data (skip redundant profile ID lookup for faster response)
     const response = {
       message: 'Login successful',
       token,
@@ -171,15 +158,6 @@ const login = async (req, res) => {
         role: user.role
       }
     };
-
-    // Add studentId, landlordId, or investorId based on role
-    if (user.role === 'student' && profileId) {
-      response.user.studentId = profileId;
-    } else if (user.role === 'landlord' && profileId) {
-      response.user.landlordId = profileId;
-    } else if (user.role === 'investor' && profileId) {
-      response.user.investorId = profileId;
-    }
 
     res.json(response);
   } catch (error) {

@@ -1,12 +1,17 @@
 import { Shield, AlertTriangle, DollarSign, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/ui/card';
 import { Button } from '@/shared/ui/button';
-import { Progress } from '@/shared/ui/progress';
 import { Badge } from '@/shared/ui/badge';
 import { toast } from 'sonner';
 
-export function SafetyFinancialSection() {
-  const scamRiskScore = 15; // Low risk (0-100, lower is better)
+interface SafetyFinancialSectionProps {
+  scamProbability?: number | null; // 0..1 from ML service
+}
+
+export function SafetyFinancialSection({ scamProbability = null }: SafetyFinancialSectionProps) {
+  const scamRiskScore = scamProbability === null || scamProbability === undefined
+    ? null
+    : Math.round(Math.max(0, Math.min(1, scamProbability)) * 100);
   
   const getRiskLevel = (score: number) => {
     if (score <= 20) return { level: 'Low Risk', color: 'text-green-600', bgColor: 'bg-green-500', barColor: 'bg-green-500' };
@@ -14,7 +19,7 @@ export function SafetyFinancialSection() {
     return { level: 'High Risk', color: 'text-red-600', bgColor: 'bg-red-500', barColor: 'bg-red-500' };
   };
 
-  const riskInfo = getRiskLevel(scamRiskScore);
+  const riskInfo = getRiskLevel(scamRiskScore ?? 50);
 
   const handleReportListing = () => {
     toast.success('Report submitted successfully. Our team will review it within 24 hours.');
@@ -55,14 +60,14 @@ export function SafetyFinancialSection() {
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Risk Score: {scamRiskScore}/100</span>
               <span className={`text-sm font-medium ${riskInfo.color}`}>
-                {100 - scamRiskScore}% Safe
+                {scamRiskScore === null ? 'Pending ML analysis' : `${100 - scamRiskScore}% Safe`}
               </span>
             </div>
             <div className="relative">
               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${riskInfo.barColor} transition-all duration-500`}
-                  style={{ width: `${scamRiskScore}%` }}
+                  style={{ width: `${scamRiskScore ?? 0}%` }}
                 />
               </div>
             </div>

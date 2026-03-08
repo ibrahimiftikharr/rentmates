@@ -98,7 +98,7 @@ const MOCK_CONVERSATIONS: Conversation[] = [
   {
     id: '3',
     studentName: 'Sarah Johnson',
-    propertyTitle: 'Cozy Apartment, Cambridge',
+    propertyTitle: 'Cozy Flat, Cambridge',
     lastMessage: 'Perfect! See you then.',
     timestamp: '1h ago',
     unreadCount: 0,

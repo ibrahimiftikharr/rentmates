@@ -121,7 +121,7 @@ const updateStudentProfile = async (req, res) => {
     // Update housing preferences
     if (updates.housingPreferences !== undefined) {
       student.housingPreferences = {
-        ...student.housingPreferences,
+        ...(student.housingPreferences || {}),
         ...updates.housingPreferences
       };
     }
@@ -134,7 +134,7 @@ const updateStudentProfile = async (req, res) => {
     // Update profile steps
     if (updates.profileSteps !== undefined) {
       student.profileSteps = {
-        ...student.profileSteps,
+        ...(student.profileSteps || {}),
         ...updates.profileSteps
       };
     }
@@ -163,7 +163,7 @@ const updateStudentProfile = async (req, res) => {
 
     // Bio Completed
     if (updates.bio !== undefined) {
-      student.profileSteps.bioCompleted = student.bio && student.bio.trim().length > 0;
+      student.profileSteps.bioCompleted = !!(student.bio && student.bio.trim().length > 0);
     }
 
     // Documents Uploaded: check if national ID or passport exists

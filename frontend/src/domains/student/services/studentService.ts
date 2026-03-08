@@ -26,7 +26,7 @@ export interface Property {
   id: string;
   title: string;
   description: string;
-  type: 'flat' | 'house' | 'studio' | 'apartment';
+  type: 'flat' | 'house' | 'studio';
   address: string;
   bedrooms: number;
   bathrooms: number;
@@ -66,6 +66,40 @@ export interface Property {
   };
   availabilityDates?: string[];
   moveInBy?: string;
+  scam_prediction?: boolean | null;
+  scam_probability?: number | null;
+  scam_explanations?: Array<{
+    feature: string;
+    impact: string;
+    score?: number;
+    direction?: 'increases' | 'decreases' | 'neutral';
+  }>;
+  scam_summary?: {
+    label: string;
+    confidence: number;
+    scam_probability: number;
+    top_factors: Array<{
+      feature: string;
+      score: number;
+      direction: 'increases' | 'decreases' | 'neutral';
+      impact: string;
+    }>;
+  };
+  scam_checked_at?: string;
+}
+
+export interface RefreshScamResponse {
+  success: boolean;
+  message?: string;
+  marketDataUnavailable?: boolean;
+  property: Property;
+  debug?: {
+    cityUsed?: string | null;
+    countryUsed?: string | null;
+    lookupSource?: string;
+    computedAreaAverageRent?: number | null;
+    finalPriceRatio?: number | null;
+  };
 }
 
 export interface StudentProfile {
@@ -194,6 +228,18 @@ export const studentService = {
       return data.property;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Failed to fetch property');
+    }
+  },
+
+  /**
+   * Trigger a fresh ML scam analysis for a property and return updated details
+   */
+  async refreshPropertyScam(id: string): Promise<RefreshScamResponse> {
+    try {
+      const { data } = await api.post(`/properties/${id}/refresh-scam`);
+      return data;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Failed to refresh scam analysis');
     }
   },
 

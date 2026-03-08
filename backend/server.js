@@ -103,6 +103,15 @@ mongoose.connect(MONGO_URI)
   .then(() => {
     console.log('✓ MongoDB is connected successfully');
     
+    // preload rent lookup data so average rent queries are fast later
+    try {
+      const { loadLookup } = require('./utils/marketRent');
+      loadLookup();
+      console.log('✓ Market rent lookup loaded');
+    } catch (e) {
+      console.warn('⚠️ Could not preload rent lookup:', e.message);
+    }
+
     // Initialize schedulers after DB connection
     initRentNotificationScheduler(io);
     initializeAutoPaymentScheduler(io);
@@ -187,10 +196,21 @@ console.log('');
 // ========================================
 // START SERVER
 // ========================================
-server.listen(PORT, () => {
+// Allow socket address reuse to avoid EADDRINUSE errors
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`✗ Port ${PORT} is already in use. Please close the existing process.`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+});
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`✓ Server is now running on port ${PORT}`);
   console.log(`  Health check: http://localhost:${PORT}/api/health`);
   console.log(`  Auth endpoints: http://localhost:${PORT}/api/auth/*`);
   console.log(`✓ Socket.IO is ready for real-time connections`);
 });
+
 

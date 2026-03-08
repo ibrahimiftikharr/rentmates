@@ -30,7 +30,7 @@ const requests = [
   {
     id: 2,
     tenantName: 'Michael Chen',
-    property: 'Riverside Apartment 3B',
+    property: 'Riverside Flat 3B',
     offer: 2200,
     status: 'pending',
     kycVerified: true,

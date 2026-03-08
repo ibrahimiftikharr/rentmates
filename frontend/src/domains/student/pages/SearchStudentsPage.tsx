@@ -247,7 +247,7 @@ export function SearchStudentsPage({ onNavigate }: SearchStudentsPageProps = {})
                       <div className="flex flex-col items-center">
                         <div className="relative mb-3">
                           <Avatar className="w-28 h-28 border-4 border-white shadow-[0_4px_14px_rgb(0,0,0,0.15)]">
-                            <AvatarImage src={student.photo} alt={student.name} className="object-cover" />
+                            <AvatarImage src={student.photo ?? undefined} alt={student.name} className="object-cover" />
                             <AvatarFallback className="text-xl bg-primary/20">
                               {student.name.split(' ').map(n => n[0]).join('')}
                             </AvatarFallback>

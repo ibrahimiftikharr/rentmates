@@ -23,6 +23,9 @@ propertyRouter.get('/my-properties', propertyController.getMyProperties);
 // Get single property
 propertyRouter.get('/:id', propertyController.getProperty);
 
+// Force refresh ML scam analysis for a property
+propertyRouter.post('/:id/refresh-scam', propertyController.refreshPropertyScam);
+
 // Update property
 propertyRouter.put('/:id', propertyController.updateProperty);
 

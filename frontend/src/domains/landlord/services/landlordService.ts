@@ -58,7 +58,7 @@ export interface Property {
   id: string;
   title: string;
   description: string;
-  type: 'flat' | 'house' | 'studio' | 'apartment';
+  type: 'flat' | 'house' | 'studio';
   address: string;
   bedrooms: number;
   bathrooms: number;

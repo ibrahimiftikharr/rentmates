@@ -47,7 +47,7 @@ export function HousingPreferencesCard({ profile, onUpdate }: HousingPreferences
     setIsEditing(false);
   };
 
-  const propertyTypes = ['Apartment', 'House', 'Studio', 'Shared Room', 'Private Room'];
+  const propertyTypes = ['Flat', 'House', 'Studio', 'Shared Room', 'Private Room'];
 
   const togglePropertyType = (type: string) => {
     setFormData(prev => ({

@@ -84,7 +84,7 @@ export function AddPropertyWizard() {
                   <div className="space-y-2">
                     <Label>Property Title</Label>
                     <Input
-                      placeholder="e.g., Modern Downtown Apartment"
+                      placeholder="e.g., Modern Downtown Flat"
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     />
