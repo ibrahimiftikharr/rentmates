@@ -1,0 +1,308 @@
+Country,City/Region,Rent_1,Rent_2,Rent_3
+Andorra,Andorra la Vella,1739,2784,3363
+Argentina,Buenos Aires,480,695,1515
+Argentina,C�rdoba,390,577,710
+Argentina,Rosario,311,429,577
+Australia,Sydney,1970,2770,4435
+Australia,Gold Coast,1810,2480,3760
+Australia,Perth,1670,2100,2730
+Australia,Melbourne,1590,2170,3400
+Australia,Canberra,1450,1730,2230
+Australia,Brisbane,1420,2080,2930
+Australia,Darwin,1250,1670,2230
+Australia,Adelaide,1250,1500,1900
+Austria,Vienna,1392,2320,3132
+Austria,Salzburg,1354,1755,2945
+Austria,Graz,889,1124,1696
+Bahamas,Nassau,2000,3200,4350
+Belgium,Brussels,1276,1739,2552
+Belgium,Antwerp,1089,1354,1713
+Belgium,Leuven,1060,1231,1472
+Belgium,Mechelen,1001,1166,1590
+Belgium,Brugge,942,1413,1825
+Belgium,Oostend,854,1013,
+Belgium,Li�ge,824,1060,1295
+Belgium,Kortrijk,801,983,
+Bosnia and H.,Sarajevo,324,440,649
+Brazil,Sao Paulo,790,1660,2740
+Brazil,Recife,560,730,960
+Brazil,Guarapari,360,540,1440
+Brazil,Rio De Janeiro,290,310,920
+Brazil,Fortaleza,,250,540
+Bulgaria,Sofia,696,812,1624
+Cambodia,Phnom Penh,550,1000,2000
+Cambodia,Kep And Kampot,600,1100,
+Cambodia,Koh Rong And Koh Rong Samloem,550,1100,
+Cambodia,Chroy Changvar,475,775,
+Canada,Toronto,1610,1940,2485
+Canada,Vancouver,1830,3180,4825
+Canada,Montr�al,1280,1610,1830
+Canada,Hamilton,1245,1500,2010
+Canada,Ottawa,1245,1425,1755
+Canada,Calgary,1200,1460,1830
+Cayman Islands,Grand Cayman,3000,3960,6485
+Chile,Santiago,360,490,680
+Colombia,Medellin,860,920,1090
+Colombia,Cartagena,700,740,950
+Colombia,Santa Marta,640,950,
+Colombia,Bogot�,590,670,1470
+Colombia,Barranquilla,560,420,660
+Colombia,Pereira,440,590,640
+Colombia,Cali,390,350,580
+Colombia,Bello,310,390,460
+Costa Rica,San Jose,1000,1400,2500
+Croatia,Zagreb,696,904,1160
+Cyprus,Nicosia,754,1044,1450
+Czech Republic,Prague,1148,1531,1902
+Czech Republic,Brno,918,1119,1154
+Czech Republic,Olomouc,753,777,859
+Czech Republic,Plzen,730,824,918
+Czech Republic,Ostrava,506,624,718
+Denmark,Copenhagen,2082,2192,2586
+Denmark,Aarhus,1278,1560,1955
+Denmark,Aalborg,871,1136,1342
+Dominican Republic,Santo Domingo,1075,1750,2600
+Egypt,Cairo,730,940,940
+Egypt,Alexandria,,420,520
+Estonia,Tallinn,730,985,
+Estonia,Tartu,541,789,
+Estonia,P�rnu,465,589,
+Finland,Helsinki,1148,1473,1728
+Finland,Tampere,930,1154,1366
+Finland,Turku,895,1154,1401
+Finland,Oulu,824,1060,1201
+France,Paris,2204,3248,4848
+France,Nice,1178,1708,2061
+France,Lyon,1048,1401,1684
+France,Bordeaux,1001,1295,1590
+France,Marseille,965,1260,1554
+France,Nantes,883,1119,1672
+France,Montpellier,883,1119,1307
+France,Toulouse,848,1048,1248
+Georgia,Tbilisi,539,684,985
+Georgia,Batumi,494,600,895
+Germany,Berlin,1415,2053,2865
+Germany,Munich,1566,2238,2945
+Germany,Frankfurt Am Main,1413,1825,2591
+Germany,Stuttgart,1319,1649,2120
+Germany,Hamburg,1036,1413,2073
+Germany,D�sseldorf,1024,1554,2214
+Germany,Cologne,942,1413,1884
+Germany,Leipzig,706,883,1531
+Greece,Athens,754,1020,1392
+Greece,Thessaloniki,612,801,942
+Greece,Heraklion,589,883,1060
+Greece,Patra,530,647,730
+Greece,Volos,506,589,742
+Greece,Kavala,471,565,647
+Hong Kong,Hong Kong Island,2500,2820,4360
+Hong Kong,Kowloon,2050,2565,4550
+Hong Kong,Outlying Islands,1925,2245,3015
+Hong Kong,New Territories,1900,2115,3335
+Hungary,Budapest,858,1276,1960
+Hungary,Debrecen,718,930,1248
+Hungary,P�cs,565,777,1083
+Hungary,Ny�regyh�za,530,683,
+Iceland,Reykjavik,2610,3074,3282
+India,Mumbai,405,750,1290
+India,Mumbai,410,800,1270
+India,Bangalore,320,470,680
+India,Pune,260,370,550
+India,Ahmedabad,190,270,380
+India,Delhi,180,320,590
+India,Hyderabad,180,310,620
+India,Chennai,165,280,515
+India,Kolkata,100,240,500
+Indonesia,Jakarta,385,565,1305
+Indonesia,Bali (Villas),715,1090,1240
+Indonesia,South Tangerang,280,445,760
+Indonesia,Tangerang,230,325,655
+Indonesia,Surabaya,180,300,740
+Ireland,Dublin,2320,2900,3595
+Ireland,Cork,1884,2356,3051
+Israel,Tel Aviv,2510,2885,4180
+Italy,Milan,1739,2320,3479
+Italy,Rome,1708,2002,2532
+Italy,Florence,1649,1767,2120
+Italy,Naples,1119,1413,1767
+Italy,Turin,1001,1178,1531
+Italy,Palermo,824,942,1001
+Italy,Catania,765,883,1001
+Japan,Tokyo,860,1220,1480
+Japan,Kawasaki,610,840,1050
+Japan,Yokohama,540,690,930
+Japan,Fukuoka,510,730,850
+Japan,Kobe,440,470,540
+Japan,Sapporo,,390,640
+Kazakhstan,Astana,555,830,1560
+Kazakhstan,Almaty,630,780,1560
+Kazakhstan,Kostanay,390,490,
+Kazakhstan,Ust-Kamenogorsk,370,410,
+Kazakhstan,Karaganda,350,450,530
+Kazakhstan,Pavlodar,350,450,
+Kazakhstan,Aktau,315,395,490
+Latvia,Riga,974,1508,2320
+Lithuania,Vilnius,765,985,1855
+Lithuania,Kaunas,647,883,1178
+Lithuania,Klaipeda,589,824,
+Luxembourg,City,1913,3248,4176
+Malaysia,Kuala Lumpur,690,770,665
+Malaysia,Petaling Jaya,510,640,690
+Malaysia,Johor Bahru,510,615,720
+Malaysia,Iskander Puteri,490,640,820
+Malaysia,Subang Jaya,460,665,640
+Malaysia,Shah Alam,360,435,405
+Malaysia,Georgetown,,740,615
+Malaysia,Ipoh,,475,490
+Mexico,Mexico City,1290,1840,3340
+Mexico,Merida,1290,1840,3285
+Mexico,Guadalajara,1060,1450,1920
+Mexico,Monterrey,1030,1615,2170
+Mexico,Naucalpan De Ju�rez,780,1590,2620
+Mexico,Canc�n,780,1170,1950
+Mexico,Puebla,438,835,1115
+Mexico,Acapulco,,555,1335
+Mongolia,Ulaanbaatar,500,840,1200
+Montenegro,Podgorica,614,869,1229
+Morocco,Casablanca,815,980,1520
+Morocco,Rabat,1305,1955,2280
+Morocco,Marrakesh,945,1520,1740
+Morocco,Tangier,760,1305,1955
+Morocco,Agadir,325,630,678
+Netherlands,Amsterdam,2615,3421,3827
+Netherlands,The Hague,2350,2768,3239
+Netherlands,Rotterdam,2350,2768,3239
+New Zealand,Auckland,1040,1340,1860
+New Zealand,Wellington,1040,1350,1620
+North Macedonia,Skopje,290,406,580
+North Macedonia,Bitola,176,188,294
+Norway,Oslo,1803,2320,2784
+Norway,Bergen,1566,1979,2668
+Norway,Trondheim,1360,1672,1884
+Pakistan,Islamabad,190,300,490
+Pakistan,Rawalpindi,190,230,320
+Pakistan,Lahore,175,230,440
+Pakistan,Karachi,110,200,420
+Panama,Panama City,,1650,2500
+Panama,Oeste,1100,1350,1800
+Panama,Cocl�,,1500,1980
+Peru,Lima,620,750,1000
+Philippines,Manila,425,850,1615
+Philippines,Cebu City,,1046,1482
+Poland,Warsaw,1020,1508,2760
+Portugal,Lisbon,1739,2146,2668
+Puerto Rico,San Juan,1900,2400,2600
+Qatar,Doha,1995,2050,2200
+Qatar,Lusail,1940,2470,2750
+Romania,Bucharest,754,1160,
+Romania,Constanta,718,954,
+Romania,Cluj-Napoca,659,824,1060
+Romania,Brasov,612,765,
+Romania,Craiova,530,706,
+Romania,Timisoara,530,647,
+Romania,Ia?i,530,647,
+Romania,Galati,530,589,
+Russia,Moscow,710,915,1525
+Russia,Saint Petersburg,515,760,1270
+Russia,Novosibirsk,420,510,610
+Russia,Yekaterinburg,380,470,760
+Russia,Rostov-na-Donu,330,445,610
+Russia,Ufa,270,355,470
+Russia,Voronezh,255,380,465
+Saudi Arabia,Riyadh,730,1120,1550
+Saudi Arabia,Jeddah,780,980,1000
+Serbia,Belgrade,927,1102,1681
+Serbia,Novi Sad,471,589,942
+Singapore,Orchard / River Valley,3310,4470,6935
+Singapore,Tanglin / Holland / Bukit Timah,2965,4240,7395
+Singapore,Alexandra / Commonwealth,2930,3930,5315
+Singapore,East Coast / Marine Parade,2695,3700,5395
+Singapore,Newton / Novena,2695,3700,5395
+Singapore,Hougang / Punggol / Sengkang,2310,2930,3530
+Slovakia,Bratislava,927,1334,2088
+Slovenia,Ljubljana,1218,1681,2842
+South Africa,Cape Town,,910,1300
+South Africa,Dolphin Coast,440,620,1100
+South Africa,Johannesburg,380,640,930
+South Africa,Centurion,380,470,730
+South Africa,Durban,350,560,
+Spain,Madrid,1681,2204,2900
+Spain,Barcelona,1884,2709,3109
+Spain,Palma De Mallorca,1825,2238,2591
+Spain,Marbella,1649,2532,4005
+Spain,Valencia,1531,1755,1767
+Spain,Malaga,1354,1649,1649
+Spain,Tenerife,1295,1413,1649
+Spain,Alicante,1130,1413,1637
+Spain,Seville,1060,1295,1295
+Spain,Murcia,777,883,1060
+Spain,C�rdoba,706,883,883
+Sweden,Stockholm,1473,1681,2088
+Sweden,Uppsala,1119,1390,
+Sweden,Gothenburg,1119,1342,1602
+Sweden,Malm�,1107,1401,1684
+Switzerland,Zurich,2981,3352,3665
+Switzerland,Canton of Geneva,2462,3015,3816
+Switzerland,Canton Of Vaud,2073,2615,3427
+Switzerland,Canton Of Aargau,2002,2344,2732
+Switzerland,Canton Of Fribourg,1837,2238,2650
+Switzerland,Canton Of Valais,1802,2143,2709
+Switzerland,Canton Of Bern,1767,2085,2332
+Switzerland,Canton Of Ticino,1660,1955,2520
+Taiwan,Taipei,970,1470,1810
+Taiwan,Taoyuan,700,840,950
+Taiwan,New Taipei,680,840,920
+Taiwan,Tainan City,,560,710
+Thailand,Bangkok,800,1770,3500
+Thailand,Phuket,660,1440,2080
+Thailand,Chon Buri (Pattaya),600,1280,1930
+Thailand,Samut Prakan,390,705,
+Thailand,Nonthaburi,310,580,
+Tunisia,Tunis,470,560,790
+Tunisia,Ariana,278,309,390
+Tunisia,Nabeul,260,358,423
+Turkey,Istanbul,620,670,960
+Turkey,Ankara,610,570,570
+Turkey,Izmir,480,570,680
+Turkey,Antalya,460,560,690
+Turkey,Konya,400,440,460
+Turkey,Bursa,370,410,570
+Turkey,Adana,320,410,570
+Turkey,Kayseri,,365,370
+Ukraine,Kyiv,638,985,1960
+Ukraine,Lviv,577,718,1018
+Ukraine,Ivano-Frankivsk,494,553,
+Ukraine,Dnipro,400,459,653
+Ukraine,Odesa,294,400,
+Ukraine,Kharkiv,235,353,
+United Arab Emirates,Dubai,2040,3520,5670
+United Arab Emirates,Abu Dhabi,2150,2950,3860
+United Arab Emirates,Ras Al Khaimah,1134,1588,1814
+United Arab Emirates,Sharjah,885,1180,1588
+United Arab Emirates,Ajman,635,862,1270
+United Kingdom,London,3108,4164,5753
+United Kingdom,Bristol,1678,2149,3386
+United Kingdom,Manchester,1478,1878,2485
+United Kingdom,Edinburgh,1466,1920,2685
+United Kingdom,Birmingham,1278,1613,2833
+United Kingdom,Glasgow,1207,1543,2149
+United Kingdom,Liverpool,1142,1413,1531
+United Kingdom,Leeds,1130,1572,2149
+United States,New York,4470,5750,6800
+United States,San Francisco,3400,4650,6560
+United States,Boston,2750,3300,3700
+United States,Miami,2675,3500,3500
+United States,San Diego,2500,3200,4200
+United States,Los Angeles,2350,3160,4000
+United States,Chicago,2300,2950,3100
+United States,Washington,2100,2940,3900
+United States,Seattle,1705,2395,3100
+United States,Atlanta,1570,1895,2385
+United States,Philadelphia,1500,1750,1965
+United States,Orlando,1400,1700,2200
+United States,Las Vegas,1375,1600,1995
+United States,Portland,1350,1645,2230
+United States,Houston,1325,1650,2025
+Uruguay,Montevideo,636,763,1395
+Vietnam,Hanoi,380,500,670
+Vietnam,Ho Chi Minh City,420,535,840

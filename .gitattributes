@@ -1,0 +1,2 @@
+# treat pickle files as binary to avoid CRLF conversion
+*.pkl binary
