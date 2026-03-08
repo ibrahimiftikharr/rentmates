@@ -446,3 +446,42 @@ export const toggleAutoPayment = async (enabled: boolean) => {
 
   return await response.json();
 };
+
+/**
+ * Download transaction receipt as PDF
+ */
+export const downloadTransactionReceipt = async (transactionId: string) => {
+  try {
+    const response = await fetch(`${API_URL}/wallet/transactions/${transactionId}/download-receipt`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${getAuthToken()}`
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to download receipt' }));
+      throw new Error(error.error || 'Failed to download receipt');
+    }
+
+    // Get the PDF blob
+    const blob = await response.blob();
+    
+    // Create a download link
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `RentMates_Receipt_${transactionId}_${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Cleanup
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Download receipt error:', error);
+    throw error;
+  }
+};

@@ -9,7 +9,8 @@ import {
   Calendar as CalendarIcon,
   Check,
   Clock,
-  X as XIcon
+  X as XIcon,
+  ExternalLink
 } from 'lucide-react';
 import { Card } from '../../../shared/ui/card';
 import { Button } from '../../../shared/ui/button';
@@ -29,7 +30,8 @@ import {
   getWalletBalance,
   connectWalletToBackend,
   withdrawFromVault,
-  getTransactionHistory
+  getTransactionHistory,
+  downloadTransactionReceipt
 } from '../../../shared/services/walletService';
 
 interface Transaction {
@@ -39,6 +41,7 @@ interface Transaction {
   status: 'completed' | 'pending' | 'failed';
   createdAt: string;
   description?: string;
+  blockchainExplorerUrl?: string;
   txHash?: string;
   relatedUser?: {
     name: string;
@@ -552,18 +555,20 @@ export function WalletPage() {
                   <th className="text-left py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] min-w-[200px]">Description</th>
                   <th className="text-right py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Amount</th>
                   <th className="text-center py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Status</th>
+                  <th className="text-center py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Blockchain</th>
+                  <th className="text-center py-3 md:py-4 px-3 md:px-6 text-xs md:text-sm text-[#8C57FF] whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoadingTransactions ? (
                   <tr>
-                    <td colSpan={5} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
+                    <td colSpan={7} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
                       Loading transactions...
                     </td>
                   </tr>
                 ) : filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
+                    <td colSpan={7} className="py-8 md:py-12 text-center text-muted-foreground text-sm">
                       No transactions found
                     </td>
                   </tr>
@@ -593,6 +598,39 @@ export function WalletPage() {
                       </td>
                       <td className="py-3 md:py-4 px-3 md:px-6 text-center">
                         {getStatusBadge(transaction.status)}
+                      </td>
+                      <td className="py-3 md:py-4 px-3 md:px-6 text-center">
+                        {transaction.blockchainExplorerUrl ? (
+                          <a 
+                            href={transaction.blockchainExplorerUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 text-xs"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>View</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">N/A</span>
+                        )}
+                      </td>
+                      <td className="py-3 md:py-4 px-3 md:px-6 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={async () => {
+                            try {
+                              await downloadTransactionReceipt(transaction._id);
+                              showSuccessToast('Receipt downloaded successfully!');
+                            } catch (error: any) {
+                              showErrorToast(error.message || 'Failed to download receipt');
+                            }
+                          }}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Receipt
+                        </Button>
                       </td>
                     </tr>
                   ))

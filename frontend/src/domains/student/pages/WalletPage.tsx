@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../shared/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../shared/ui/popover';
 import { Calendar } from '../../../shared/ui/calendar';
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, Clock, CheckCircle, XCircle, CalendarIcon, Filter } from 'lucide-react';
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, Clock, CheckCircle, XCircle, CalendarIcon, Filter, Download, ExternalLink } from 'lucide-react';
 import { toast } from '@/shared/utils/toast';
 import { format } from 'date-fns';
 import { socketService } from '@/shared/services/socketService';
@@ -24,7 +24,8 @@ import {
   payRent,
   getTransactionHistory,
   getStudentRentalInfo,
-  toggleAutoPayment
+  toggleAutoPayment,
+  downloadTransactionReceipt
 } from '../../../shared/services/walletService';
 
 type TransactionType = 'deposit' | 'withdraw' | 'rent_payment' | 'rent_received' | 'loan_disbursement' | 'collateral_return';
@@ -38,6 +39,7 @@ interface Transaction {
   createdAt: string;
   description?: string;
   txHash?: string;
+  blockchainExplorerUrl?: string;
   relatedUser?: {
     name: string;
     email: string;
@@ -768,12 +770,14 @@ export function WalletPage() {
                         <th className="text-left py-3 px-2">Type</th>
                         <th className="text-right py-3 px-2">Amount</th>
                         <th className="text-center py-3 px-2">Status</th>
+                        <th className="text-center py-3 px-2">Blockchain</th>
+                        <th className="text-center py-3 px-2">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {isLoadingTransactions ? (
                         <tr>
-                          <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             Loading transactions...
                           </td>
                         </tr>
@@ -808,11 +812,48 @@ export function WalletPage() {
                                 </Badge>
                               </div>
                             </td>
+                            <td className="py-3 px-2">
+                              <div className="flex items-center justify-center">
+                                {transaction.blockchainExplorerUrl ? (
+                                  <a 
+                                    href={transaction.blockchainExplorerUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    <span>View</span>
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">N/A</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-2">
+                              <div className="flex items-center justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={async () => {
+                                    try {
+                                      await downloadTransactionReceipt(transaction._id);
+                                      toast.success('Receipt downloaded successfully!');
+                                    } catch (error: any) {
+                                      toast.error(error.message || 'Failed to download receipt');
+                                    }
+                                  }}
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Receipt
+                                </Button>
+                              </div>
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             No transactions found matching the selected filters
                           </td>
                         </tr>

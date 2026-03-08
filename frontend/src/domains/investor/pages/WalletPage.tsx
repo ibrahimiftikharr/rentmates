@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Copy, Filter, XCircle, Loader2 } from "lucide-react";
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Copy, Filter, XCircle, Loader2, Download, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { WithdrawalModal } from "../components/modals/WithdrawalModal";
@@ -18,7 +18,8 @@ import {
   connectMetaMask,
   getWalletBalance,
   connectWalletToBackend,
-  getTransactionHistory
+  getTransactionHistory,
+  downloadTransactionReceipt
 } from "../../../shared/services/walletService";
 
 type TransactionType = 'deposit' | 'withdraw' | 'investment_income';
@@ -31,6 +32,7 @@ interface Transaction {
   status: TransactionStatus;
   createdAt: string;
   description?: string;
+  blockchainExplorerUrl?: string;
   txHash?: string;
 }
 
@@ -408,7 +410,7 @@ export function WalletPage() {
 
           {/* Transaction Table - Desktop */}
           <div className="hidden md:block rounded-lg border overflow-x-auto">
-            <table className="w-full min-w-[600px]">
+            <table className="w-full min-w-[700px]">
               <thead className="bg-accent/50">
                 <tr>
                   <th className="text-left p-2 md:p-3 text-xs md:text-sm font-medium">Date</th>
@@ -416,18 +418,20 @@ export function WalletPage() {
                   <th className="text-left p-2 md:p-3 text-xs md:text-sm font-medium">Description</th>
                   <th className="text-right p-2 md:p-3 text-xs md:text-sm font-medium">Amount</th>
                   <th className="text-center p-2 md:p-3 text-xs md:text-sm font-medium">Status</th>
+                  <th className="text-center p-2 md:p-3 text-xs md:text-sm font-medium">Blockchain</th>
+                  <th className="text-center p-2 md:p-3 text-xs md:text-sm font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {isLoadingTransactions ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center">
+                    <td colSpan={7} className="p-6 text-center">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                     </td>
                   </tr>
                 ) : filteredTransactions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-sm text-muted-foreground">
+                    <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">
                       No transactions found
                     </td>
                   </tr>
@@ -470,6 +474,39 @@ export function WalletPage() {
                           )}
                         </div>
                       </td>
+                      <td className="p-2 md:p-3 text-center">
+                        {tx.blockchainExplorerUrl ? (
+                          <a 
+                            href={tx.blockchainExplorerUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 flex items-center justify-center gap-1 text-xs"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            <span>View</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">N/A</span>
+                        )}
+                      </td>
+                      <td className="p-2 md:p-3 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={async () => {
+                            try {
+                              await downloadTransactionReceipt(tx._id);
+                              toast.success('Receipt downloaded successfully!');
+                            } catch (error: any) {
+                              toast.error(error.message || 'Failed to download receipt');
+                            }
+                          }}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Receipt
+                        </Button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -502,7 +539,7 @@ export function WalletPage() {
                         <p className="text-xs text-muted-foreground mb-2">{tx.description || 'No description'}</p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-1">
                         {tx.status === 'completed' ? (
                           <>
@@ -526,6 +563,37 @@ export function WalletPage() {
                       }`}>
                         {tx.type === 'deposit' || tx.type === 'investment_income' ? '+' : '-'}${tx.amount.toFixed(2)}
                       </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                      {tx.blockchainExplorerUrl ? (
+                        <a 
+                          href={tx.blockchainExplorerUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>View on Blockchain</span>
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No blockchain TX</span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[10px]"
+                        onClick={async () => {
+                          try {
+                            await downloadTransactionReceipt(tx._id);
+                            toast.success('Receipt downloaded!');
+                          } catch (error: any) {
+                            toast.error('Failed to download');
+                          }
+                        }}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Receipt
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
