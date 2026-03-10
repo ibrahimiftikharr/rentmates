@@ -450,9 +450,9 @@ export function WalletPage() {
                         {tx.description || 'No description'}
                       </td>
                       <td className={`p-2 md:p-3 text-xs md:text-sm text-right font-medium whitespace-nowrap ${
-                        tx.type === 'deposit' || tx.type === 'investment_income' ? 'text-green-600' : 'text-foreground'
+                        tx.type === 'deposit' || tx.type === 'investment_income' || tx.type === 'withdraw' ? 'text-green-600' : 'text-foreground'
                       }`}>
-                        {tx.type === 'deposit' || tx.type === 'investment_income' ? '+' : '-'}${tx.amount.toFixed(2)}
+                        {tx.type === 'deposit' || tx.type === 'investment_income' || tx.type === 'withdraw' ? '+' : '-'}${tx.amount.toFixed(2)}
                       </td>
                       <td className="p-2 md:p-3 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -559,9 +559,9 @@ export function WalletPage() {
                         )}
                       </div>
                       <span className={`text-sm font-bold ${
-                        tx.type === 'deposit' || tx.type === 'investment_income' ? 'text-green-600' : 'text-foreground'
+                        tx.type === 'deposit' || tx.type === 'investment_income' || tx.type === 'withdraw' ? 'text-green-600' : 'text-foreground'
                       }`}>
-                        {tx.type === 'deposit' || tx.type === 'investment_income' ? '+' : '-'}${tx.amount.toFixed(2)}
+                        {tx.type === 'deposit' || tx.type === 'investment_income' || tx.type === 'withdraw' ? '+' : '-'}${tx.amount.toFixed(2)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2 pt-2 border-t">
