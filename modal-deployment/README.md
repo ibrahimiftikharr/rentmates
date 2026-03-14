@@ -1,125 +1,67 @@
-﻿# Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features - Modal.com Deployment
+# Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features
 
-This folder contains the ML module optimized for serverless deployment on Modal.com.
+This folder contains the ML part of my FYP module for matching students with compatible flatmates.
 
-## Why This Module Matters
+## Purpose
 
-Finding the right flatmate is usually a gamble based on short chats and first impressions. This module turns that guesswork into a data-informed decision by combining structured profile signals (budget, lifestyle, study patterns) with textual understanding of personal bios. The goal is practical: reduce avoidable roommate conflicts, improve long-term living compatibility, and help students find homes where they can thrive academically and socially.
+Finding a suitable flatmate is often uncertain, relying primarily on brief interactions and initial impressions. This module transforms that uncertainty into a data-driven decision-making process by integrating structured profile attributes (such as budget, lifestyle, and study habits) with textual analysis of personal bios. The primary objective is to minimize avoidable flatmate mismatch, enhance long-term compatibility, and enable students to secure living arrangements that snhance both academic success and social well-being.
 
-##  Files
+## Files in This Folder
 
-- **modal_app.py** - Main Modal application with web endpoints
-- **model.py** - ML model implementation (Gradient Boosting)
-- **features.py** - Feature engineering (17 features)
-- **train_pipeline.py** - Step-by-step training/evaluation pipeline runner
-- **training_data.csv** - Professional training dataset with realistic student compatibility pairs
-- **requirements-ml.txt** - Local ML dependencies for reproducible training runs
-- **requirements.txt** - Modal dependencies
-- **test-data.json** - Sample test data for endpoint testing
-- **README.md** - Deployment guide
-- **DEPLOYMENT_CHECKLIST.md** - Step-by-step deployment checklist
+- `modal_app.py`: deployment app and HTTP endpoints
+- `model.py`: core model code and step-by-step training pipeline
+- `features.py`: feature engineering (structured + text features)
+- `train_pipeline.py`: local pipeline runner for reproducible training/evaluation
+- `training_data.csv`: training dataset
+- `requirements.txt`: deployment dependencies
+- `requirements-ml.txt`: local ML dependencies
+- `test-data.json`: sample request payload
+- `DEPLOYMENT_CHECKLIST.md`: quick deployment checklist
 
-## Training Data
+## Dataset
 
-The model is trained on `training_data.csv`, which contains realistic student compatibility pairs featuring:
+The model is trained using `training_data.csv`.
 
-- **Diverse student profiles** across NTU, NUS, and SMU
-- **Varied courses** - Computer Science, Medicine, Business, Engineering, Arts, etc.
-- **Meaningful, unique bios** - Each student has a detailed, realistic description (not just mixed attributes)
-- **Real compatibility patterns** - Scores based on actual compatibility factors like:
-  - Lifestyle alignment (quiet studious vs social party-goers)
-  - Budget compatibility (similar budget ranges)
-  - Study habits (early bird vs night owl, clean vs moderate)
-  - Course and university matches
-  - Personality traits (introverted vs extroverted)
+- Student pairs include university, course, budget, lifestyle, and bio text
+- Labels are compatibility scores
+- Data includes both high-compatibility and low-compatibility examples
 
-**Example pairs:**
-- High compatibility (92): Two CS students, both quiet, clean, non-smoking, similar budgets
-- Low compatibility (38): CS student (quiet, organized) vs Business student (party lover, messy)
-- Mixed compatibility (68): Law student (structured) vs Accounting student (similar work ethic, different interests)
+## Step-by-Step Local Pipeline
 
-To expand the dataset, add more rows to `training_data.csv` following the same format.
-
-## Quick Deployment
-
-## Step-by-Step Local ML Pipeline (for reporting/reproducibility)
-
-Run this when you need a clear end-to-end ML pipeline artifact with preprocessing, training, metrics, and error analysis:
+Run the local training pipeline:
 
 ```bash
 python train_pipeline.py --csv training_data.csv --seed 42
 ```
 
-Outputs are written to:
-- `artifacts/roommate_matcher.pkl` (trained checkpoint)
-- `artifacts/pipeline_report.json` (metrics + error-analysis summary)
-- `artifacts/final_validation_log.txt` (single-line final validation log)
+Artifacts generated:
 
-The core stepwise implementation lives in `model.py` under `run_step_by_step_pipeline(...)`.
+- `artifacts/roommate_matcher.pkl`
+- `artifacts/pipeline_report.json`
+- `artifacts/final_validation_log.txt`
 
-### 1. Install Modal CLI
+## Deployed Microservice
 
-```bash
-pip install modal
-```
+This model is deployed as a microservice. The backend calls these HTTP endpoints directly for health checks, scoring, and retraining.
 
-### 2. Authenticate with Modal
+Microservice owner username: ibrahimiftikharr
 
-```bash
-modal token new
-```
+### Endpoint List and Purpose
 
-This will open your browser to authenticate. Create a free account if needed.
+1. Health endpoint
 
-### 3. Deploy the App
+Purpose: confirms service availability and whether a trained model file exists.
 
-```bash
-cd modal-deployment
-modal deploy modal_app.py
-```
-
-The deployment will:
-- Build a container with all dependencies
-- Create persistent storage for the model
-- Deploy web endpoints
-- Give you a public URL
-
-### 4. Train the Model (First Time)
-
-After deployment, train the model:
-
-```bash
-modal run modal_app.py::train_model
-```
-
-Or call the training endpoint:
-
-```bash
-curl -X POST https://your-app-url.modal.run/train
-```
-
-### 5. Test the Deployment
-
-```bash
-# Test locally first
-modal run modal_app.py::test_prediction
-
-# Test health endpoint
-curl https://your-app-url.modal.run/health
-```
-
-##  API Endpoints
-
-Once deployed, Modal gives you public URLs for each endpoint:
-
-### Health Check
 ```http
-GET https://<your-username>--rentmates-compatibility-health-endpoint.modal.run
+GET https://ibrahimiftikharr--rentmates-compatibility-health-endpoint.modal.run
 ```
 
-### Single Prediction
+2. Single prediction endpoint
+
+Purpose: returns one compatibility score for one student pair.
+
 ```http
-POST https://<your-username>--rentmates-compatibility-predict-endpoint.modal.run
+POST https://ibrahimiftikharr--rentmates-compatibility-predict-endpoint.modal.run
 Content-Type: application/json
 
 {
@@ -128,182 +70,56 @@ Content-Type: application/json
 }
 ```
 
-### Batch Prediction (Recommended)
+3. Batch prediction endpoint
+
+Purpose: returns ranked compatibility scores for one current student against multiple other students.
+
 ```http
-POST https://<your-username>--rentmates-compatibility-predict-batch-endpoint.modal.run
+POST https://ibrahimiftikharr--rentmates-compatibility-predict-batch-endpoint.modal.run
 Content-Type: application/json
 
 {
   "currentStudent": { ...profile... },
-  "otherStudents": [ {...}, {...} ]
+  "otherStudents": [{...}, {...}]
 }
 ```
 
-### Train Model
+4. Train endpoint
+
+Purpose: triggers model training/retraining for this microservice deployment.
+
 ```http
-POST https://<your-username>--rentmates-compatibility-train-endpoint.modal.run
+POST https://ibrahimiftikharr--rentmates-compatibility-train-endpoint.modal.run
 Content-Type: application/json
 
 {}
 ```
 
-##  Configure Your Backend
+## Backend Configuration
 
-After deployment, update your Node.js backend `.env`:
+In backend `.env`:
 
 ```env
 USE_ML_SERVICE=true
-ML_SERVICE_URL=https://<your-username>--rentmates-compatibility
+ML_SERVICE_URL=https://ibrahimiftikharr--rentmates-compatibility
+ML_TIMEOUT=10000
 ```
 
-The backend will automatically append the correct endpoint names:
-- `/predict-endpoint` for single predictions
-- `/predict-batch-endpoint` for batch predictions
+The backend appends endpoint suffixes like `/predict-endpoint` and `/predict-batch-endpoint` automatically.
 
-##  Modal Dashboard
-
-View your deployment at: https://modal.com/apps
-
-You can:
-- See logs in real-time
-- Monitor usage and costs
-- View container status
-- Manage volumes (stored models)
-
-##  Pricing
-
-Modal.com Free Tier includes:
-- **$30/month** in free credits
-- Good for ~10,000-50,000 predictions/month
-- Auto-scales to zero when not in use (no idle costs)
-
-Perfect for FYP projects!
-
-##  Testing
-
-### Local Testing (Before Deployment)
+## Quick Test Commands
 
 ```bash
-# Test the functions locally
-modal run modal_app.py::test_prediction
-```
+# health
+curl https://ibrahimiftikharr--rentmates-compatibility-health-endpoint.modal.run
 
-### Production Testing
-
-```bash
-# Test health
-curl https://your-url.modal.run/health
-
-# Test prediction
-curl -X POST https://your-url.modal.run/predict-endpoint \
+# single prediction
+curl -X POST https://ibrahimiftikharr--rentmates-compatibility-predict-endpoint.modal.run \
   -H "Content-Type: application/json" \
   -d @test-data.json
 ```
 
-##  Performance
+## Notes
 
-Modal.com provides:
-- **Cold start**: ~2-5 seconds (first request)
-- **Warm requests**: ~100-500ms
-- **Auto-scaling**: Handles traffic spikes automatically
-- **Persistent storage**: Model stays loaded in memory
-
-##  Updating the Model
-
-### Option 1: Redeploy
-
-```bash
-# Make changes to code
-modal deploy modal_app.py
-
-# Retrain
-modal run modal_app.py::train_model
-```
-
-### Option 2: Live Training
-
-Call the `/train` endpoint with new data:
-
-```json
-{
-  "trainingData": [
-    {
-      "student1": {...},
-      "student2": {...},
-      "score": 85
-    }
-  ]
-}
-```
-
-##  Troubleshooting
-
-### Deployment Fails
-
-```bash
-# Check logs
-modal app logs rentmates-compatibility
-
-# Verify authentication
-modal token verify
-```
-
-### Model Not Found
-
-Train the model after deployment:
-```bash
-modal run modal_app.py::train_model
-```
-
-### Endpoints Not Working
-
-1. Check deployment status in Modal dashboard
-2. Verify URLs are correct (check Modal dashboard for exact URLs)
-3. Ensure model is trained
-
-### Backend Can't Connect
-
-Update backend `.env` with correct Modal URL from dashboard.
-
-##  Environment Variables
-
-Modal automatically handles:
-- Container isolation
-- Dependency management  
-- GPU/CPU allocation (if needed in future)
-- Persistent storage
-- HTTPS certificates
-
-No manual configuration needed!
-
-##  Production Checklist
-
-- [ ] Deploy app: `modal deploy modal_app.py`
-- [ ] Train model: Call `/train` endpoint
-- [ ] Test health: GET `/health`
-- [ ] Test prediction: POST `/predict-endpoint`
-- [ ] Update backend `.env` with Modal URLs
-- [ ] Test integration from your app
-- [ ] Monitor logs in Modal dashboard
-
-## 📚 Learn More
-
-- Modal Docs: https://modal.com/docs
-- Modal Examples: https://modal.com/docs/examples
-- Support: https://modal.com/slack
-
-## Benefits of Modal vs Local Hosting
-
-| Feature | Local Flask | Modal.com |
-|---------|-------------|-----------|
-| Setup | Manual venv, pip install | One command deploy |
-| Scaling | Single server | Auto-scales |
-| Maintenance | You manage | Modal manages |
-| SSL/HTTPS | Need reverse proxy | Built-in |
-| Costs | Always running | Pay per use |
-| Deployment | Complex | `modal deploy` |
-| Monitoring | DIY | Built-in dashboard |
-
----
-
-**Your ML model is now production-ready on serverless infrastructure! **
+- If prediction fails because the model is missing, run training once.
+- If endpoint URL changes after redeploy, update backend `.env`.
