@@ -1,4 +1,8 @@
-# Modal.com Deployment Requirements
-# These are installed automatically by Modal in the container
-
 modal>=0.55.0
+numpy==1.24.3
+pandas==2.1.4
+scikit-learn==1.3.2
+sentence-transformers>=2.7.0
+transformers>=4.36.2
+torch>=2.1.2
+joblib==1.3.2
