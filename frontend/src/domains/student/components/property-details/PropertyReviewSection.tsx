@@ -18,9 +18,11 @@ import { toast } from '../../../../shared/utils/toast';
 
 interface PropertyReviewSectionProps {
   propertyId: string;
+  onReviewChanged?: () => Promise<void> | void;
+  onStatsChange?: (stats: ReviewStats) => void;
 }
 
-export const PropertyReviewSection: React.FC<PropertyReviewSectionProps> = ({ propertyId }) => {
+export const PropertyReviewSection: React.FC<PropertyReviewSectionProps> = ({ propertyId, onReviewChanged, onStatsChange }) => {
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [stats, setStats] = useState<ReviewStats>({
     averageRating: 0,
@@ -53,6 +55,7 @@ export const PropertyReviewSection: React.FC<PropertyReviewSectionProps> = ({ pr
       const data = await getPropertyReviews(propertyId);
       setReviews(data.reviews);
       setStats(data.stats);
+      onStatsChange?.(data.stats);
     } catch (error: any) {
       console.error('Error loading reviews:', error);
       toast.error(error.response?.data?.message || 'Failed to load reviews');
@@ -102,15 +105,18 @@ export const PropertyReviewSection: React.FC<PropertyReviewSectionProps> = ({ pr
       });
 
       toast.success('Review submitted successfully!');
-      
+
       // Reset form
       setRating(0);
       setReviewText('');
       setThumbsUpDown('up');
-      
-      // Reload reviews and status
+
+      // Reload reviews/status and trigger risk refresh in parent.
       await loadReviews();
       await checkUserReviewStatus();
+      if (onReviewChanged) {
+        await onReviewChanged();
+      }
     } catch (error: any) {
       console.error('Error submitting review:', error);
       toast.error(error.response?.data?.message || 'Failed to submit review');
@@ -154,10 +160,13 @@ export const PropertyReviewSection: React.FC<PropertyReviewSectionProps> = ({ pr
 
       toast.success('Review updated successfully!');
       setIsEditing(false);
-      
-      // Reload reviews and status
+
+      // Reload reviews/status and trigger risk refresh in parent.
       await loadReviews();
       await checkUserReviewStatus();
+      if (onReviewChanged) {
+        await onReviewChanged();
+      }
     } catch (error: any) {
       console.error('Error updating review:', error);
       toast.error(error.response?.data?.message || 'Failed to update review');
@@ -178,16 +187,19 @@ export const PropertyReviewSection: React.FC<PropertyReviewSectionProps> = ({ pr
       await deleteReview(currentUserReview._id);
 
       toast.success('Review deleted successfully!');
-      
+
       // Reset form and state
       setRating(0);
       setReviewText('');
       setThumbsUpDown('up');
       setIsEditing(false);
-      
-      // Reload reviews and status
+
+      // Reload reviews/status and trigger risk refresh in parent.
       await loadReviews();
       await checkUserReviewStatus();
+      if (onReviewChanged) {
+        await onReviewChanged();
+      }
     } catch (error: any) {
       console.error('Error deleting review:', error);
       toast.error(error.response?.data?.message || 'Failed to delete review');

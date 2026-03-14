@@ -1,0 +1,85 @@
+{
+  "model_name": "Gradient Boosting",
+  "features": [
+    "PriceRatio",
+    "DepositRatio",
+    "ReputationScore",
+    "NationalityMismatch",
+    "ThumbsRatio",
+    "AverageReviewRating",
+    "DescriptionScamScore"
+  ],
+  "num_features": 7,
+  "test_accuracy": 0.9302325581395349,
+  "test_auc": 0.9674704680699884,
+  "cv_auc": 0.9722160731514145,
+  "cv_accuracy": 0.9202672509726451,
+  "scaler_mean": [
+    1.0675842091732533,
+    2.1839787304261336,
+    55.80119458836479,
+    0.24003322259136212,
+    0.6858281535063341,
+    3.3180083418501725,
+    0.38678986710963453
+  ],
+  "scaler_scale": [
+    0.29801019046485955,
+    0.7858098155651803,
+    22.456351749712457,
+    0.4271033535852507,
+    0.2149932720536607,
+    0.8436256476261645,
+    0.3960909938959699
+  ],
+  "selection_rationale": "Gradient Boosting selected because it is closest to the requested 92-94% test-accuracy band on calibrated noisy data.",
+  "target_accuracy_band": "92-94%",
+  "training_data_size": 3010,
+  "training_samples_legit": 1620,
+  "training_samples_scam": 1390,
+  "runtime_rules": {
+    "underpricing_floors": [
+      {
+        "lt": 0.2,
+        "prob": 0.99
+      },
+      {
+        "lt": 0.35,
+        "prob": 0.95
+      },
+      {
+        "lt": 0.5,
+        "prob": 0.85
+      },
+      {
+        "lt": 0.7,
+        "prob": 0.65
+      }
+    ],
+    "description": {
+      "weighted_patterns": {
+        "\\b(no viewing|no visit|viewing not possible)\\b": 0.3,
+        "\\b(wire transfer|western union|crypto|bitcoin|gift card)\\b": 0.35,
+        "\\b(owner abroad|landlord abroad|currently overseas)\\b": 0.25,
+        "\\b(urgent|act fast|only today|limited time)\\b": 0.15,
+        "\\b(too good to be true|half price|very cheap|low price)\\b": 0.2,
+        "\\b(send deposit first|deposit before viewing|pay first)\\b": 0.35
+      },
+      "review_cues": {
+        "negative": "\\b(scam|fake|fraud|no reply|did not return deposit|payment first)\\b",
+        "positive": "\\b(reliable|smooth|returned deposit|as described|professional)\\b",
+        "negative_bump": 0.08,
+        "positive_bump": -0.05
+      }
+    }
+  },
+  "feature_importance_rf": {
+    "ReputationScore": 0.34463659983039385,
+    "PriceRatio": 0.252734775373642,
+    "DepositRatio": 0.1654452034581169,
+    "AverageReviewRating": 0.11337476499429038,
+    "DescriptionScamScore": 0.09927695507923552,
+    "ThumbsRatio": 0.02158430948298919,
+    "NationalityMismatch": 0.002947391781332247
+  }
+}

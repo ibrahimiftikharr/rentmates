@@ -20,6 +20,14 @@ import {
   createJoinRequest 
 } from '@/shared/services/joinRequestService';
 import { getCurrencySymbol } from '@/shared/utils/currency';
+import {
+  getUserTimeZone,
+  convertUTCToLocal,
+  convertLocalToUTC,
+  addMinutesToTime,
+  formatDateForAPI,
+} from '@/shared/utils/timezone';
+import type { ReviewStats } from '@/shared/services/reviewService';
 
 interface PropertyDetailsPageProps {
   property: any;
@@ -102,7 +110,10 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   } | null>(null);
   const [isRefreshingScam, setIsRefreshingScam] = useState(false);
   const [isRiskAssessmentCollapsed, setIsRiskAssessmentCollapsed] = useState(false);
+  const [isScamOverviewCollapsed, setIsScamOverviewCollapsed] = useState(false);
+  const [isScamReasonsCollapsed, setIsScamReasonsCollapsed] = useState(false);
   const [marketDataNotice, setMarketDataNotice] = useState<string | null>(null);
+  const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
 
   useEffect(() => {
     checkWishlistStatus();
@@ -197,6 +208,180 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
   const effectiveScamExplanations = latestScamData?.scam_explanations ?? property.scam_explanations;
   const effectiveScamCheckedAt = latestScamData?.scam_checked_at ?? property.scam_checked_at;
   const hasScamResult = effectiveScamPrediction !== null && effectiveScamPrediction !== undefined;
+
+  const getFeatureNormalRange = (feature: string): string => {
+    const key = String(feature || '').toLowerCase();
+    if (key === 'priceratio') return '0.90x to 1.05x market rent';
+    if (key === 'depositratio') return '1.0x to 2.5x monthly market rent';
+    if (key === 'reputationscore') return '50 to 100';
+    if (key === 'nationalitymismatch') return '0 (no mismatch)';
+    if (key === 'thumbsratio') return '0.6 to 1.0 positive ratio';
+    if (key === 'averagereviewrating') return '3.5 to 5.0 out of 5';
+    if (key === 'descriptionscamscore') return '0.0 to 0.44';
+    return 'Varies by context';
+  };
+
+  const getReasonSeverity = (
+    feature: string | undefined,
+    direction: string | undefined,
+    impact: string | undefined,
+    overallProbability: number
+  ): 'high' | 'moderate' | 'low' => {
+    const featureKey = String(feature || '').toLowerCase();
+    const text = String(impact || '').toLowerCase();
+
+    const numberMatches = text.match(/\d+(?:\.\d+)?/g) || [];
+    const firstNumber = numberMatches.length > 0 ? Number(numberMatches[0]) : NaN;
+
+    if (featureKey === 'priceratio') {
+      if (Number.isFinite(firstNumber)) {
+        if (firstNumber >= 0.9 && firstNumber <= 1.05) return 'low';
+        return 'high';
+      }
+      return direction === 'decreases' ? 'low' : 'high';
+    }
+
+    if (featureKey === 'depositratio' && Number.isFinite(firstNumber)) {
+      if (firstNumber < 0.85 || firstNumber > 2.7) return 'high';
+      if (firstNumber < 1.0 || firstNumber > 2.5) return 'moderate';
+      return 'low';
+    }
+
+    if (featureKey === 'reputationscore' && Number.isFinite(firstNumber)) {
+      if (firstNumber < 30) return 'high';
+      if (firstNumber < 50) return 'moderate';
+      return 'low';
+    }
+
+    if (featureKey === 'descriptionscamscore' && Number.isFinite(firstNumber)) {
+      if (firstNumber >= 0.70) return 'high';
+      if (firstNumber >= 0.45) return 'moderate';
+      return 'low';
+    }
+
+    if (featureKey === 'thumbsratio') {
+      if (hasLiveReviewEvidence && reviewStats) {
+        if (reviewStats.thumbsDown > reviewStats.thumbsUp) return 'high';
+        if (reviewStats.thumbsDown > 0) return 'moderate';
+        if (reviewStats.totalReviews < 3) return 'low';
+      }
+      if (text.includes('new listing')) return 'low';
+      if (Number.isFinite(firstNumber)) {
+        if (firstNumber < 0.4) return 'high';
+        if (firstNumber <= 0.6) return 'moderate';
+        return 'low';
+      }
+    }
+
+    if (featureKey === 'averagereviewrating' && hasLiveReviewEvidence && reviewStats) {
+      if (reviewStats.averageRating < 2.8) return 'high';
+      if (reviewStats.thumbsDown > 0 || reviewStats.totalReviews < 3 || reviewStats.averageRating < 4.0) return 'moderate';
+      return 'low';
+    }
+
+    if (featureKey === 'averagereviewrating' && text.includes('new listing')) {
+      return 'low';
+    }
+
+    if (featureKey === 'averagereviewrating' && Number.isFinite(firstNumber)) {
+      if (firstNumber < 2.8) return 'high';
+      if (firstNumber < 4.0) return 'moderate';
+      return 'low';
+    }
+
+    if (featureKey === 'nationalitymismatch') {
+      if (text.includes('present') || text.includes('mismatch')) return 'high';
+      return 'low';
+    }
+
+    if (direction === 'decreases') return 'low';
+    if (direction === 'neutral') return overallProbability >= 0.5 ? 'moderate' : 'low';
+
+    const highSignals = [
+      'extremely high',
+      'far below market',
+      'exceeds 2x legal limit',
+      'high (',
+      'mostly negative reactions',
+      'low landlord reputation',
+      'description nlp scam score is high',
+    ];
+    if (highSignals.some(s => text.includes(s))) return 'high';
+    return 'moderate';
+  };
+
+  const getSeverityVisual = (severity: 'high' | 'moderate' | 'low') => {
+    if (severity === 'high') return { icon: '🔴', textClass: 'text-red-700' };
+    if (severity === 'moderate') return { icon: '🟡', textClass: 'text-yellow-700' };
+    return { icon: '🟢', textClass: 'text-green-700' };
+  };
+
+  const getLiveReviewImpact = (feature: string, fallbackImpact?: string) => {
+    const featureKey = String(feature || '').toLowerCase();
+    if (!hasLiveReviewEvidence || !reviewStats) return fallbackImpact;
+
+    if (featureKey === 'averagereviewrating') {
+      const { averageRating, totalReviews, thumbsUp, thumbsDown } = reviewStats;
+
+      if (totalReviews <= 1) {
+        return `Only ${totalReviews} review is available so far; current average rating is ${averageRating.toFixed(1)}/5, so this remains a weak signal`;
+      }
+
+      if (thumbsDown > 0 && thumbsUp > 0) {
+        return `Reviews are mixed so far: average rating is ${averageRating.toFixed(1)}/5 across ${totalReviews} reviews`;
+      }
+
+      if (thumbsDown > thumbsUp) {
+        return `Review trend is negative: average rating is ${averageRating.toFixed(1)}/5 across ${totalReviews} reviews`;
+      }
+
+      if (thumbsDown > 0) {
+        return `Average rating is ${averageRating.toFixed(1)}/5 across ${totalReviews} reviews, but there is already some negative feedback`;
+      }
+
+      if (totalReviews < 3) {
+        return `Average rating is ${averageRating.toFixed(1)}/5, but it is based on only ${totalReviews} reviews so far`;
+      }
+
+      return `Average rating is consistently positive at ${averageRating.toFixed(1)}/5 across ${totalReviews} reviews`;
+    }
+
+    if (featureKey === 'thumbsratio') {
+      const { totalReviews, thumbsUp, thumbsDown } = reviewStats;
+
+      if (totalReviews <= 1) {
+        return `Only ${totalReviews} review is available so far, so thumbs sentiment is still a weak signal`;
+      }
+
+      if (thumbsDown > 0 && thumbsUp > 0) {
+        return `Thumbs feedback is mixed so far: ${thumbsUp} positive and ${thumbsDown} negative across ${totalReviews} reviews`;
+      }
+
+      if (thumbsDown > thumbsUp) {
+        return `Thumbs feedback is leaning negative: ${thumbsUp} positive and ${thumbsDown} negative`;
+      }
+
+      if (totalReviews < 3) {
+        return `Thumbs feedback is positive so far, but based on only ${totalReviews} reviews`;
+      }
+
+      return `Thumbs feedback is consistently positive: ${thumbsUp} positive and ${thumbsDown} negative`;
+    }
+
+    return fallbackImpact;
+  };
+
+  const hasLiveReviewEvidence = (reviewStats?.totalReviews || 0) > 0;
+  const visibleScamFactors = ((effectiveScamSummary?.top_factors || effectiveScamExplanations || []) as Array<{
+    feature: string;
+    score?: number;
+    direction?: string;
+    impact?: string;
+  }>).filter((factor) => {
+    const key = String(factor?.feature || '').toLowerCase();
+    const isReviewFactor = key === 'averagereviewrating' || key === 'thumbsratio';
+    return hasLiveReviewEvidence || !isReviewFactor;
+  });
 
   const checkWishlistStatus = async () => {
     try {
@@ -809,71 +994,97 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                   </div>
                 ) : (
                   <>
-                    <div className="space-y-1 text-sm mb-3">
-                      <p className="font-semibold">
-                        🎯 Prediction:{' '}
-                        <span className={effectiveScamPrediction ? 'text-red-700' : 'text-green-700'}>
-                          {effectiveScamPrediction ? '❌ SCAM' : '✅ LEGITIMATE'}
-                        </span>
-                      </p>
-                      <p>
-                        Confidence:{' '}
-                        <strong>
-                          {effectiveScamSummary?.confidence !== undefined
-                            ? (effectiveScamSummary.confidence * 100).toFixed(1)
-                            : (((effectiveScamPrediction ? (effectiveScamProbability || 0) : (1 - (effectiveScamProbability || 0))) * 100).toFixed(1))}%
-                        </strong>
-                      </p>
-                      <p>
-                        Scam Probability:{' '}
-                        <strong>{((effectiveScamSummary?.scam_probability ?? effectiveScamProbability ?? 0) * 100).toFixed(1)}%</strong>
-                      </p>
-                      {effectiveScamCheckedAt && (
-                        <p className="text-xs text-gray-500">
-                          Last checked: {new Date(effectiveScamCheckedAt).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-
-                    {(effectiveScamSummary?.top_factors?.length > 0 || effectiveScamExplanations?.length > 0) && (
-                      <div className="border-t pt-3">
-                        <p className="font-medium mb-2 text-gray-700">📊 Top Contributing Factors:</p>
-                        <ul className="space-y-2">
-                          {(effectiveScamSummary?.top_factors || effectiveScamExplanations || []).slice(0, 5).map((e: { feature: string; score?: number; direction?: string; impact?: string }, i: number) => (
-                            <li key={i} className="flex items-start gap-2 text-sm">
-                              <span className="text-gray-500 mt-0.5">{i + 1}.</span>
-                              <div className="flex-1">
-                                <p className="mb-1">
-                                  <strong className="text-gray-800">
-                                    {(e.direction === 'decreases' ? '🟢' : e.direction === 'increases' ? '🔴' : '⚪')} {e.feature}
-                                  </strong>
-                                </p>
-                                <div className="text-xs text-gray-600 space-y-0.5">
-                                  {typeof e.score === 'number' && (
-                                    <p className="font-mono font-semibold">
-                                      <span className={e.score >= 0 ? 'text-red-600' : 'text-green-600'}>
-                                        {e.score >= 0 ? '+' : ''}{e.score.toFixed(3)}
-                                      </span>
-                                    </p>
-                                  )}
-                                  <p className="text-gray-600 capitalize">
-                                    {e.direction === 'decreases' ? '↓ ' : e.direction === 'increases' ? '↑ ' : '→ '}
-                                    {e.direction === 'decreases' 
-                                      ? 'Decreases scam probability' 
-                                      : e.direction === 'increases' 
-                                        ? 'Increases scam probability' 
-                                        : 'Neutral impact'}
-                                  </p>
-                                  {e.impact && e.impact !== (e.direction === 'decreases' ? 'Decreases scam probability' : 'Increases scam probability') && (
-                                    <p className="text-gray-500">{e.impact}</p>
-                                  )}
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                    <div className="space-y-3">
+                      <div className="border rounded-md bg-white/70">
+                        <div className="flex items-center justify-between px-3 py-2 border-b">
+                          <p className="font-medium text-gray-800">Scam Overview</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsScamOverviewCollapsed(!isScamOverviewCollapsed)}
+                            className="h-7 w-7 p-0"
+                            title={isScamOverviewCollapsed ? 'Expand overview' : 'Collapse overview'}
+                          >
+                            {isScamOverviewCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                        {!isScamOverviewCollapsed && (
+                          <div className="px-3 py-2 space-y-1 text-sm">
+                            <p className="font-semibold">
+                              🎯 Prediction:{' '}
+                              <span className={effectiveScamPrediction ? 'text-red-700' : 'text-green-700'}>
+                                {effectiveScamPrediction ? '❌ SCAM' : '✅ LEGITIMATE'}
+                              </span>
+                            </p>
+                            <p>
+                              Scam Probability:{' '}
+                              <strong>{((effectiveScamSummary?.scam_probability ?? effectiveScamProbability ?? 0) * 100).toFixed(1)}%</strong>
+                            </p>
+                            {effectiveScamCheckedAt && (
+                              <p className="text-xs text-gray-500">
+                                Last checked: {new Date(effectiveScamCheckedAt).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    )}
+
+                      <div className="border rounded-md bg-white/70">
+                        <div className="flex items-center justify-between px-3 py-2 border-b">
+                          <p className="font-medium text-gray-800">Check Scam Reasons</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsScamReasonsCollapsed(!isScamReasonsCollapsed)}
+                            className="h-7 w-7 p-0"
+                            title={isScamReasonsCollapsed ? 'Expand reasons' : 'Collapse reasons'}
+                          >
+                            {isScamReasonsCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                        {!isScamReasonsCollapsed && (
+                          <div className="px-3 py-2">
+                            <p className="text-xs text-gray-600 mb-2">
+                              Reasons are grouped by severity so you can quickly spot high-risk vs near-legit signals.
+                            </p>
+                            {visibleScamFactors.length > 0 ? (
+                              <ul className="space-y-2">
+                                {visibleScamFactors.slice(0, 5).map((e: { feature: string; score?: number; direction?: string; impact?: string }, i: number) => {
+                                  const overallProb = (effectiveScamSummary?.scam_probability ?? effectiveScamProbability ?? 0);
+                                  const liveImpact = getLiveReviewImpact(e.feature, e.impact);
+                                  const severity = getReasonSeverity(e.feature, e.direction, liveImpact, overallProb);
+                                  const visual = getSeverityVisual(severity);
+                                  return (
+                                  <li key={i} className="flex items-start gap-2 text-sm">
+                                    <span className="text-gray-500 mt-0.5">{i + 1}.</span>
+                                    <div className="flex-1">
+                                      <p className="mb-1">
+                                        <strong className={`${visual.textClass}`}>
+                                          {visual.icon} {e.feature}
+                                        </strong>
+                                      </p>
+                                      <div className="text-xs text-gray-600 space-y-0.5">
+                                        <p className={`${visual.textClass} font-medium`}>
+                                          Risk signal: {severity === 'high' ? 'High' : severity === 'moderate' ? 'Moderate' : 'Low'}
+                                        </p>
+                                        {liveImpact && (
+                                          <p className="text-gray-500">{liveImpact}</p>
+                                        )}
+                                        <p className="text-gray-500">
+                                          Normal range: {getFeatureNormalRange(e.feature)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </li>
+                                );})}
+                              </ul>
+                            ) : (
+                              <p className="text-xs text-gray-500">No reason details available yet.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     {effectiveScamPrediction && (
                       <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded">
                         <p className="text-sm text-red-800 font-medium">
@@ -1196,7 +1407,11 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
               </TabsContent>
 
               <TabsContent value="reviews" className="mt-6">
-                <PropertyReviewSection propertyId={property.id} />
+                <PropertyReviewSection
+                  propertyId={property.id}
+                  onReviewChanged={refreshScamDataManually}
+                  onStatsChange={setReviewStats}
+                />
               </TabsContent>
             </Tabs>
 
@@ -1213,7 +1428,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                       <AvatarImage src={property.landlord.profileImage || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400'} />
                       <AvatarFallback>{property.landlord.user?.name?.split(' ').map((n: string) => n[0]).join('') || 'LL'}</AvatarFallback>
                     </Avatar>
-                    {property.landlord.reputationScore >= 80 && (
+                    {property.landlord.reputationScore >= 70 && (
                       <div className="absolute -bottom-2 -right-2 bg-green-500 rounded-full p-2 border-4 border-white shadow-lg">
                         <Shield className="w-5 h-5 text-white" />
                       </div>
@@ -1222,7 +1437,7 @@ export function PropertyDetailsPage({ property, onClose, onNavigate }: PropertyD
                   <div className="flex-1 w-full">
                     <div className="flex items-center gap-2 mb-4">
                       <h4 className="text-lg">{property.landlord.user?.name || 'Landlord'}</h4>
-                      {property.landlord.reputationScore >= 80 && (
+                      {property.landlord.reputationScore >= 70 && (
                         <Badge className="bg-green-500 hover:bg-green-600 text-white">
                           <Shield className="w-3 h-3 mr-1" />
                           Verified

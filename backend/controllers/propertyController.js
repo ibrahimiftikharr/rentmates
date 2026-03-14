@@ -1,5 +1,6 @@
 const Property = require('../models/propertyModel');
 const Landlord = require('../models/landlordModel');
+const Review = require('../models/reviewModel');
 const { cloudinary } = require('../config/cloudinary');
 const { calculate_expected_rent } = require('../utils/marketRent');
 const { predictScam } = require('../utils/mlClient');
@@ -23,6 +24,56 @@ function clearScamAssessment(property) {
   property.scam_checked_at = new Date();
 }
 
+function filterNoReviewFactors(explanations, isNewListing) {
+  if (!Array.isArray(explanations)) return [];
+  if (!isNewListing) return explanations;
+
+  const reviewFeatures = new Set(['averagereviewrating', 'thumbsratio']);
+  return explanations.filter(exp => !reviewFeatures.has(String(exp?.feature || '').toLowerCase()));
+}
+
+function shapeMlResult(mlres, payload) {
+  const isNewListing = Boolean(payload?.isNewListing);
+
+  const processedExplanations = filterNoReviewFactors(
+    (mlres?.scam_explanations || []).map(exp => ({
+      feature: exp.feature || 'Unknown',
+      impact: exp.impact || '',
+      score: typeof exp.score === 'number' ? exp.score : null,
+      direction: exp.direction || 'neutral'
+    })),
+    isNewListing
+  );
+
+  const summary = mlres?.summary
+    ? {
+        ...mlres.summary,
+        top_factors: filterNoReviewFactors(mlres.summary.top_factors || [], isNewListing)
+      }
+    : null;
+
+  return {
+    scam_prediction: mlres?.scam_prediction,
+    scam_probability: mlres?.scam_probability,
+    scam_explanations: processedExplanations,
+    scam_summary: summary,
+  };
+}
+
+function normalizeBillPrices(value) {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return {
+    wifi: parseFloat(value.wifi) || 0,
+    water: parseFloat(value.water) || 0,
+    electricity: parseFloat(value.electricity) || 0,
+    gas: parseFloat(value.gas) || 0,
+    councilTax: parseFloat(value.councilTax) || 0,
+  };
+}
+
 // Asynchronous function to run ML prediction without blocking property creation
 async function predictScamAsync(property, landlord) {
   try {
@@ -34,26 +85,20 @@ async function predictScamAsync(property, landlord) {
     }
 
     // Keep create/update/refresh paths aligned through one payload builder.
-    const payload = buildMlPayload(property, landlord);
+    const payload = await buildMlPayload(property, landlord);
 
     const mlres = await predictScam(payload);
 
-    // Ensure explanations have all required fields
-    const processedExplanations = (mlres.scam_explanations || []).map(exp => ({
-      feature: exp.feature || 'Unknown',
-      impact: exp.impact || '',
-      score: typeof exp.score === 'number' ? exp.score : null,
-      direction: exp.direction || 'neutral'
-    }));
+    const shaped = shapeMlResult(mlres, payload);
 
-    console.log(`📊 Processed explanations (${processedExplanations.length} total):`, JSON.stringify(processedExplanations.slice(0, 3), null, 2));
+    console.log(`📊 Processed explanations (${shaped.scam_explanations.length} total):`, JSON.stringify(shaped.scam_explanations.slice(0, 3), null, 2));
 
     // Update property with ML results
     await Property.findByIdAndUpdate(property._id, {
-      scam_prediction: mlres.scam_prediction,
-      scam_probability: mlres.scam_probability,
-      scam_explanations: processedExplanations,
-      scam_summary: mlres.summary || null,
+      scam_prediction: shaped.scam_prediction,
+      scam_probability: shaped.scam_probability,
+      scam_explanations: shaped.scam_explanations,
+      scam_summary: shaped.scam_summary,
       scam_checked_at: new Date()
     });
 
@@ -77,8 +122,75 @@ async function predictScamAsync(property, landlord) {
   }
 }
 
-function buildMlPayload(property, landlord) {
-  const isNewProperty = (property.thumbsUpCount || 0) === 0 && (property.thumbsDownCount || 0) === 0;
+async function getPropertyReviewSignals(propertyId) {
+  if (!propertyId) {
+    return {
+      averageRating: 0,
+      thumbsUp: 0,
+      thumbsDown: 0,
+      reviewsText: ''
+    };
+  }
+
+  try {
+    const [stats] = await Review.aggregate([
+      { $match: { property: propertyId } },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$rating' },
+          thumbsUp: {
+            $sum: { $cond: [{ $eq: ['$thumbsUpDown', 'up'] }, 1, 0] }
+          },
+          thumbsDown: {
+            $sum: { $cond: [{ $eq: ['$thumbsUpDown', 'down'] }, 1, 0] }
+          },
+          reviewTexts: { $push: '$reviewText' }
+        }
+      }
+    ]);
+
+    if (!stats) {
+      return {
+        averageRating: 0,
+        thumbsUp: 0,
+        thumbsDown: 0,
+        reviewsText: ''
+      };
+    }
+
+    const reviewsText = (stats.reviewTexts || [])
+      .filter(Boolean)
+      .slice(0, 40)
+      .join(' ')
+      .slice(0, 5000);
+
+    return {
+      averageRating: Number(stats.averageRating) || 0,
+      thumbsUp: Number(stats.thumbsUp) || 0,
+      thumbsDown: Number(stats.thumbsDown) || 0,
+      reviewsText
+    };
+  } catch (error) {
+    console.warn('Review signal aggregation failed:', error.message);
+    return {
+      averageRating: 0,
+      thumbsUp: 0,
+      thumbsDown: 0,
+      reviewsText: ''
+    };
+  }
+}
+
+async function buildMlPayload(property, landlord) {
+  const reviewSignals = await getPropertyReviewSignals(property._id);
+  const storedThumbsUp = Number(property.thumbsUpCount);
+  const storedThumbsDown = Number(property.thumbsDownCount);
+  const thumbsUpCount = reviewSignals.thumbsUp ?? (Number.isFinite(storedThumbsUp) ? storedThumbsUp : 0);
+  const thumbsDownCount = reviewSignals.thumbsDown ?? (Number.isFinite(storedThumbsDown) ? storedThumbsDown : 0);
+  const reviewsText = String(reviewSignals.reviewsText || property.reviews || '');
+  const hasReviewEvidence = (thumbsUpCount + thumbsDownCount) > 0 || reviewsText.trim().length > 0;
+  const isNewProperty = (thumbsUpCount === 0) && (thumbsDownCount === 0) && !hasReviewEvidence;
   
   // If market lookup is unavailable, keep the ML input neutral instead of force-flagging.
   let priceRatio = property.priceRatio;
@@ -88,20 +200,35 @@ function buildMlPayload(property, landlord) {
   }
   
   // Strict type coercion to ensure ML service receives correct data types
+  const averageReviewRatingRaw = Number(
+    reviewSignals.averageRating ||
+    property.averageReviewRating ||
+    property.average_review_rating ||
+    property.avgRating ||
+    0
+  );
+  const averageReviewRating = isNewProperty
+    ? 3.0
+    : (Number.isFinite(averageReviewRatingRaw) && averageReviewRatingRaw > 0 ? averageReviewRatingRaw : 3.0);
+
+  const normalizedDepositRatio = Number.isFinite(Number(property.depositRatio))
+    ? Number(property.depositRatio)
+    : 1.0; // Neutral when market-based deposit ratio is unavailable.
+
   const payload = {
     priceRatio: parseFloat(priceRatio) || 1.0,
-    depositRatio: parseFloat(property.depositRatio) || 0.0,
-    depositTooHigh: Boolean(property.depositTooHigh),
-    landlordVerified: !!(landlord?.governmentId && landlord?.govIdDocument),
+    depositRatio: normalizedDepositRatio,
     reputationScore: parseFloat(landlord?.reputationScore) || 0.0,
     nationalityMismatch: false,
-    thumbsRatio: parseFloat(isNewProperty ? 0.5 : (property.thumbsRatio || 0.0)),
-    minStayMonths: parseInt(property.minimumStay, 10) || 12,
-    description_length: parseInt(property.description_length, 10) || 0,
-    description_word_count: parseInt(property.description_word_count, 10) || 0,
-    has_scam_keywords: Boolean(property.has_scam_keywords),
-    review_count: parseInt(property.review_count, 10) || 0,
-    isNewListing: isNewProperty
+    // Symmetric Laplace smoothing so first positive/negative review changes the signal.
+    thumbsRatio: isNewProperty
+      ? 0.5
+      : ((thumbsUpCount + 1) / (thumbsUpCount + thumbsDownCount + 2)),
+    averageReviewRating,
+    isNewListing: isNewProperty,
+    // Send raw text for NLP scoring in ML service.
+    description: String(property.description || ''),
+    reviews: reviewsText
   };
   
   return payload;
@@ -155,22 +282,34 @@ function computeFeatures(prop) {
   prop.amenitiesCount = (prop.amenities || []).length;
   // bills included count
   prop.billsIncludedCount = (prop.billsIncluded || []).length;
-  // bills extra cost (sum of all billsCost values)
-  let extra = 0;
-  if (prop.billsCost) {
-    for (let v of Object.values(prop.billsCost)) {
-      extra += parseFloat(v) || 0;
+  
+  // Calculate bills that ARE included in rent (to add to market baseline for fair comparison)
+  let includedBillsCost = 0;
+  if (prop.billsCost && prop.billsIncluded && prop.billsIncluded.length > 0) {
+    const includedSet = new Set(
+      (prop.billsIncluded || []).map(b => String(b).toLowerCase().trim())
+    );
+    for (const [billName, cost] of Object.entries(prop.billsCost)) {
+      if (includedSet.has(billName.toLowerCase())) {
+        includedBillsCost += parseFloat(cost) || 0;
+      }
     }
   }
-  prop.billsExtraCost = extra;
-  // included bills total
-  let totalBillsCost = 0;
+  prop.includedBillsTotal = includedBillsCost;
+  
+  // Calculate bills that are NOT included (extra costs tenant pays separately)
+  let excludedBillsCost = 0;
   if (prop.billsCost) {
-    for (let v of Object.values(prop.billsCost)) {
-      totalBillsCost += parseFloat(v) || 0;
+    const includedSet = new Set(
+      (prop.billsIncluded || []).map(b => String(b).toLowerCase().trim())
+    );
+    for (const [billName, cost] of Object.entries(prop.billsCost)) {
+      if (!includedSet.has(billName.toLowerCase())) {
+        excludedBillsCost += parseFloat(cost) || 0;
+      }
     }
   }
-  prop.includedBillsTotal = totalBillsCost - prop.billsExtraCost;
+  prop.billsExtraCost = excludedBillsCost;
 
   // Derive location from address when possible to avoid missing market-rent lookups.
   const normalizedLocation = deriveCityCountry(prop.address, prop.city, prop.country);
@@ -180,6 +319,7 @@ function computeFeatures(prop) {
   }
 
   // Keep market rent and price ratio in sync with latest property fields.
+  let depositBaselineRent = null;
   if (prop.city && prop.country && prop.bedrooms) {
     try {
       const market = calculate_expected_rent(
@@ -188,9 +328,10 @@ function computeFeatures(prop) {
         parseInt(prop.bedrooms) || 0,
         prop.type,
         !!prop.furnished,
-        prop.billsExtraCost || 0
+        prop.includedBillsTotal || 0  // Use INCLUDED bills to match what's in listed price
       );
       if (hasCityLevelMarketData(market) && market.area_average_rent) {
+        depositBaselineRent = market.base_lookup_rent || null;
         prop.areaAverageRent = market.area_average_rent;
       } else {
         prop.areaAverageRent = null;
@@ -201,14 +342,15 @@ function computeFeatures(prop) {
     }
   }
 
-  // deposit ratio
-  if (prop.deposit && prop.price) {
-    prop.depositRatio = prop.deposit / prop.price;
-    // flag suspiciously high deposit
-    prop.depositTooHigh = prop.depositRatio > 1.5;
+  // deposit ratio: compare requested deposit against lookup base market rent (without bills).
+  const depositDenominator = depositBaselineRent || prop.areaAverageRent;
+  if (prop.deposit && depositDenominator) {
+    prop.depositRatio = prop.deposit / depositDenominator;
+    // Keep backward-compatible schema field updated from ratio threshold.
+    prop.depositFlag = prop.depositRatio < 1.0 || prop.depositRatio > 2.5;
   } else {
     prop.depositRatio = null;
-    prop.depositTooHigh = false;
+    prop.depositFlag = false;
   }
   // price ratio (using areaAverageRent)
   if (prop.areaAverageRent && prop.price) {
@@ -216,21 +358,19 @@ function computeFeatures(prop) {
   } else {
     prop.priceRatio = null;
   }
-  // thumbs ratio
-  prop.thumbsRatio = (prop.thumbsUpCount || 0) / ((prop.thumbsUpCount || 0) + (prop.thumbsDownCount || 0) + 1);
-  // has reviews
-  prop.hasReviews = (prop.reviews || '').length > 2;
-  // is new listing
-  prop.isNewListing = ((prop.thumbsUpCount || 0) === 0) && ((prop.thumbsDownCount || 0) === 0);
-  // scam keyword count
-  const scamKeywords = ['urgent', 'amazing', 'wire transfer', 'western union', 'overseas', 'no viewing', 'cash only', 'cryptocurrency'];
-  prop.scamKeywordCount = scamKeywords.reduce((count, kw) => count + ((prop.description || '').toLowerCase().includes(kw.toLowerCase()) ? 1 : 0), 0);
-
-  // Aggregated text features for hybrid approach
-  prop.description_length = (prop.description || '').length;
-  prop.description_word_count = (prop.description || '').split(/\s+/).filter(word => word.length > 0).length;
-  prop.has_scam_keywords = /urgent|wire|paypal|bitcoin|western union|gift card/i.test(prop.description || '');
-  prop.review_count = (prop.reviews || '').split(/\s+/).filter(word => word.length > 0).length;
+  // thumbs ratio (symmetric smoothing keeps no-review state neutral at 0.5).
+  prop.thumbsRatio = ((prop.thumbsUpCount || 0) + 1) / ((prop.thumbsUpCount || 0) + (prop.thumbsDownCount || 0) + 2);
+  // Review evidence should require either thumb activity or actual review text.
+  prop.hasReviews = ((prop.thumbsUpCount || 0) + (prop.thumbsDownCount || 0)) > 0 || (prop.reviews || '').trim().length > 2;
+  // Treat as new only when no review evidence exists.
+  prop.isNewListing = !prop.hasReviews;
+  
+  // Keep only compact metadata signals; text is handled by NLP inside ML service.
+  const basicScamKeywords = ['urgent', 'wire transfer', 'bitcoin', 'low price', 'cheap'];
+  prop.scamKeywordCount = basicScamKeywords.reduce(
+    (count, kw) => count + ((prop.description || '').toLowerCase().includes(kw.toLowerCase()) ? 1 : 0),
+    0
+  );
 }
 
 const createProperty = async (req, res) => {
@@ -293,8 +433,8 @@ const createProperty = async (req, res) => {
       return value;
     };
 
-    // Compute extra bills cost (bills NOT included in base rent)
-    let billsExtraTotal = 0;
+    // Compute included bills cost (bills INCLUDED in base rent for market comparison)
+    let billsIncludedTotal = 0;
     const parsedBillsIncludedRaw = parseIfString(billsIncluded);
     const parsedBillsIncluded = Array.isArray(parsedBillsIncludedRaw) ? parsedBillsIncludedRaw : [];
     const billKeyMap = { 'wifi': 'wifi', 'water': 'water', 'electricity': 'electricity', 'gas': 'gas', 'council tax': 'councilTax', 'counciltax': 'councilTax' };
@@ -306,10 +446,10 @@ const createProperty = async (req, res) => {
       if (costObj) {
         for (const billName of Object.keys(billKeyMap)) {
           const billKey = billKeyMap[billName];
-          // Only count bills that are NOT in the billsIncluded array
+          // Only count bills that ARE in the billsIncluded array (to add to market baseline)
           const isIncluded = parsedBillsIncluded.some(b => b.toLowerCase() === billName);
-          if (!isIncluded && costObj[billKey]) {
-            billsExtraTotal += parseFloat(costObj[billKey]) || 0;
+          if (isIncluded && costObj[billKey]) {
+            billsIncludedTotal += parseFloat(costObj[billKey]) || 0;
           }
         }
       }
@@ -329,7 +469,7 @@ const createProperty = async (req, res) => {
         bedroomCount,
         normalizedType,
         furnishedBool,
-        billsExtraTotal
+        billsIncludedTotal
       );
     } catch (marketErr) {
       console.warn('Market rent lookup failed during createProperty:', marketErr.message);
@@ -381,9 +521,9 @@ const createProperty = async (req, res) => {
     // Add property to landlord's properties array
     landlord.properties.push(property._id);
     
-    // Increase reputation score for adding a property
-    landlord.reputationScore = Math.min(100, landlord.reputationScore + 5);
-    await landlord.save();
+    // // Increase reputation score for adding a property
+    // landlord.reputationScore = Math.min(100, landlord.reputationScore + 5);
+    // await landlord.save();
 
     console.log('✓ Property created:', property.title);
 
@@ -480,6 +620,7 @@ const getMyProperties = async (req, res) => {
         priceRatio: prop.priceRatio,
         amenitiesCount: prop.amenitiesCount,
         billsIncludedCount: prop.billsIncludedCount,
+        billPrices: prop.billsCost,
         billsExtraCost: prop.billsExtraCost,
         views: prop.views,
         wishlistCount: prop.wishlistCount,
@@ -541,6 +682,13 @@ const getProperty = async (req, res) => {
       
       // Return property with sanitized landlord data
       const propertyObj = property.toObject();
+      propertyObj.billPrices = propertyObj.billsCost || {
+        wifi: 0,
+        water: 0,
+        electricity: 0,
+        gas: 0,
+        councilTax: 0,
+      };
       propertyObj.landlord = sanitizedLandlord;
       
       return res.status(200).json({
@@ -551,7 +699,16 @@ const getProperty = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      property
+      property: {
+        ...property.toObject(),
+        billPrices: property.billsCost || {
+          wifi: 0,
+          water: 0,
+          electricity: 0,
+          gas: 0,
+          councilTax: 0,
+        },
+      }
     });
   } catch (error) {
     console.error('Get property error:', error);
@@ -581,7 +738,7 @@ const updateProperty = async (req, res) => {
     const allowedUpdates = [
       'title', 'description', 'type', 'address', 'city', 'country',
       'university', 'distance', 'bedrooms', 'bathrooms', 'area', 'furnished',
-      'price', 'deposit', 'amenities', 'billsIncluded', 'billPrices', 'availableFrom',
+      'price', 'deposit', 'amenities', 'billsIncluded', 'billPrices', 'billsCost', 'availableFrom',
       'minimumStay', 'maximumStay', 'availabilityDates', 'moveInBy', 'houseRules', 'status'
     ];
 
@@ -593,6 +750,20 @@ const updateProperty = async (req, res) => {
           property[field] = new Date(req.body[field]);
         } else if (field === 'type') {
           property[field] = normalizePropertyType(req.body[field]);
+        } else if (field === 'billPrices' || field === 'billsCost') {
+          const raw = req.body.billsCost ?? req.body.billPrices;
+          const parsed = typeof raw === 'string' ? (() => {
+            try {
+              return JSON.parse(raw);
+            } catch (e) {
+              return null;
+            }
+          })() : raw;
+
+          const normalized = normalizeBillPrices(parsed);
+          if (normalized) {
+            property.billsCost = normalized;
+          }
         } else {
           property[field] = req.body[field];
         }
@@ -608,7 +779,7 @@ const updateProperty = async (req, res) => {
       console.log('🏠 House rules updated:', property.houseRules);
     }
     if (req.body.billPrices || req.body.billsCost) {
-      console.log('💰 Bill prices updated:', property.billPrices || req.body.billsCost);
+      console.log('💰 Bill prices updated:', property.billsCost || req.body.billsCost || req.body.billPrices);
     }
 
     // recompute engineered features now that updates are applied
@@ -621,12 +792,13 @@ const updateProperty = async (req, res) => {
           clearScamAssessment(property);
           console.warn(`⚠️  Skipping ML scoring for "${property.title}" during update: city market data unavailable`);
         } else {
-          const payload = buildMlPayload(property, landlord);
+          const payload = await buildMlPayload(property, landlord);
           const mlres = await predictScam(payload);
-          property.scam_prediction = mlres.scam_prediction;
-          property.scam_probability = mlres.scam_probability;
-          property.scam_explanations = mlres.scam_explanations || [];
-          property.scam_summary = mlres.summary || null;
+          const shaped = shapeMlResult(mlres, payload);
+          property.scam_prediction = shaped.scam_prediction;
+          property.scam_probability = shaped.scam_probability;
+          property.scam_explanations = shaped.scam_explanations;
+          property.scam_summary = shaped.scam_summary;
           property.scam_checked_at = new Date();
         }
       } catch (mlErr) {
@@ -724,6 +896,8 @@ const refreshPropertyScam = async (req, res) => {
       cityUsed: property.city || null,
       countryUsed: property.country || null,
       lookupSource: 'not_attempted',
+      lookupBaseRent: null,
+      includedBillsTotal: property.includedBillsTotal || 0,
       computedAreaAverageRent: property.areaAverageRent ?? null,
       finalPriceRatio: property.priceRatio ?? null
     };
@@ -738,10 +912,11 @@ const refreshPropertyScam = async (req, res) => {
         beds,
         property.type,
         !!property.furnished,
-        property.billsExtraCost || 0
+        property.includedBillsTotal || 0
       );
 
       refreshDebug.lookupSource = market.lookup_source || 'not_found';
+      refreshDebug.lookupBaseRent = market.base_lookup_rent ?? null;
 
       if (hasCityLevelMarketData(market) && market.area_average_rent) {
         property.areaAverageRent = market.area_average_rent;
@@ -779,7 +954,7 @@ const refreshPropertyScam = async (req, res) => {
     }
 
     const landlord = property.landlord;
-    const payload = buildMlPayload(property, landlord);
+    const payload = await buildMlPayload(property, landlord);
     let mlres;
     try {
       mlres = await predictScam(payload);
@@ -795,10 +970,11 @@ const refreshPropertyScam = async (req, res) => {
       });
     }
 
-    property.scam_prediction = mlres.scam_prediction;
-    property.scam_probability = mlres.scam_probability;
-    property.scam_explanations = mlres.scam_explanations || [];
-    property.scam_summary = mlres.summary || null;
+    const shaped = shapeMlResult(mlres, payload);
+    property.scam_prediction = shaped.scam_prediction;
+    property.scam_probability = shaped.scam_probability;
+    property.scam_explanations = shaped.scam_explanations;
+    property.scam_summary = shaped.scam_summary;
     property.scam_checked_at = new Date();
 
     await property.save();
@@ -875,6 +1051,7 @@ const getAllProperties = async (req, res) => {
         amenitiesCount: prop.amenitiesCount,
         billsIncluded: prop.billsIncluded,
         billsIncludedCount: prop.billsIncludedCount,
+        billPrices: prop.billsCost,
         billsCost: prop.billsCost,
         billsExtraCost: prop.billsExtraCost,
         mainImage: prop.mainImage,

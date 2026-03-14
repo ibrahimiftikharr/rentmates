@@ -61,7 +61,7 @@ const propertySchema = new mongoose.Schema({
   
   // Fraud Detection Fields
   priceRatio: { type: Number }, // price / area_average_rent - values > 1.3 or < 0.7 are suspicious
-  depositRatio: { type: Number }, // deposit amount divided by monthly price
+  depositRatio: { type: Number }, // listed deposit amount / monthly market rent baseline
   depositFlag: { type: Boolean, default: false }, // true if depositRatio outside normal range
 
   // scam inspection results

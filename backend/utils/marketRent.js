@@ -301,10 +301,10 @@ function getBaseRent(country, city, bedrooms) {
  * @param {string} city
  * @param {string} country
  * @param {number} bedrooms
- * @param {string} propertyType - flat/house/studio
- * @param {boolean} furnished
+ * @param {string} propertyType - kept for backward compatibility (not used in baseline)
+ * @param {boolean} furnished - kept for backward compatibility (not used in baseline)
  * @param {number} includedBillsTotal
- * @returns {{area_average_rent: number|null, price_ratio?:number, insight: string, lookup_source?: string, lookup_city?: string|null, lookup_country?: string|null}}
+ * @returns {{area_average_rent: number|null, base_lookup_rent?: number|null, included_bills_total?: number, price_ratio?:number, insight: string, lookup_source?: string, lookup_city?: string|null, lookup_country?: string|null}}
  */
 function calculate_expected_rent(city, country, bedrooms, propertyType, furnished, includedBillsTotal) {
   const details = getBaseRentDetails(country, city, bedrooms);
@@ -319,24 +319,18 @@ function calculate_expected_rent(city, country, bedrooms, propertyType, furnishe
     };
   }
 
-  // adjust by property type
-  let adjusted = baseRent;
-  if (propertyType === 'house') adjusted *= 1.15;
-  else if (propertyType === 'studio') adjusted *= 0.80;
-  // flats unchanged
-
-  // furnishing
-  if (furnished) adjusted *= 1.15;
-
-  // add bills
-  const expected = adjusted + (includedBillsTotal || 0);
+  // Baseline must remain the exact lookup value (unfurnished flat market benchmark).
+  const safeIncludedBills = Number.isFinite(includedBillsTotal) ? includedBillsTotal : 0;
+  const expected = baseRent + safeIncludedBills;
 
   const ratio = null; // price is not known here, compute externally if available
 
-  const insight = `Average rent for a ${bedrooms}-bedroom flat in ${city} is ${baseRent}. After adjustments, the expected rent is ${expected.toFixed(2)}.`;
+  const insight = `Lookup base rent for ${bedrooms}-bedroom in ${city} is ${baseRent}. Including listed in-rent bills (${safeIncludedBills.toFixed(2)}), effective market reference is ${expected.toFixed(2)}.`;
 
   return {
     area_average_rent: expected,
+    base_lookup_rent: baseRent,
+    included_bills_total: safeIncludedBills,
     price_ratio: ratio,
     lookup_source: details.lookupSource,
     lookup_city: details.matchedCity,

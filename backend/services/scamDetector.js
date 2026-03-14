@@ -144,7 +144,8 @@ class ScamDetector:
         
         # Calculate engineered features
         price_ratio = price / (area_avg_price + 1)
-        deposit_ratio = deposit / (price + 1)
+        # DepositRatio must be relative to market monthly rent, not listed price.
+        deposit_ratio = deposit / (area_avg_price + 1)
         thumbs_ratio = thumbs_up / (thumbs_up + thumbs_down + 1)
         scam_keyword_count = self._count_scam_keywords(description + ' ' + reviews_text)
         deposit_too_high = 1 if deposit_ratio > 1.5 else 0

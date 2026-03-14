@@ -2,112 +2,182 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pickle
 import numpy as np
-from typing import Optional, List
 import json
-import sys
+from typing import Optional, List, Dict
+import re
+from scam_runtime_logic import (
+    set_runtime_context,
+    compute_description_scam_score,
+    infer_risk_direction,
+    explanation_for_feature,
+)
 
 try:
     import shap
 except Exception:
     shap = None
 
-app = FastAPI(title="Scam Detection API", version="1.0.0")
+try:
+    from property_assessment import PropertyAssessment, MarketPriceLookup
+except ImportError:
+    PropertyAssessment = None
+    MarketPriceLookup = None
+    print("[STARTUP] property_assessment module not available (optional)")
+
+app = FastAPI(title="Scam Detection API", version="2.0.0")
 
 # Initialize model and explainer as None first
 model = None
 explainer = None
 selected_features = None
 startup_error = None
+property_assessor = None
+model_metadata = {}
+scaler_mean = None
+scaler_scale = None
 
-# Load the saved models and features
-try:
-    print("\n🔧 [STARTUP] Loading ML models...")
-    
+desc_vectorizer = None
+desc_text_model = None
+
+def _safe_float(value, default=0.0):
     try:
-        with open('scam_detector_hybrid.pkl', 'rb') as f:
-            model = pickle.load(f)
-        with open('hybrid_features.pkl', 'rb') as f:
-            selected_features = pickle.load(f)
-        print(f"✅ [STARTUP] Loaded hybrid model with {len(selected_features)} features")
-        print(f"📊 [STARTUP] Features: {selected_features[:10] if len(selected_features) > 10 else selected_features}")
-    except FileNotFoundError as e:
-        print(f"⚠️  [STARTUP] Model file not found: {e}")
-        raise RuntimeError(f"Model file not found: {e}")
-    except pickle.UnpicklingError as e:
-        # fall back to the original full-feature model and warn the user
-        print("\n[WARNING] [STARTUP] could not unpickle hybrid model (possible file corruption).")
-        print("[NOTE] Re-run the notebook saving cell and add '*.pkl binary' to .gitattributes")
-        print("[FALLBACK] Falling back to the original scam_detector.pkl for now.\n")
-        with open('scam_detector.pkl', 'rb') as f:
-            model = pickle.load(f)
-        # Use the correct feature names that match compute_features() order
-        selected_features = [
-            'priceRatio',
-            'depositRatio',
-            'depositTooHigh',
-            'landlordVerified',
-            'reputationScore',
-            'nationalityMismatch',
-            'thumbsRatio',
-            'minStayMonths',
-            'description_length',
-            'description_word_count',
-            'has_scam_keywords',
-            'review_count'
-        ]
-        print(f"⚠️  [STARTUP] Fallback: Using hardcoded feature names (12 features)")
-        print(f"📊 [STARTUP] Features: {selected_features}")
+        v = float(value)
+        if np.isnan(v) or np.isinf(v):
+            return default
+        return v
+    except Exception:
+        return default
 
-    # Print model info after loading
-    if model:
-        print(f"\n🤖 [STARTUP] Model type: {type(model).__name__}")
-        print(f"📋 [STARTUP] Has feature_importances_: {hasattr(model, 'feature_importances_')}")
-        if hasattr(model, 'feature_importances_'):
-            print(f"📊 [STARTUP] Number of importances: {len(model.feature_importances_)}")
-            try:
-                top_5 = sorted(model.feature_importances_, reverse=True)[:5]
-                print(f"📊 [STARTUP] Top 5 importances: {top_5}")
-            except Exception as imp_err:
-                print(f"⚠️  [STARTUP] Could not get importances: {imp_err}")
 
-    # Initialize SHAP
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _apply_model_scaling(features: np.ndarray) -> np.ndarray:
+    """Apply training-time scaling if scaler params are available from notebook metadata."""
+    if features is None:
+        return features
+    if scaler_mean is None or scaler_scale is None:
+        return features
+    try:
+        arr = np.asarray(features, dtype=float)
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        if arr.shape[1] != scaler_mean.shape[0] or arr.shape[1] != scaler_scale.shape[0]:
+            return arr
+
+        safe_scale = np.where(np.abs(scaler_scale) < 1e-12, 1.0, scaler_scale)
+        return (arr - scaler_mean.reshape(1, -1)) / safe_scale.reshape(1, -1)
+    except Exception:
+        return features
+
+
+try:
+    print("[STARTUP] Loading ML artifacts...")
+
+    with open("scam_detector_hybrid.pkl", "rb") as f:
+        model = pickle.load(f)
+
+    with open("hybrid_features.pkl", "rb") as f:
+        selected_features = pickle.load(f)
+
+    try:
+        with open("model_metadata.json", "r", encoding="utf-8") as f:
+            model_metadata = json.load(f)
+        scaler_mean = np.asarray(model_metadata.get("scaler_mean", []), dtype=float)
+        scaler_scale = np.asarray(model_metadata.get("scaler_scale", []), dtype=float)
+        if scaler_mean.size == 0 or scaler_scale.size == 0:
+            scaler_mean = None
+            scaler_scale = None
+            print("[STARTUP] Metadata loaded without scaler params")
+        else:
+            print("[STARTUP] Loaded scaler params from model_metadata.json")
+    except FileNotFoundError:
+        model_metadata = {}
+        scaler_mean = None
+        scaler_scale = None
+        print("[STARTUP] model_metadata.json not found. Using unscaled inference.")
+    except Exception as e:
+        model_metadata = {}
+        scaler_mean = None
+        scaler_scale = None
+        print(f"[STARTUP] Failed loading metadata/scaler: {e}")
+
+    print(f"[STARTUP] Loaded model: {type(model).__name__}")
+    print(f"[STARTUP] Loaded {len(selected_features)} features: {selected_features}")
+
+    # Better NLP signal from trained text classifier on listing descriptions.
+    try:
+        with open("description_tfidf.pkl", "rb") as f:
+            desc_vectorizer = pickle.load(f)
+        with open("description_text_model.pkl", "rb") as f:
+            desc_text_model = pickle.load(f)
+        print("[STARTUP] Loaded description NLP artifacts")
+    except FileNotFoundError:
+        print("[STARTUP] Description NLP artifacts not found. Falling back to heuristic description scoring.")
+
+    # Configure runtime scoring/explanation logic from notebook metadata.
+    runtime_rules = model_metadata.get("runtime_rules") if isinstance(model_metadata, dict) else None
+    set_runtime_context(
+        desc_vectorizer=desc_vectorizer,
+        desc_text_model=desc_text_model,
+        runtime_rules=runtime_rules,
+    )
+
     if shap is not None and model is not None:
         try:
             explainer = shap.TreeExplainer(model)
-            print("✅ [STARTUP] SHAP explainer initialized")
+            print("[STARTUP] SHAP explainer initialized")
         except Exception as e:
             explainer = None
-            print(f"⚠️  [STARTUP] SHAP not initialized, using fallback explanations: {e}")
-    
-    print("\n✅ [STARTUP] ML service startup complete. Model loaded and ready.\n")
-    
-except Exception as startup_err:
-    print(f"\n❌ [STARTUP] CRITICAL ERROR during model loading: {startup_err}")
-    import traceback
-    print(traceback.format_exc())
-    startup_error = str(startup_err)
-    # Don't fail completely, let the app start but with a health endpoint that reports the error
+            print(f"[STARTUP] SHAP unavailable: {e}")
+
+    # Initialize property assessment module (for calculate price at publish time)
+    if PropertyAssessment is not None:
+        try:
+            market_lookup = MarketPriceLookup("rent_lookup.csv")
+            property_assessor = PropertyAssessment(market_lookup)
+            print("[STARTUP] Property assessment module initialized")
+        except Exception as e:
+            property_assessor = None
+            print(f"[STARTUP] Property assessment unavailable: {e}")
+
+    print("[STARTUP] Service ready")
+except Exception as e:
+    startup_error = str(e)
+    print(f"[STARTUP] Failed: {startup_error}")
 
 
 # Define the request model
 class PredictionRequest(BaseModel):
-    priceRatio: float = 0.5
+    priceRatio: float = 1.0
     depositRatio: float = 0.0
-    depositTooHigh: bool = False
-    landlordVerified: bool = False
-    reputationScore: float = 0.0
+    reputationScore: float = 50.0
     nationalityMismatch: bool = False
     thumbsRatio: float = 0.5
-    minStayMonths: int = 12
-    description_length: int = 0
-    description_word_count: int = 0
-    has_scam_keywords: bool = False
-    review_count: int = 0
+    averageReviewRating: float = 3.0
     isNewListing: Optional[bool] = False
-    
-    class Config:
-        # Allow None values to use defaults
-        validate_assignment = True
+    description: Optional[str] = ""
+    reviews: Optional[str] = ""
+
+
+class PropertyPublishRequest(BaseModel):
+    """Request model for landlord publishing a property."""
+    country: str
+    city: str
+    propertyType: str
+    bedrooms: int = 2
+    listedPrice: float
+    depositAmount: float
+    landlordReputationScore: float = 50.0
+    landlordNationalityMatch: Optional[bool] = True
+    positiveReviews: Optional[int] = 0
+    negativeReviews: Optional[int] = 0
+    description: Optional[str] = ""
+    reviewsText: Optional[str] = ""
 
 
 class FactorExplanation(BaseModel):
@@ -115,6 +185,7 @@ class FactorExplanation(BaseModel):
     score: float
     direction: str
     impact: str
+    contribution_percent: Optional[float] = None  # Percentage contribution to prediction
 
 
 class PredictionSummary(BaseModel):
@@ -123,6 +194,7 @@ class PredictionSummary(BaseModel):
     scam_probability: float
     top_factors: List[FactorExplanation]
 
+
 # Define the response model
 class PredictionResponse(BaseModel):
     scam_prediction: bool
@@ -130,86 +202,232 @@ class PredictionResponse(BaseModel):
     scam_explanations: List[FactorExplanation]
     summary: PredictionSummary
 
-def compute_features(data: PredictionRequest) -> np.ndarray:
+def compute_features(data: PredictionRequest) -> tuple:
     """Compute the feature vector from the request data."""
-    # Extract features in the order of selected_features
-    # Add defensive conversions to handle edge cases
-    try:
-        features = [
-            float(data.priceRatio or 0.5),
-            float(data.depositRatio or 0.0),
-            int(bool(data.depositTooHigh)),
-            int(bool(data.landlordVerified)),
-            float(data.reputationScore or 0.0),
-            int(bool(data.nationalityMismatch)),
-            float(data.thumbsRatio or 0.5),
-            int(data.minStayMonths or 12),
-            int(data.description_length or 0),
-            int(data.description_word_count or 0),
-            int(bool(data.has_scam_keywords)),
-            int(data.review_count or 0)
-        ]
-        feature_array = np.array(features, dtype=float).reshape(1, -1)
-        return feature_array
-    except Exception as e:
-        print(f"❌ Error in compute_features: {e}")
-        raise ValueError(f"Failed to compute features: {e}")
+    is_new = bool(data.isNewListing)
+    description_scam_score = compute_description_scam_score(data.description or "", data.reviews or "")
 
+    # For new listings, thumbs/rating are weak signals. Keep neutral defaults.
+    thumbs_ratio = 0.5 if is_new else _safe_float(data.thumbsRatio, 0.5)
+    avg_rating = 3.0 if is_new else _safe_float(data.averageReviewRating, 3.0)
 
-def pretty_feature_name(name: str) -> str:
-    mapping = {
-        'minStayMonths': 'MinStayMonths',
-        'priceRatio': 'PriceRatio',
-        'reputationScore': 'ReputationScore',
-        'depositTooHigh': 'DepositTooHigh',
-        'thumbsRatio': 'ThumbsRatio',
-        'depositRatio': 'DepositRatio',
-        'landlordVerified': 'LandlordVerified',
-        'has_scam_keywords': 'HasScamKeywords',
-        'description_length': 'DescriptionLength',
-        'description_word_count': 'DescriptionWordCount',
-        'review_count': 'ReviewCount',
-        'nationalityMismatch': 'NationalityMismatch'
+    feature_values: Dict[str, float] = {
+        "priceRatio": _safe_float(data.priceRatio, 1.0),
+        "depositRatio": _safe_float(data.depositRatio, 0.0),
+        "reputationScore": _safe_float(data.reputationScore, 50.0),
+        "nationalityMismatch": float(1 if data.nationalityMismatch else 0),
+        "thumbsRatio": thumbs_ratio,
+        "averageReviewRating": avg_rating,
+        "descriptionScamScore": description_scam_score,
     }
-    return mapping.get(name, name)
+
+    values = []
+    for feat in selected_features:
+        canonical = canonical_feature_name(feat)
+        values.append(_safe_float(feature_values.get(canonical, 0.0), 0.0))
+
+    return np.array(values, dtype=float).reshape(1, -1), feature_values
 
 
 def canonical_feature_name(name: str) -> str:
     """Normalize model feature names to canonical request keys."""
-    token = ''.join(ch for ch in str(name or '') if ch.isalnum()).lower()
+    token = "".join(ch for ch in str(name or "") if ch.isalnum()).lower()
     mapping = {
-        'priceratio': 'priceRatio',
-        'depositratio': 'depositRatio',
-        'deposittoohigh': 'depositTooHigh',
-        'landlordverified': 'landlordVerified',
-        'reputationscore': 'reputationScore',
-        'nationalitymismatch': 'nationalityMismatch',
-        'thumbsratio': 'thumbsRatio',
-        'minstaymonths': 'minStayMonths',
-        'descriptionlength': 'description_length',
-        'descriptionwordcount': 'description_word_count',
-        'hasscamkeywords': 'has_scam_keywords',
-        'reviewcount': 'review_count',
+        "priceratio": "priceRatio",
+        "depositratio": "depositRatio",
+        "reputationscore": "reputationScore",
+        "nationalitymismatch": "nationalityMismatch",
+        "thumbsratio": "thumbsRatio",
+        "averagereviewrating": "averageReviewRating",
+        "descriptionscamscore": "descriptionScamScore",
+        # Backward-compat aliases
+        "hasscamkeywords": "descriptionScamScore",
+        "descriptionwordcount": "descriptionScamScore",
+        "descriptionlength": "descriptionScamScore",
+        "reviewcount": "averageReviewRating",
     }
-    return mapping.get(token, str(name or ''))
+    return mapping.get(token, str(name or ""))
 
 
-def underpricing_risk_floor(price_ratio: float) -> float:
-    """Return a minimum scam probability for extreme underpricing patterns."""
-    # Ensure price_ratio is a Python float, not numpy type
-    price_ratio = float(price_ratio.item() if hasattr(price_ratio, 'item') else price_ratio)
-    
-    if price_ratio <= 0:
+def pretty_feature_name(name: str) -> str:
+    mapping = {
+        "priceRatio": "PriceRatio",
+        "depositRatio": "DepositRatio",
+        "reputationScore": "ReputationScore",
+        "nationalityMismatch": "NationalityMismatch",
+        "thumbsRatio": "ThumbsRatio",
+        "averageReviewRating": "AverageReviewRating",
+        "descriptionScamScore": "DescriptionScamScore",
+    }
+    return mapping.get(name, name)
+
+
+def _clamp01(value: float) -> float:
+    return float(min(1.0, max(0.0, _safe_float(value, 0.0))))
+
+
+def _price_risk_component(price_ratio: float) -> float:
+    pr = _safe_float(price_ratio, 1.0)
+    if pr <= 0:
+        return 0.45
+
+    safe_low = 0.90
+    safe_high = 1.05
+    if safe_low <= pr <= safe_high:
+        return -0.08
+
+    # Use symmetric distance from the safe band edge so low/high outliers
+    # get the same fixed risk score for the same margin.
+    if pr < safe_low:
+        distance = safe_low - pr
+    else:
+        distance = pr - safe_high
+
+    if distance <= 0.15:
+        return 0.12
+    if distance <= 0.35:
+        return 0.20
+    if distance <= 0.75:
+        return 0.25
+    return 0.45
+
+
+def _deposit_risk_component(deposit_ratio: float) -> float:
+    dr = _safe_float(deposit_ratio, 1.0)
+    if dr < 0.85 or dr > 2.70:
+        return 0.35
+    if dr < 1.00 or dr > 2.50:
+        return 0.25
+    return 0.10
+
+
+def _reputation_component(reputation_score: float) -> float:
+    rs = _safe_float(reputation_score, 50.0)
+    if rs >= 50.0:
+        # Good reputation reduces risk up to 10%.
+        return -0.10 * min(1.0, (rs - 50.0) / 50.0)
+    # Low reputation increases risk up to 10%.
+    return 0.10 * min(1.0, (50.0 - rs) / 50.0)
+
+
+def _description_component(description_score: float, description_text: str) -> float:
+    base = 0.10 * _clamp01(description_score)
+    text = (description_text or "").lower()
+    keyword_patterns = [
+        r"\bwire transfer\b",
+        r"\bwestern union\b",
+        r"\bcrypto\b",
+        r"\bbitcoin\b",
+        r"\boutside the country\b",
+        r"\boverseas\b",
+        r"\bdeposit before (viewing|visit|visiting)\b",
+        r"\bsend deposit first\b",
+        r"\bpay first\b",
+    ]
+    hits = sum(1 for p in keyword_patterns if re.search(p, text))
+    if hits >= 3:
+        bonus = 0.10
+    elif hits >= 1:
+        bonus = 0.05
+    else:
+        bonus = 0.0
+    return base + bonus
+
+
+def _reviews_component(average_rating: float, thumbs_ratio: float, reviews_text: str = "", is_new_listing: bool = False) -> float:
+    if bool(is_new_listing):
         return 0.0
-    if price_ratio < 0.20:
-        return 0.99
-    if price_ratio < 0.35:
-        return 0.95
-    if price_ratio < 0.50:
-        return 0.85
-    if price_ratio < 0.70:
-        return 0.65
-    return 0.0
+
+    rating = _safe_float(average_rating, 3.0)
+    thumbs = _safe_float(thumbs_ratio, 0.5)
+
+    score = 0.0
+    if rating >= 4.5 and thumbs >= 0.70:
+        score = -0.10
+    elif rating >= 4.0 and thumbs >= 0.60:
+        score = -0.05
+    elif rating < 2.5 or thumbs < 0.40:
+        score = 0.12
+    elif rating < 3.0 or thumbs < 0.45:
+        score = 0.10
+    elif rating < 3.5 or thumbs < 0.55:
+        score = 0.06
+
+    text = (reviews_text or "").lower()
+    if text.strip():
+        negative_patterns = [
+            r"\bscam\b",
+            r"\bfraud\b",
+            r"\bfake\b",
+            r"\bunsafe\b",
+            r"\bno reply\b",
+            r"\bpayment first\b",
+            r"\bdid not return deposit\b",
+        ]
+        positive_patterns = [
+            r"\breliable\b",
+            r"\bprofessional\b",
+            r"\bsafe\b",
+            r"\bas described\b",
+            r"\breturned deposit\b",
+            r"\bsmooth\b",
+        ]
+
+        negative_hits = sum(1 for p in negative_patterns if re.search(p, text))
+        positive_hits = sum(1 for p in positive_patterns if re.search(p, text))
+
+        if negative_hits >= 2:
+            score += 0.05
+        elif negative_hits == 1:
+            score += 0.03
+
+        if positive_hits >= 2:
+            score -= 0.05
+        elif positive_hits == 1:
+            score -= 0.03
+
+    return float(min(0.15, max(-0.12, score)))
+
+
+def _new_listing_component(is_new_listing: bool) -> float:
+    # Fixed neutral uncertainty for new listings.
+    return 0.05 if bool(is_new_listing) else 0.0
+
+
+def compute_weighted_scam_probability(request: PredictionRequest, feature_values: Dict[str, float]):
+    price_component = _price_risk_component(request.priceRatio)
+    deposit_component = _deposit_risk_component(request.depositRatio)
+    reputation_component = _reputation_component(request.reputationScore)
+    description_component = _description_component(
+        feature_values.get("descriptionScamScore", 0.0),
+        request.description or "",
+    )
+    reviews_component = _reviews_component(
+        request.averageReviewRating,
+        request.thumbsRatio,
+        request.reviews or "",
+        bool(request.isNewListing),
+    )
+    new_listing_component = _new_listing_component(request.isNewListing)
+
+    raw_probability = (
+        price_component
+        + deposit_component
+        + reputation_component
+        + description_component
+        + reviews_component
+        + new_listing_component
+    )
+
+    components = {
+        "price": price_component,
+        "deposit": deposit_component,
+        "reputation": reputation_component,
+        "description": description_component,
+        "reviews": reviews_component,
+        "new_listing": new_listing_component,
+    }
+    return _clamp01(raw_probability), components
 
 
 def get_shap_scores(features: np.ndarray) -> Optional[np.ndarray]:
@@ -218,397 +436,206 @@ def get_shap_scores(features: np.ndarray) -> Optional[np.ndarray]:
         return None
     try:
         raw_vals = explainer.shap_values(features)
-        result = None
-        
-        if isinstance(raw_vals, list):
-            # Binary-class models can return [class0, class1]
-            if len(raw_vals) > 1:
-                result = np.array(raw_vals[1][0], dtype=float) if len(raw_vals[1].shape) > 1 else np.array(raw_vals[1], dtype=float)
-        elif isinstance(raw_vals, np.ndarray):
+        if isinstance(raw_vals, list) and len(raw_vals) > 1:
+            return np.asarray(raw_vals[1][0], dtype=float).flatten()
+        if isinstance(raw_vals, np.ndarray):
             if raw_vals.ndim == 3 and raw_vals.shape[2] >= 2:
-                # Shape: (n_samples, n_features, n_classes)
-                result = np.array(raw_vals[0, :, 1], dtype=float)
-            elif raw_vals.ndim == 2:
-                # Shape: (n_samples, n_features)
-                result = np.array(raw_vals[0], dtype=float)
-            elif raw_vals.ndim == 1:
-                result = np.array(raw_vals, dtype=float)
-        
-        # Ensure result is always a 1D array if not None
-        if result is not None:
-            result = np.asarray(result, dtype=float).flatten()
-        return result
+                return np.asarray(raw_vals[0, :, 1], dtype=float).flatten()
+            if raw_vals.ndim == 2:
+                return np.asarray(raw_vals[0], dtype=float).flatten()
+            if raw_vals.ndim == 1:
+                return np.asarray(raw_vals, dtype=float).flatten()
     except Exception as e:
-        print(f"⚠️ SHAP explanation failed, falling back to importances: {e}")
+        print(f"[PREDICT] SHAP failed: {e}")
     return None
+
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_scam(request: PredictionRequest):
     if model is None:
-        raise HTTPException(status_code=503, detail=f"Model not loaded: {startup_error or 'Unknown error'}")
-    
-    print(f"\n📥 Received prediction request:")
-    print(f"  priceRatio: {request.priceRatio}")
-    print(f"  depositRatio: {request.depositRatio}")
-    print(f"  isNewListing: {request.isNewListing}")
-    
+        raise HTTPException(status_code=503, detail=f"Model not loaded: {startup_error or 'Unknown startup error'}")
+
     try:
-        # Compute features
-        features = compute_features(request)
-        
-        # Get actual feature values for detailed explanations
-        feature_values = {
-            'priceRatio': request.priceRatio,
-            'depositRatio': request.depositRatio,
-            'depositTooHigh': int(request.depositTooHigh),
-            'landlordVerified': int(request.landlordVerified),
-            'reputationScore': request.reputationScore,
-            'nationalityMismatch': int(request.nationalityMismatch),
-            'thumbsRatio': request.thumbsRatio,
-            'minStayMonths': request.minStayMonths,
-            'description_length': request.description_length,
-            'description_word_count': request.description_word_count,
-            'has_scam_keywords': int(request.has_scam_keywords),
-            'review_count': request.review_count
-        }
+        features, feature_values = compute_features(request)
+        model_input = _apply_model_scaling(features)
+        prediction = int(model.predict(model_input)[0])
+        proba = model.predict_proba(model_input)[0]
+        model_scam_probability = float(proba[1])
 
-        # Predict with better error handling
-        try:
-            prediction = model.predict(features)[0]
-            # Ensure prediction is a Python type, not numpy
-            prediction = int(prediction) if hasattr(prediction, 'item') else int(prediction)
-            print(f"✅ Model prediction: {prediction}")
-        except Exception as pred_err:
-            print(f"❌ Model.predict failed: {pred_err}")
-            raise ValueError(f"Model prediction failed: {pred_err}")
-            
-        try:
-            proba_raw = model.predict_proba(features)[0]
-            # Ensure proba is a Python list, not numpy array
-            proba = [float(p.item() if hasattr(p, 'item') else p) for p in proba_raw]
-            print(f"✅ Model proba: {proba}")
-        except Exception as proba_err:
-            print(f"❌ Model.predict_proba failed: {proba_err}")
-            raise ValueError(f"Model proba calculation failed: {proba_err}")
+        shap_scores = get_shap_scores(model_input)
 
-        # Generate structured factor explanations
-        explanations: List[FactorExplanation] = []
-        
-        try:
-            print(f"📊 Getting SHAP scores...")
-            shap_scores = get_shap_scores(features)
-            print(f"✅ SHAP scores: type={type(shap_scores)}, value={shap_scores}")
-        except Exception as shap_err:
-            print(f"⚠️  SHAP scores failed: {shap_err}")
-            shap_scores = None
-
-        score_source = 'none'
         top_indices = []
-        try:
-            print(f"📊 Checking score source...")
-            if shap_scores is not None:
-                shap_len = len(shap_scores)
-                selected_len = len(selected_features)
-                print(f"   shap_scores length: {shap_len}, selected_features length: {selected_len}")
-                if shap_len >= selected_len:
-                    print(f"   Using SHAP scores as source")
-                    top_indices = np.argsort(np.abs(shap_scores))[-10:][::-1]
-                    score_source = 'shap'
-                else:
-                    print(f"   SHAP length insufficient, falling back to importances")
+        score_source = "none"
+        if shap_scores is not None and len(shap_scores) >= len(selected_features):
+            top_indices = np.argsort(np.abs(shap_scores))[-10:][::-1]
+            score_source = "shap"
+        elif hasattr(model, "feature_importances_"):
+            importances = np.asarray(model.feature_importances_, dtype=float)
+            top_indices = np.argsort(importances)[-10:][::-1]
+            score_source = "importance"
+
+        explanations: List[FactorExplanation] = []
+        seen = set()
+        
+        # Calculate total absolute contribution for percentage conversion
+        total_abs_contribution = 0.0
+        if score_source == "shap" and shap_scores is not None:
+            total_abs_contribution = np.sum(np.abs(shap_scores))
+        elif score_source == "importance" and hasattr(model, "feature_importances_"):
+            total_abs_contribution = np.sum(np.abs(model.feature_importances_))
+
+        for idx in top_indices:
+            idx = int(idx)
+            if idx >= len(selected_features):
+                continue
+
+            original_name = selected_features[idx]
+            canonical = canonical_feature_name(original_name)
+            value = _safe_float(feature_values.get(canonical, 0.0), 0.0)
+
+            score = 0.0
+            if score_source == "shap" and shap_scores is not None:
+                score = float(shap_scores[idx])
+            elif score_source == "importance" and hasattr(model, "feature_importances_"):
+                score = float(model.feature_importances_[idx])
+
+            # Show user-facing direction from feature semantics to avoid contradictory messaging.
+            direction = infer_risk_direction(canonical, value, bool(request.isNewListing))
             
-            if score_source != 'shap':
-                if hasattr(model, 'feature_importances_'):
-                    print(f"   Using model feature importances")
-                    importances = model.feature_importances_
-                    top_indices = np.argsort(importances)[-10:][::-1]
-                    score_source = 'importance'
-                else:
-                    print(f"   No feature importances available")
-                    top_indices = []
-                    score_source = 'none'
-        except Exception as score_src_err:
-            print(f"❌ Error determining score source: {score_src_err}")
-            import traceback
-            traceback.print_exc()
-            top_indices = []
-            score_source = 'none'
+            # Calculate percentage contribution
+            contribution_percent = None
+            if total_abs_contribution > 0:
+                contribution_percent = round((abs(score) / total_abs_contribution) * 100, 1)
 
-        if top_indices is not None and len(top_indices) > 0:
-            print(f"📋 Building explanations from {len(top_indices)} top factors...")
-            for idx in top_indices:
-                try:
-                    idx = int(idx)
-                    if idx >= len(selected_features):
-                        continue
-                    
-                    feature_name = selected_features[idx]
-                    canonical_name = canonical_feature_name(feature_name)
-                    raw_val = feature_values.get(canonical_name, 0)
-                    feature_value = float(raw_val.item() if hasattr(raw_val, 'item') else raw_val)
-                    
-                    model_score = 0.0
-                    if score_source == 'shap' and shap_scores is not None:
-                        shap_val = shap_scores[idx]
-                        model_score = float(shap_val.item() if hasattr(shap_val, 'item') else shap_val)
-                    elif score_source == 'importance' and hasattr(model, 'feature_importances_'):
-                        imp_val = model.feature_importances_[idx]
-                        model_score = float(imp_val.item() if hasattr(imp_val, 'item') else imp_val)
-                    
-                    impact_direction = "increases" if model_score > 0 else "decreases"
-                    if abs(model_score) < 1e-9:
-                        impact_direction = "neutral"
-                    explanation_text = "Increases scam probability"
-                    risk_strength = 1.0
+            pretty = pretty_feature_name(canonical)
+            if pretty in seen:
+                continue
+            seen.add(pretty)
 
-                    if canonical_name == 'priceRatio':
-                        if feature_value < 0.2:
-                            explanation_text = "Price is extremely below market average (very high risk)"
-                            risk_strength = 1.0
-                        elif feature_value < 0.5:
-                            explanation_text = "Price too low compared to market average (high risk)"
-                            risk_strength = 0.8
-                        elif feature_value < 0.7:
-                            explanation_text = "Price below market average (increases risk)"
-                            risk_strength = 0.55
-                        elif feature_value > 1.6:
-                            explanation_text = "Price unusually higher than market average (increases risk)"
-                            risk_strength = 0.45
-                        elif feature_value > 1.3:
-                            explanation_text = "Price above market average (slight risk)"
-                            risk_strength = 0.25
-                        else:
-                            explanation_text = "Price within normal range (decreases risk)"
-                            impact_direction = "decreases"
-                            risk_strength = 0.3
+            explanations.append(FactorExplanation(
+                feature=pretty,
+                score=round(score, 3),
+                direction=direction,
+                impact=explanation_for_feature(canonical, value, direction, bool(request.isNewListing)),
+                contribution_percent=contribution_percent,
+            ))
 
-                    elif canonical_name == 'depositRatio':
-                        if feature_value > 2.0:
-                            explanation_text = f"Deposit extremely high ({feature_value:.2f}x rent, high risk)"
-                            risk_strength = 0.9
-                        elif feature_value > 1.5:
-                            explanation_text = f"Deposit too high ({feature_value:.2f}x rent, increases risk)"
-                            risk_strength = 0.7
-                        elif feature_value > 1.0:
-                            explanation_text = f"Deposit above 1 month rent (increases risk)"
-                            risk_strength = 0.4
-                        else:
-                            explanation_text = "Deposit in normal range (decreases risk)"
-                            impact_direction = "decreases"
-                            risk_strength = 0.25
-
-                    elif canonical_name == 'thumbsRatio':
-                        if request.isNewListing:
-                            explanation_text = "New listing - no reviews yet (neutral)"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-                        elif feature_value < 0.3:
-                            explanation_text = "Low positive feedback ratio (increases risk)"
-                            risk_strength = 0.5
-                        elif feature_value > 0.7:
-                            explanation_text = "High positive feedback (decreases risk)"
-                            impact_direction = "decreases"
-                            risk_strength = 0.35
-                        else:
-                            explanation_text = "Mixed feedback ratio"
-                            risk_strength = 0.15
-
-                    elif canonical_name == 'landlordVerified':
-                        if feature_value == 1:
-                            explanation_text = "Landlord verified with documents (decreases risk)"
-                            impact_direction = "decreases"
-                            risk_strength = 0.45
-                        else:
-                            explanation_text = "Landlord not verified (increases risk)"
-                            risk_strength = 0.5
-
-                    elif canonical_name == 'reputationScore':
-                        if feature_value > 70:
-                            explanation_text = f"Good reputation score ({feature_value:.0f}/100, decreases risk)"
-                            impact_direction = "decreases"
-                            risk_strength = 0.5
-                        elif feature_value < 30:
-                            explanation_text = f"Low reputation score ({feature_value:.0f}/100, increases risk)"
-                            risk_strength = 0.55
-                        else:
-                            explanation_text = f"Average reputation score ({feature_value:.0f}/100, neutral)"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-
-                    elif canonical_name == 'has_scam_keywords':
-                        if feature_value == 1:
-                            explanation_text = "Suspicious keywords detected in description (increases risk)"
-                            risk_strength = 0.7
-                        else:
-                            explanation_text = "No suspicious keywords (decreases risk)"
-                            impact_direction = "decreases"
-                            risk_strength = 0.35
-
-                    elif canonical_name == 'depositTooHigh':
-                        if feature_value == 1:
-                            explanation_text = "Deposit exceeds normal thresholds (increases risk)"
-                            risk_strength = 0.65
-                        else:
-                            explanation_text = "Deposit within acceptable limits"
-                            impact_direction = "decreases"
-                            risk_strength = 0.25
-
-                    elif canonical_name == 'description_word_count':
-                        if feature_value >= 20:
-                            explanation_text = "Unusually long description for this listing type (increases risk)"
-                            risk_strength = 0.35
-                        elif feature_value <= 6:
-                            explanation_text = "Very short description with limited detail (increases risk)"
-                            risk_strength = 0.45
-                        else:
-                            explanation_text = "Description length appears natural"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-
-                    elif canonical_name == 'description_length':
-                        if feature_value >= 140:
-                            explanation_text = "Lengthy description pattern seen in higher-risk samples"
-                            risk_strength = 0.2
-                        elif feature_value <= 40:
-                            explanation_text = "Description is too short to assess confidence"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-                        else:
-                            explanation_text = "Description length is within a normal range"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-
-                    elif canonical_name == 'review_count':
-                        if request.isNewListing:
-                            explanation_text = "New listing - review count not informative yet"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-                        elif feature_value == 0:
-                            explanation_text = "No review history available"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-                        else:
-                            explanation_text = "Review volume is available for assessment"
-                            impact_direction = "neutral"
-                            risk_strength = 0.0
-
-                    if request.isNewListing and canonical_name in {'thumbsRatio', 'review_count'}:
-                        continue
-
-                    if score_source == 'importance' and abs(model_score) <= 0.01:
-                        continue
-
-                    signed_score = float(model_score) * float(risk_strength)
-                    if impact_direction == 'neutral':
-                        signed_score = 0.0
-
-                    explanations.append(FactorExplanation(
-                        feature=pretty_feature_name(canonical_name),
-                        score=round(signed_score, 3),
-                        direction=impact_direction,
-                        impact=f"{explanation_text} (value: {feature_value})"
-                    ))
-                    
-                except Exception as factor_err:
-                    print(f"❌ Error processing factor {feature_name}: {factor_err}")
-                    import traceback
-                    traceback.print_exc()
-                    continue
-        else:
-            # Fallback: derive explanations from request values when model importances are unavailable.
-            fallback = []
-
-            if request.priceRatio < 0.7:
-                fallback.append(FactorExplanation(
+        if not explanations:
+            fallback_price_direction = "decreases" if 0.9 <= request.priceRatio <= 1.05 else "increases"
+            fallback_price_distance = (
+                (0.9 - request.priceRatio)
+                if request.priceRatio < 0.9
+                else (request.priceRatio - 1.05)
+            )
+            fallback_price_score = (
+                -0.2
+                if 0.9 <= request.priceRatio <= 1.05
+                else (0.6 if fallback_price_distance > 0.75 else 0.2)
+            )
+            explanations = [
+                FactorExplanation(
                     feature="PriceRatio",
-                    score=0.6,
+                    score=fallback_price_score,
+                    direction=fallback_price_direction,
+                    impact=explanation_for_feature(
+                        "priceRatio",
+                        _safe_float(request.priceRatio, 1.0),
+                        fallback_price_direction,
+                        bool(request.isNewListing),
+                    ),
+                    contribution_percent=60.0,
+                ),
+                FactorExplanation(
+                    feature="DescriptionScamScore",
+                    score=0.4,
                     direction="increases",
-                    impact=f"Price is below market baseline (value: {request.priceRatio:.2f})"
-                ))
-            elif request.priceRatio > 1.4:
-                fallback.append(FactorExplanation(
-                    feature="PriceRatio",
-                    score=0.2,
-                    direction="increases",
-                    impact=f"Price is above typical market range (value: {request.priceRatio:.2f})"
-                ))
-            else:
-                fallback.append(FactorExplanation(
-                    feature="PriceRatio",
-                    score=-0.2,
-                    direction="decreases",
-                    impact=f"Price is within normal market range (value: {request.priceRatio:.2f})"
-                ))
-
-            if request.depositRatio > 1.5 or request.depositTooHigh:
-                fallback.append(FactorExplanation(
-                    feature="DepositRatio",
-                    score=0.45,
-                    direction="increases",
-                    impact=f"Deposit is high relative to rent (value: {request.depositRatio:.2f})"
-                ))
-            else:
-                fallback.append(FactorExplanation(
-                    feature="DepositRatio",
-                    score=-0.15,
-                    direction="decreases",
-                    impact=f"Deposit appears normal (value: {request.depositRatio:.2f})"
-                ))
-
-            if request.landlordVerified:
-                fallback.append(FactorExplanation(
-                    feature="LandlordVerified",
-                    score=-0.25,
-                    direction="decreases",
-                    impact="Landlord verification reduces scam risk"
-                ))
-            else:
-                fallback.append(FactorExplanation(
-                    feature="LandlordVerified",
-                    score=0.25,
-                    direction="increases",
-                    impact="Landlord is not verified"
-                ))
-
-            if request.has_scam_keywords:
-                fallback.append(FactorExplanation(
-                    feature="HasScamKeywords",
-                    score=0.35,
-                    direction="increases",
-                    impact="Description contains suspicious keywords"
-                ))
-
-            explanations = fallback
+                    impact=explanation_for_feature(
+                        "descriptionScamScore",
+                        feature_values.get("descriptionScamScore", 0.0),
+                        "increases",
+                        bool(request.isNewListing),
+                    ),
+                    contribution_percent=40.0,
+                ),
+            ]
 
         explanations = sorted(explanations, key=lambda f: abs(f.score), reverse=True)
         top_factors = explanations[:5]
 
-        model_scam_probability = float(proba[1])
-        floor_probability = underpricing_risk_floor(request.priceRatio)
-        scam_probability = max(model_scam_probability, floor_probability)
+        scam_probability, weighted_components = compute_weighted_scam_probability(request, feature_values)
         is_scam = scam_probability >= 0.5
-        confidence = scam_probability if is_scam else (1.0 - scam_probability)
+        # Confidence reflects certainty in the chosen label (distance from 0.5 threshold).
+        confidence = min(1.0, max(0.0, abs(scam_probability - 0.5) * 2.0))
         label = "SCAM" if is_scam else "LEGITIMATE"
 
-        # Make sure the UI reflects why an extreme underpricing case was forced high risk.
-        if floor_probability > model_scam_probability:
-            top_factors.insert(0, FactorExplanation(
-                feature="PriceRatio",
-                score=round(float(floor_probability - model_scam_probability), 3),
-                direction="increases",
-                impact=(
-                    f"Listing is far below area average (price ratio {request.priceRatio:.2f}); "
-                    "rule-based guardrail raised risk"
-                )
-            ))
-            top_factors = top_factors[:5]
+        component_rows = [
+            (
+                "PriceRatio",
+                float(weighted_components.get("price", 0.0)),
+                "priceRatio",
+                _safe_float(request.priceRatio, 1.0),
+            ),
+            (
+                "DepositRatio",
+                float(weighted_components.get("deposit", 0.0)),
+                "depositRatio",
+                _safe_float(request.depositRatio, 1.0),
+            ),
+            (
+                "ReputationScore",
+                float(weighted_components.get("reputation", 0.0)),
+                "reputationScore",
+                _safe_float(request.reputationScore, 50.0),
+            ),
+            (
+                "DescriptionScamScore",
+                float(weighted_components.get("description", 0.0)),
+                "descriptionScamScore",
+                _safe_float(feature_values.get("descriptionScamScore", 0.0), 0.0),
+            ),
+            (
+                "AverageReviewRating",
+                float(weighted_components.get("reviews", 0.0)),
+                "averageReviewRating",
+                _safe_float(request.averageReviewRating, 3.0),
+            ),
+        ]
 
-        print(f"\n🔍 ML Prediction Complete:")
-        print(f"  Prediction: {label}")
-        print(f"  Scam Probability: {scam_probability:.4f} (model={model_scam_probability:.4f}, floor={floor_probability:.4f})")
-        print(f"  Generated {len(top_factors)} top explanations")
-        for idx, exp in enumerate(top_factors):
-            print(f"    {idx+1}. {exp.feature}: score={exp.score}, direction={exp.direction}")
+        if bool(request.isNewListing):
+            component_rows.append((
+                "NewListing",
+                float(weighted_components.get("new_listing", 0.0)),
+                "averageReviewRating",
+                _safe_float(request.averageReviewRating, 3.0),
+            ))
+
+        total_component_weight = sum(abs(row[1]) for row in component_rows)
+        weighted_factors: List[FactorExplanation] = []
+        for feature_name, score, canonical_name, value in component_rows:
+            direction = "increases" if score > 0 else ("decreases" if score < 0 else "neutral")
+            if feature_name == "NewListing":
+                impact = "New listing baseline uncertainty adds a fixed neutral risk weight"
+            elif feature_name == "AverageReviewRating":
+                impact = (
+                    f"Combined review quality signal uses rating={_safe_float(request.averageReviewRating, 3.0):.1f} "
+                    f"and thumbs ratio={_safe_float(request.thumbsRatio, 0.5):.2f}"
+                )
+            else:
+                impact = explanation_for_feature(canonical_name, value, direction, bool(request.isNewListing))
+
+            contribution_percent = 0.0
+            if total_component_weight > 0:
+                contribution_percent = round((abs(score) / total_component_weight) * 100.0, 1)
+
+            weighted_factors.append(FactorExplanation(
+                feature=feature_name,
+                score=round(score, 3),
+                direction=direction,
+                impact=impact,
+                contribution_percent=contribution_percent,
+            ))
+
+        top_factors = sorted(weighted_factors, key=lambda f: abs(f.score), reverse=True)[:5]
 
         return PredictionResponse(
             scam_prediction=is_scam,
@@ -618,15 +645,110 @@ async def predict_scam(request: PredictionRequest):
                 label=label,
                 confidence=round(confidence, 4),
                 scam_probability=round(scam_probability, 4),
-                top_factors=top_factors
-            )
+                top_factors=top_factors,
+            ),
         )
     except Exception as e:
-        error_msg = str(e)
-        print(f"\n❌ ERROR in predict_scam endpoint: {error_msg}")
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {error_msg}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
+
+
+@app.post("/publish-property")
+async def publish_property(request: PropertyPublishRequest):
+    """
+    Assess property for scam risk when landlord publishes listing.
+    
+    Calculates PriceRatio based on market baseline for the area,
+    then runs full scam detection on all 7 features.
+    
+    Returns assessment with red flags and scam probability.
+    """
+    if model is None:
+        raise HTTPException(status_code=503, detail=f"Model not loaded: {startup_error or 'Unknown startup error'}")
+    
+    if property_assessor is None:
+        raise HTTPException(status_code=503, detail="Property assessment module not initialized")
+    
+    try:
+        # Step 1: Assess property and calculate all features
+        assessment = property_assessor.assess_property_on_publish(
+            country=request.country,
+            city=request.city,
+            property_type=request.propertyType,
+            bedrooms=request.bedrooms,
+            listed_price=request.listedPrice,
+            deposit_amount=request.depositAmount,
+            landlord_reputation_score=request.landlordReputationScore,
+            landlord_nationality_match=request.landlordNationalityMatch or True,
+            positive_reviews=request.positiveReviews or 0,
+            negative_reviews=request.negativeReviews or 0,
+            description=request.description or "",
+            reviews_text=request.reviewsText or "",
+        )
+        
+        # Step 2: Create prediction request from computed features
+        feature_dict = assessment['features']
+        pred_request = PredictionRequest(
+            priceRatio=feature_dict['PriceRatio'],
+            depositRatio=feature_dict['DepositRatio'],
+            reputationScore=feature_dict['ReputationScore'],
+            nationalityMismatch=bool(feature_dict['NationalityMismatch']),
+            thumbsRatio=feature_dict['ThumbsRatio'],
+            averageReviewRating=feature_dict['AverageReviewRating'],
+            isNewListing=True,
+            description=request.description or "",
+            reviews=request.reviewsText or "",
+        )
+        
+        # Step 3: Get scam prediction using weighted feature logic
+        features_array, feature_values = compute_features(pred_request)
+        model_input = _apply_model_scaling(features_array)
+        prediction = int(model.predict(model_input)[0])
+        proba = model.predict_proba(model_input)[0]
+        model_scam_probability = float(proba[1])
+
+        price_ratio = assessment['price_ratio']
+        scam_probability, weighted_components = compute_weighted_scam_probability(pred_request, feature_values)
+        is_scam = scam_probability >= 0.5
+        
+        # Step 4: Format response
+        return {
+            "status": "assessment_complete",
+            "property": {
+                "country": request.country,
+                "city": request.city,
+                "propertyType": request.propertyType,
+                "bedrooms": request.bedrooms,
+                "listedPrice": request.listedPrice,
+                "marketPrice": assessment['market_price'],
+            },
+            "scam_detection": {
+                "is_scam": is_scam,
+                "scam_probability": round(scam_probability, 4),
+                "model_probability": round(model_scam_probability, 4),
+                "weighted_components": {
+                    "price": round(float(weighted_components.get("price", 0.0)), 4),
+                    "deposit": round(float(weighted_components.get("deposit", 0.0)), 4),
+                    "reputation": round(float(weighted_components.get("reputation", 0.0)), 4),
+                    "description": round(float(weighted_components.get("description", 0.0)), 4),
+                    "reviews": round(float(weighted_components.get("reviews", 0.0)), 4),
+                    "new_listing": round(float(weighted_components.get("new_listing", 0.0)), 4),
+                },
+                "confidence": round(scam_probability if is_scam else (1.0 - scam_probability), 4),
+            },
+            "price_analysis": {
+                "price_ratio": round(price_ratio, 3),
+                "deposit_ratio": round(assessment['deposit_ratio'], 3),
+                "price_risk_level": assessment['price_risk_level'],
+                "price_summary": assessment['summary'],
+            },
+            "red_flags": assessment['red_flags'],
+            "recommendation": (
+                "🚫 BLOCK THIS LISTING" if is_scam else "✅ ALLOW PUBLICATION"
+            ),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Property assessment failed: {e}")
+
 
 @app.get("/")
 async def root():
@@ -634,8 +756,9 @@ async def root():
         "message": "Scam Detection API is running",
         "model_loaded": model is not None,
         "shap_available": shap is not None and explainer is not None,
-        "startup_error": startup_error
+        "startup_error": startup_error,
     }
+
 
 @app.get("/health")
 async def health():
@@ -644,28 +767,48 @@ async def health():
             "status": "unhealthy",
             "model_working": False,
             "error": startup_error or "Model not loaded",
-            "startup_error": startup_error
         }
-    
+
     try:
-        # Test a minimal prediction to ensure everything is working
-        test_features = np.array([[0.5, 0.0, 0, 0, 50.0, 0, 0.5, 12, 100, 20, 0, 0]], dtype=float)
+        neutral = {
+            "priceRatio": 1.0,
+            "depositRatio": 1.0,
+            "reputationScore": 50.0,
+            "nationalityMismatch": 0.0,
+            "thumbsRatio": 0.5,
+            "averageReviewRating": 3.0,
+            "descriptionScamScore": 0.2,
+        }
+        vector = []
+        for feat in selected_features:
+            vector.append(neutral.get(canonical_feature_name(feat), 0.0))
+        test_features = np.array([vector], dtype=float)
+        test_features = _apply_model_scaling(test_features)
+
         _ = model.predict(test_features)
         _ = model.predict_proba(test_features)
+
         return {
             "status": "healthy",
             "model_working": True,
             "model_type": type(model).__name__,
-            "features_count": len(selected_features) if selected_features else 0
+            "features_count": len(selected_features) if selected_features else 0,
+            "features": selected_features,
+            "nlp_model_loaded": desc_vectorizer is not None and desc_text_model is not None,
+            "metadata_loaded": bool(model_metadata),
+            "scaler_loaded": scaler_mean is not None and scaler_scale is not None,
+            "target_accuracy_band": model_metadata.get("target_accuracy_band") if model_metadata else None,
         }
     except Exception as e:
         return {
             "status": "unhealthy",
             "model_working": False,
             "error": str(e),
-            "model_type": type(model).__name__ if model else "None"
+            "model_type": type(model).__name__ if model else "None",
         }
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

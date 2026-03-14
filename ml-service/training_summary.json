@@ -1,0 +1,36 @@
+{
+  "best_model": "Random Forest",
+  "test_accuracy": 0.9318936877076412,
+  "test_auc": 0.970146105337952,
+  "cv_accuracy_mean": 0.918608362591765,
+  "cv_auc_mean": 0.9699875682944402,
+  "features": [
+    "PriceRatio",
+    "DepositRatio",
+    "ReputationScore",
+    "NationalityMismatch",
+    "ThumbsRatio",
+    "AverageReviewRating",
+    "DescriptionScamScore"
+  ],
+  "all_models": {
+    "Gradient Boosting": {
+      "test_accuracy": 0.9235880398671097,
+      "test_auc": 0.9679478639310772,
+      "cv_accuracy": 0.9281622829340671,
+      "cv_auc": 0.9722419140250314
+    },
+    "Random Forest": {
+      "test_accuracy": 0.9318936877076412,
+      "test_auc": 0.970146105337952,
+      "cv_accuracy": 0.918608362591765,
+      "cv_auc": 0.9699875682944402
+    },
+    "Logistic Regression": {
+      "test_accuracy": 0.845514950166113,
+      "test_auc": 0.9280242472688516,
+      "cv_accuracy": 0.8567265637805057,
+      "cv_auc": 0.9324427730893614
+    }
+  }
+}
