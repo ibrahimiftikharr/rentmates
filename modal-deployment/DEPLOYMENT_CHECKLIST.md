@@ -1,4 +1,4 @@
-# 🚀 Modal.com Deployment Checklist
+﻿#  Modal.com Deployment Checklist
 
 ## Pre-Deployment
 
@@ -76,7 +76,7 @@
 ### 7. Test Backend Integration
 - [ ] Start your frontend: `cd frontend && npm run dev`
 - [ ] Log in to your app
-- [ ] Navigate to roommate matching page
+- [ ] Navigate to student flatmate compatibility prediction page
 - [ ] View compatibility scores
 - [ ] Verify scores are different from old JS-based scores (ML is smarter!)
 
@@ -127,19 +127,19 @@ If you want to reduce cold start time, edit `modal_app.py`:
 
 ## Troubleshooting Common Issues
 
-### ❌ "Token not found" Error
+### [ERROR] "Token not found" Error
 **Solution:** Run `modal token new` again
 
-### ❌ "Model not trained" Error
+### [ERROR] "Model not trained" Error
 **Solution:** Run `modal run modal_app.py::train_model`
 
-### ❌ Backend can't connect to Modal
+### [ERROR] Backend can't connect to Modal
 **Solution:** Check `ML_SERVICE_URL` in backend/.env matches exactly
 
-### ❌ Slow first request (5+ seconds)
+### [ERROR] Slow first request (5+ seconds)
 **Solution:** This is normal cold start. Subsequent requests are fast.
 
-### ❌ Import errors during deployment
+### [ERROR] Import errors during deployment
 **Solution:** Check Python version is 3.10 as specified in `modal_app.py`
 
 ---
@@ -174,7 +174,7 @@ modal app delete rentmates-compatibility
 
 ## Success Criteria
 
-✅ **Deployment Successful When:**
+[OK] **Deployment Successful When:**
 1. All 4 endpoints accessible via HTTPS
 2. Health check returns `"status": "healthy"`
 3. Test prediction returns score between 0-100
@@ -187,11 +187,11 @@ modal app delete rentmates-compatibility
 
 ## Next Steps After Deployment
 
-1. 📊 **Expand Training Data** - Add more pairs to `training_data.csv` from real user feedback
-2. 🔄 **Retrain Model** - Weekly/monthly retraining with updated CSV data
-3. 🎯 **A/B Testing** - Compare ML scores vs old rule-based scores
-4. 📈 **Monitor Accuracy** - Track user feedback on match quality
-5. 🚀 **Optimize** - Fine-tune features and add more diverse training examples
+1.  **Expand Training Data** - Add more pairs to `training_data.csv` from real user feedback
+2.  **Retrain Model** - Weekly/monthly retraining with updated CSV data
+3. **A/B Testing** - Compare ML scores vs old rule-based scores
+4.  **Monitor Accuracy** - Track user feedback on match quality
+5.  **Optimize** - Fine-tune features and add more diverse training examples
 
 ---
 
@@ -199,4 +199,4 @@ modal app delete rentmates-compatibility
 
 **Cost:** FREE (within $30/month Modal credits)
 
-🎉 **You're ready to deploy! Follow the checklist step by step.** 🎉
+**You're ready to deploy! Follow the checklist step by step.**

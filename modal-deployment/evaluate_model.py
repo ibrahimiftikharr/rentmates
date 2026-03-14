@@ -1,5 +1,6 @@
 """
-Full Model Evaluation including NLP Bio Text Analysis
+Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features
+Full model evaluation including NLP bio text analysis
 Note: First run will download Sentence-BERT model (~90MB, 2-5 minutes)
 """
 import numpy as np
@@ -9,7 +10,7 @@ import sys
 import time
 
 print("=" * 75)
-print("ROOMMATE COMPATIBILITY MODEL - FULL EVALUATION (WITH NLP)")
+print("STUDENT FLATMATE COMPATIBILITY PREDICTION - FULL EVALUATION (WITH NLP)")
 print("=" * 75)
 print()
 

@@ -1,5 +1,5 @@
 """
-Roommate Compatibility ML Model - Modal Deployment
+Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features
 
 Simplified version for serverless deployment on Modal.com
 """
@@ -9,14 +9,18 @@ from typing import Dict, List, Tuple, Optional
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import joblib
 import os
+import json
+import time
+import random
 
 from features import FeatureEngineer
 
 
 class RoommateCompatibilityModel:
-    """ML Model for predicting roommate compatibility scores"""
+    """ML model for student flatmate compatibility prediction."""
     
     # Default feature weights for rule-based fallback
     FEATURE_WEIGHTS = {
@@ -298,3 +302,137 @@ def load_training_data_from_csv(csv_path: str) -> Tuple[List[Dict], List[float]]
     
     print(f"Loaded {len(training_pairs)} training pairs from {csv_path}")
     return training_pairs, labels
+
+
+def run_step_by_step_pipeline(
+    csv_path: str,
+    model_output_path: str,
+    report_output_path: str,
+    test_size: float = 0.2,
+    random_seed: int = 42,
+) -> Dict:
+    """
+    Run a full train/evaluation pipeline with explicit step-by-step stages.
+
+    This helper is intended for reproducible experiments and form reporting.
+    """
+    start_time = time.time()
+
+    # Reproducibility setup - fix random seeds for repeatable splits/training.
+    random.seed(random_seed)
+    np.random.seed(random_seed)
+
+    # STEP 1: Data gathering - load raw training pairs and labels from CSV.
+    training_pairs, labels = load_training_data_from_csv(csv_path)
+
+    # STEP 2: Data quality preprocessing, drop malformed samples and clamp labels.
+    clean_pairs: List[Dict] = []
+    clean_labels: List[float] = []
+    dropped_rows = 0
+    for pair, label in zip(training_pairs, labels):
+        if pair.get('student1') is None or pair.get('student2') is None:
+            dropped_rows += 1
+            continue
+        if np.isnan(label):
+            dropped_rows += 1
+            continue
+        clean_pairs.append(pair)
+        clean_labels.append(float(max(0.0, min(100.0, label))))
+
+    if not clean_pairs:
+        raise ValueError("No valid training samples found after preprocessing.")
+
+    # STEP 3: Feature engineering, convert profile pairs into numeric feature vectors.
+    model = RoommateCompatibilityModel(model_type='gradient_boosting')
+    X = []
+    for sample in clean_pairs:
+        X.append(model.feature_engineer.extract_features(sample['student1'], sample['student2']))
+    X = np.array(X)
+    y = np.array(clean_labels)
+
+    # STEP 4: Dataset split strategy, fixed random seed for reproducible holdout split.
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=test_size,
+        random_state=random_seed,
+        shuffle=True,
+    )
+
+    # STEP 5: Normalization, fit scaler only on train split, then transform both splits.
+    model.scaler.fit(X_train)
+    X_train_scaled = model.scaler.transform(X_train)
+    X_test_scaled = model.scaler.transform(X_test)
+
+    # STEP 6: Model training, fit Gradient Boosting Regressor.
+    model.model.fit(X_train_scaled, y_train)
+    model.is_trained = True
+
+    # STEP 7: Evaluation, compute core regression metrics on train and test sets.
+    y_train_pred = model.model.predict(X_train_scaled)
+    y_test_pred = model.model.predict(X_test_scaled)
+
+    train_r2 = float(r2_score(y_train, y_train_pred))
+    test_r2 = float(r2_score(y_test, y_test_pred))
+    test_mae = float(mean_absolute_error(y_test, y_test_pred))
+    test_rmse = float(np.sqrt(mean_squared_error(y_test, y_test_pred)))
+
+    # STEP 8: Error analysis, identify worst residuals and summarize failure modes.
+    abs_errors = np.abs(y_test - y_test_pred)
+    sorted_indices = np.argsort(abs_errors)[::-1]
+    worst_k = min(5, len(sorted_indices))
+    worst_examples = []
+    for idx in sorted_indices[:worst_k]:
+        worst_examples.append(
+            {
+                'actual': float(y_test[idx]),
+                'predicted': float(y_test_pred[idx]),
+                'absolute_error': float(abs_errors[idx]),
+            }
+        )
+
+    overfitting_gap = float(train_r2 - test_r2)
+    within_10 = float((np.sum(abs_errors <= 10.0) / len(abs_errors)) * 100.0)
+
+    # STEP 9: Persist artifacts, save trained model and machine-readable report.
+    model.save_model(model_output_path)
+
+    report = {
+        'pipeline': 'roommate_compatibility_step_by_step',
+        'seed': random_seed,
+        'dataset': {
+            'csv_path': csv_path,
+            'raw_samples': len(training_pairs),
+            'dropped_samples': dropped_rows,
+            'used_samples': len(clean_pairs),
+            'feature_count': int(X.shape[1]),
+            'train_samples': int(len(X_train)),
+            'test_samples': int(len(X_test)),
+            'test_size': test_size,
+        },
+        'metrics': {
+            'train_r2': train_r2,
+            'test_r2': test_r2,
+            'test_mae': test_mae,
+            'test_rmse': test_rmse,
+            'within_10_points_pct': within_10,
+            'overfitting_gap': overfitting_gap,
+        },
+        'error_analysis': {
+            'worst_examples': worst_examples,
+        },
+        'artifacts': {
+            'model_path': model_output_path,
+            'report_path': report_output_path,
+        },
+        'runtime_seconds': float(time.time() - start_time),
+    }
+
+    report_dir = os.path.dirname(report_output_path)
+    if report_dir:
+        os.makedirs(report_dir, exist_ok=True)
+    with open(report_output_path, 'w', encoding='utf-8') as f:
+        json.dump(report, f, indent=2)
+
+    # STEP 10: Return summary - convenient for CLI/API callers.
+    return report

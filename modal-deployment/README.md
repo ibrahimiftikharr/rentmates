@@ -1,21 +1,27 @@
-# Roommate Compatibility ML Model - Modal.com Deployment
+﻿# Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features - Modal.com Deployment
 
-This folder contains the ML model optimized for serverless deployment on Modal.com.
+This folder contains the ML module optimized for serverless deployment on Modal.com.
 
-## 📁 Files
+## Why This Module Matters
+
+Finding the right flatmate is usually a gamble based on short chats and first impressions. This module turns that guesswork into a data-informed decision by combining structured profile signals (budget, lifestyle, study patterns) with textual understanding of personal bios. The goal is practical: reduce avoidable roommate conflicts, improve long-term living compatibility, and help students find homes where they can thrive academically and socially.
+
+##  Files
 
 - **modal_app.py** - Main Modal application with web endpoints
 - **model.py** - ML model implementation (Gradient Boosting)
 - **features.py** - Feature engineering (17 features)
-- **training_data.csv** - Professional training dataset with 64 realistic student compatibility pairs
+- **train_pipeline.py** - Step-by-step training/evaluation pipeline runner
+- **training_data.csv** - Professional training dataset with realistic student compatibility pairs
+- **requirements-ml.txt** - Local ML dependencies for reproducible training runs
 - **requirements.txt** - Modal dependencies
 - **test-data.json** - Sample test data for endpoint testing
 - **README.md** - Deployment guide
 - **DEPLOYMENT_CHECKLIST.md** - Step-by-step deployment checklist
 
-## � Training Data
+## Training Data
 
-The model is trained on `training_data.csv`, which contains **64 realistic student compatibility pairs** featuring:
+The model is trained on `training_data.csv`, which contains realistic student compatibility pairs featuring:
 
 - **Diverse student profiles** across NTU, NUS, and SMU
 - **Varied courses** - Computer Science, Medicine, Business, Engineering, Arts, etc.
@@ -34,7 +40,22 @@ The model is trained on `training_data.csv`, which contains **64 realistic stude
 
 To expand the dataset, add more rows to `training_data.csv` following the same format.
 
-## �🚀 Quick Deployment
+## Quick Deployment
+
+## Step-by-Step Local ML Pipeline (for reporting/reproducibility)
+
+Run this when you need a clear end-to-end ML pipeline artifact with preprocessing, training, metrics, and error analysis:
+
+```bash
+python train_pipeline.py --csv training_data.csv --seed 42
+```
+
+Outputs are written to:
+- `artifacts/roommate_matcher.pkl` (trained checkpoint)
+- `artifacts/pipeline_report.json` (metrics + error-analysis summary)
+- `artifacts/final_validation_log.txt` (single-line final validation log)
+
+The core stepwise implementation lives in `model.py` under `run_step_by_step_pipeline(...)`.
 
 ### 1. Install Modal CLI
 
@@ -87,7 +108,7 @@ modal run modal_app.py::test_prediction
 curl https://your-app-url.modal.run/health
 ```
 
-## 🔌 API Endpoints
+##  API Endpoints
 
 Once deployed, Modal gives you public URLs for each endpoint:
 
@@ -126,7 +147,7 @@ Content-Type: application/json
 {}
 ```
 
-## 🔧 Configure Your Backend
+##  Configure Your Backend
 
 After deployment, update your Node.js backend `.env`:
 
@@ -139,7 +160,7 @@ The backend will automatically append the correct endpoint names:
 - `/predict-endpoint` for single predictions
 - `/predict-batch-endpoint` for batch predictions
 
-## 📊 Modal Dashboard
+##  Modal Dashboard
 
 View your deployment at: https://modal.com/apps
 
@@ -149,7 +170,7 @@ You can:
 - View container status
 - Manage volumes (stored models)
 
-## 💰 Pricing
+##  Pricing
 
 Modal.com Free Tier includes:
 - **$30/month** in free credits
@@ -158,7 +179,7 @@ Modal.com Free Tier includes:
 
 Perfect for FYP projects!
 
-## 🧪 Testing
+##  Testing
 
 ### Local Testing (Before Deployment)
 
@@ -179,7 +200,7 @@ curl -X POST https://your-url.modal.run/predict-endpoint \
   -d @test-data.json
 ```
 
-## 📈 Performance
+##  Performance
 
 Modal.com provides:
 - **Cold start**: ~2-5 seconds (first request)
@@ -187,7 +208,7 @@ Modal.com provides:
 - **Auto-scaling**: Handles traffic spikes automatically
 - **Persistent storage**: Model stays loaded in memory
 
-## 🔄 Updating the Model
+##  Updating the Model
 
 ### Option 1: Redeploy
 
@@ -215,7 +236,7 @@ Call the `/train` endpoint with new data:
 }
 ```
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### Deployment Fails
 
@@ -244,7 +265,7 @@ modal run modal_app.py::train_model
 
 Update backend `.env` with correct Modal URL from dashboard.
 
-## 📝 Environment Variables
+##  Environment Variables
 
 Modal automatically handles:
 - Container isolation
@@ -255,7 +276,7 @@ Modal automatically handles:
 
 No manual configuration needed!
 
-## 🚀 Production Checklist
+##  Production Checklist
 
 - [ ] Deploy app: `modal deploy modal_app.py`
 - [ ] Train model: Call `/train` endpoint
@@ -271,7 +292,7 @@ No manual configuration needed!
 - Modal Examples: https://modal.com/docs/examples
 - Support: https://modal.com/slack
 
-## 🎉 Benefits of Modal vs Local Hosting
+## Benefits of Modal vs Local Hosting
 
 | Feature | Local Flask | Modal.com |
 |---------|-------------|-----------|
@@ -285,4 +306,4 @@ No manual configuration needed!
 
 ---
 
-**Your ML model is now production-ready on serverless infrastructure! 🚀**
+**Your ML model is now production-ready on serverless infrastructure! **

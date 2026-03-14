@@ -1,8 +1,8 @@
-# NLP-Based Roommate Matching Approach
+# Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features
 
 ## Overview
 
-Our roommate compatibility matching system uses a **hybrid Machine Learning approach** that combines structured data analysis with advanced **Natural Language Processing (NLP)** to predict compatibility scores between students.
+Our student flatmate compatibility prediction module uses a **hybrid Machine Learning approach** that combines structured data analysis with advanced **Natural Language Processing (NLP)** to predict compatibility scores between students.
 
 ---
 
@@ -363,7 +363,7 @@ numpy==1.24.3                 # Numerical operations
 
 ## Conclusion
 
-Our NLP-based roommate matching uses **state-of-the-art Sentence-BERT** for semantic text understanding, combined with traditional structured features, achieving **82.6% prediction accuracy**. This hybrid approach:
+Our Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features module uses **state-of-the-art Sentence-BERT** for semantic text understanding, combined with traditional structured features, achieving **82.6% prediction accuracy**. This hybrid approach:
 
 ✓ Understands personality from free text  
 ✓ Respects hard requirements (smoking, budget)  
@@ -371,7 +371,7 @@ Our NLP-based roommate matching uses **state-of-the-art Sentence-BERT** for sema
 ✓ Deployed on serverless infrastructure  
 ✓ Production-tested and validated  
 
-The result: **Accurate, AI-powered roommate compatibility predictions** that help students find better living arrangements and reduce conflicts.
+The result: **Accurate, AI-powered student flatmate compatibility predictions** that help students find better living arrangements and reduce conflicts.
 
 ---
 

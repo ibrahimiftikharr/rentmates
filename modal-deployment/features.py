@@ -1,7 +1,7 @@
 """
-Feature Engineering for Roommate Compatibility Matching
+Feature Engineering for Student Flatmate Compatibility Prediction
 
-Extracts and encodes features from student profiles for ML model
+Extracts and encodes structured and textual profile features for the ML model
 """
 import numpy as np
 from typing import Dict, List, Tuple

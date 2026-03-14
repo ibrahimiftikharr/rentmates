@@ -1,0 +1,1 @@
+test_r2=0.828528, test_mae=5.165155, test_rmse=7.200577, checkpoint=C:\Users\PMY\Documents\FYP\rentmates\modal-deployment\artifacts\roommate_matcher.pkl

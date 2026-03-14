@@ -1,5 +1,5 @@
-"""
-RentMates Roommate Compatibility Model - Modal.com Deployment
+﻿"""
+Student Flatmate Compatibility Prediction Using Structured and Textual Profile Features
 
 This file defines the Modal app for serverless deployment of the ML model.
 All dependencies are containerized and automatically managed by Modal.
@@ -51,7 +51,7 @@ MODELS_PATH = "/models"
 )
 def train_model():
     """
-    Train the compatibility model with CSV training data
+    Train the student flatmate compatibility model with CSV training data
     This function can be called to initialize or retrain the model
     """
     import sys
@@ -413,4 +413,4 @@ def test_prediction():
     scores = predict_batch.remote(student1, other_students)
     print(f"Batch scores: {scores}")
     
-    print("\n✅ Test completed successfully!")
+    print("\n[OK] Test completed successfully!")

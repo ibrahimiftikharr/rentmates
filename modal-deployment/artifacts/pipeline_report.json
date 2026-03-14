@@ -1,0 +1,56 @@
+{
+  "pipeline": "roommate_compatibility_step_by_step",
+  "seed": 42,
+  "dataset": {
+    "csv_path": "training_data.csv",
+    "raw_samples": 1333,
+    "dropped_samples": 0,
+    "used_samples": 1333,
+    "feature_count": 17,
+    "train_samples": 1066,
+    "test_samples": 267,
+    "test_size": 0.2
+  },
+  "metrics": {
+    "train_r2": 0.9671338033922654,
+    "test_r2": 0.8285277134551695,
+    "test_mae": 5.165155065401338,
+    "test_rmse": 7.2005766404900795,
+    "within_10_points_pct": 89.51310861423221,
+    "overfitting_gap": 0.1386060899370959
+  },
+  "error_analysis": {
+    "worst_examples": [
+      {
+        "actual": 31.0,
+        "predicted": 67.49337137894163,
+        "absolute_error": 36.49337137894163
+      },
+      {
+        "actual": 28.0,
+        "predicted": 58.027993097213034,
+        "absolute_error": 30.027993097213034
+      },
+      {
+        "actual": 55.0,
+        "predicted": 78.66534474407418,
+        "absolute_error": 23.665344744074176
+      },
+      {
+        "actual": 35.0,
+        "predicted": 57.477386583310086,
+        "absolute_error": 22.477386583310086
+      },
+      {
+        "actual": 74.0,
+        "predicted": 52.46858806553515,
+        "absolute_error": 21.53141193446485
+      }
+    ]
+  },
+  "artifacts": {
+    "model_path": "artifacts/roommate_matcher.pkl",
+    "report_path": "artifacts/pipeline_report.json"
+  },
+  "runtime_seconds": 88.46987247467041
+}
