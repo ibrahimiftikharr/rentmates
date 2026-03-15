@@ -1,5 +1,5 @@
 {
-  "model_name": "Gradient Boosting",
+  "model_name": "Random Forest",
   "features": [
     "PriceRatio",
     "DepositRatio",
@@ -11,9 +11,9 @@
   ],
   "num_features": 7,
   "test_accuracy": 0.9302325581395349,
-  "test_auc": 0.9674704680699884,
-  "cv_auc": 0.9722160731514145,
-  "cv_accuracy": 0.9202672509726451,
+  "test_auc": 0.9699351629807265,
+  "cv_auc": 0.9701924482854067,
+  "cv_accuracy": 0.9194373754539729,
   "scaler_mean": [
     1.0675842091732533,
     2.1839787304261336,
@@ -32,7 +32,7 @@
     0.8436256476261645,
     0.3960909938959699
   ],
-  "selection_rationale": "Gradient Boosting selected because it is closest to the requested 92-94% test-accuracy band on calibrated noisy data.",
+  "selection_rationale": "Random Forest selected based on strongest overall performance (highest test AUC among compared models).",
   "target_accuracy_band": "92-94%",
   "training_data_size": 3010,
   "training_samples_legit": 1620,

@@ -1,9 +1,9 @@
 {
   "best_model": "Random Forest",
-  "test_accuracy": 0.9318936877076412,
-  "test_auc": 0.970146105337952,
-  "cv_accuracy_mean": 0.918608362591765,
-  "cv_auc_mean": 0.9699875682944402,
+  "test_accuracy": 0.9302325581395349,
+  "test_auc": 0.9699351629807265,
+  "cv_accuracy_mean": 0.9194373754539729,
+  "cv_auc_mean": 0.9701924482854067,
   "features": [
     "PriceRatio",
     "DepositRatio",
@@ -14,23 +14,23 @@
     "DescriptionScamScore"
   ],
   "all_models": {
+    "Logistic Regression": {
+      "test_accuracy": 0.8488372093023255,
+      "test_auc": 0.9279576338928858,
+      "cv_accuracy": 0.8517447226990796,
+      "cv_auc": 0.9324841994294182
+    },
     "Gradient Boosting": {
-      "test_accuracy": 0.9235880398671097,
-      "test_auc": 0.9679478639310772,
-      "cv_accuracy": 0.9281622829340671,
-      "cv_auc": 0.9722419140250314
+      "test_accuracy": 0.9302325581395349,
+      "test_auc": 0.9674704680699884,
+      "cv_accuracy": 0.9202672509726451,
+      "cv_auc": 0.9722160731514145
     },
     "Random Forest": {
-      "test_accuracy": 0.9318936877076412,
-      "test_auc": 0.970146105337952,
-      "cv_accuracy": 0.918608362591765,
-      "cv_auc": 0.9699875682944402
-    },
-    "Logistic Regression": {
-      "test_accuracy": 0.845514950166113,
-      "test_auc": 0.9280242472688516,
-      "cv_accuracy": 0.8567265637805057,
-      "cv_auc": 0.9324427730893614
+      "test_accuracy": 0.9302325581395349,
+      "test_auc": 0.9699351629807265,
+      "cv_accuracy": 0.9194373754539729,
+      "cv_auc": 0.9701924482854067
     }
   }
 }

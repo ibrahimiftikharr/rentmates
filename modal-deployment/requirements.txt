@@ -1,4 +1,0 @@
-# Modal.com Deployment Requirements
-# These are installed automatically by Modal in the container
-
-modal>=0.55.0
